@@ -1441,17 +1441,17 @@ async function guardarComentariAlumne(comentari, modal, items = [], passarAlSegu
     const db = window._tutoriaDB;
     if (!db) throw new Error('Firebase no disponible');
 
-    // Guardar comentari + metadades ítems (títol + assoliment) per exportació Excel
+    // Guardar comentari + metadades ítems dins el periode actiu
     const metadades = items.map(it => ({
       titol: it.titol || '',
       assoliment: it.assoliment || ''
     }));
 
     const update = {
-      comentari: comentari,
+      [`comentarisPerPeriode.${classIdActual}.comentari`]: comentari,
     };
     if (metadades.length > 0) {
-      update[`comentarisItems.${classIdActual}`] = metadades;
+      update[`comentarisPerPeriode.${classIdActual}.comentarisItems`] = metadades;
     }
 
     await db.collection('alumnes').doc(studentIdActual).update(update);
