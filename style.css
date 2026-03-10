@@ -527,7 +527,7 @@ body {
   transition: all 0.2s;
   border: 1px solid var(--ink-10);
   position: relative;
-  overflow: hidden;
+  overflow: visible;
 }
 
 .class-card::before {
@@ -537,6 +537,7 @@ body {
   left: 0;
   right: 0;
   height: 4px;
+  border-radius: var(--radius) var(--radius) 0 0;
 }
 
 .class-card:nth-child(6n+1)::before { background: linear-gradient(90deg, #ff5f6d, #ff8f9d); }
@@ -1253,3 +1254,52 @@ body {
   font-family: var(--font);
 }
 .btn-add-periode:hover { border-color: var(--accent); color: var(--accent); background: var(--accent-light); }
+
+/* ══════════════════════════════════════
+   SIDEBAR CLASSES LIST
+══════════════════════════════════════ */
+.sidebar-classes-section {
+  padding: 0 12px 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.sidebar-classes-label {
+  font-size: 10px;
+  font-weight: 700;
+  color: rgba(255,255,255,0.25);
+  text-transform: uppercase;
+  letter-spacing: .8px;
+  padding: 8px 12px 4px;
+}
+.sidebar-class-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: rgba(255,255,255,0.45);
+  background: none;
+  border: none;
+  border-radius: var(--radius-sm);
+  padding: 8px 12px;
+  font-family: var(--font);
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.15s;
+  text-align: left;
+  width: 100%;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.sidebar-class-item:hover { background: rgba(255,255,255,0.06); color: rgba(255,255,255,0.8); }
+.sidebar-class-item.active { background: rgba(255,95,109,0.12); color: #fff; font-weight: 600; }
+.sidebar-class-dot {
+  width: 7px; height: 7px;
+  border-radius: 50%;
+  background: rgba(255,255,255,0.2);
+  flex-shrink: 0;
+}
+.sidebar-class-item.active .sidebar-class-dot {
+  background: var(--accent);
+}
