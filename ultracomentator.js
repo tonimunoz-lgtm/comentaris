@@ -1350,8 +1350,13 @@ ${instrNom}
 Escriu ÚNICAMENT els blocs de comentari, res més.`;
 
   try {
-    if (!window.callTutoriaAPI) throw new Error('API no configurada. Comprova api-config.js');
-    const data = await window.callTutoriaAPI(prompt);
+    const response = await fetch('/api/tutoria', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ prompt })
+    });
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.error?.message || 'Error API');
     const comentari = (data.text || '').trim();
     resultText.textContent = comentari;
 
