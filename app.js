@@ -1352,22 +1352,29 @@ window.exportarComentarisExcel = exportarComentarisExcel;
 window.firebase = firebase;
 
 window._refreshCommentDisplay = function(studentId, text) {
+  // 1. Refrescar el panell dret complet (si l'alumne actiu és aquest)
   if (currentCommentStudent?.id === studentId) {
-    // Refresc immediat sense esperar Firestore — mantenim assoliments si ja existien
-    const assolamentsExistents = document.querySelector('#commentsGrid .comment-card > div:first-of-type + div');
-    const assolamentsHTML = (assolamentsExistents && assolamentsExistents.querySelector('span')) ? assolamentsExistents.outerHTML : '';
-    _renderCommentPanel(currentCommentStudent.nom, text, assolamentsHTML, studentId);
+    showStudentComment(studentId, currentCommentStudent.nom, text);
   }
-  // Actualitzar dot a la llista sense recarregar tot
+
+  // 2. Actualitzar dot verd a la llista
   const li = document.querySelector(`#studentsList li[data-id="${studentId}"]`);
   if (li) {
     const dot = li.querySelector('.student-comment-dot');
-    if (text && !dot) {
+    if (text?.trim() && !dot) {
       const nameSpan = li.querySelector('.student-name');
       const newDot = document.createElement('span');
       newDot.className = 'student-comment-dot';
       newDot.title = 'Té comentari';
       nameSpan?.after(newDot);
-    } else if (!text && dot) dot.remove();
+    } else if (!text?.trim() && dot) {
+      dot.remove();
+    }
   }
+
+  // 3. Recalcular barra de progrés
+  const allLis = document.querySelectorAll('#studentsList li[data-id]');
+  const total = allLis.length;
+  const amb = [...allLis].filter(l => l.querySelector('.student-comment-dot')).length;
+  renderPeriodesTabs({ amb, total });
 };
