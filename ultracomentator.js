@@ -1478,14 +1478,17 @@ async function guardarComentariAlumne(comentari, modal, items = [], passarAlSegu
 
     await db.collection('alumnes').doc(studentIdActual).update(update);
 
+    // Refrescar panell dret, dot verd i barra de progrés
+    if (typeof window._refreshCommentDisplay === 'function') {
+      window._refreshCommentDisplay(studentIdActual, comentari);
+    }
+
     // Omplir textarea del modal de comentaris si esta obert
     const taComment = document.getElementById('commentTextarea');
     if (taComment) {
       taComment.value = comentari;
       taComment.dispatchEvent(new Event('input'));
     }
-
-    _ucActualitzarFilaComentari(studentIdActual, classIdActual, comentari);
 
     if (passarAlSeguent) {
       // Trobar el seguent alumne a la classe
