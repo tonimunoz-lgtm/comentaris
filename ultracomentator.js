@@ -1350,15 +1350,8 @@ ${instrNom}
 Escriu ÚNICAMENT els blocs de comentari, res més.`;
 
   try {
-    const response = await fetch('/api/tutoria', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ prompt })
-    });
-
-    const data = await response.json();
-    if (!response.ok) throw new Error(data.error?.message || 'Error API');
-
+    if (!window.callTutoriaAPI) throw new Error('API no configurada. Comprova api-config.js');
+    const data = await window.callTutoriaAPI(prompt);
     const comentari = (data.text || '').trim();
     resultText.textContent = comentari;
 
@@ -1440,7 +1433,7 @@ async function guardarComentariAlumne(comentari, modal, items = [], passarAlSegu
     }));
 
     const update = {
-      [`comentarios.${classIdActual}`]: comentari,
+      comentari: comentari,
     };
     if (metadades.length > 0) {
       update[`comentarisItems.${classIdActual}`] = metadades;
