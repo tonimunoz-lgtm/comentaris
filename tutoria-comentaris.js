@@ -836,7 +836,7 @@ async function tcGuardar(modal, btn) {
     btn.textContent = '⏳ Guardant...';
 
     await _tcDB.collection('alumnes').doc(_tcStudentId).update({
-      comentari: text,
+      [`comentarisPerPeriode.${_tcClassId}.comentari`]: text,
     });
 
     // Posar el text al textarea del modal de comentaris
@@ -853,10 +853,7 @@ async function tcGuardar(modal, btn) {
       window._refreshCommentDisplay(_tcStudentId, text);
     }
 
-    // Tancar i refrescar
-    setTimeout(() => {
-      modal.remove();
-    }, 700);
+    setTimeout(() => { modal.remove(); }, 700);
 
   } catch(e) {
     console.error('Error guardant:', e);
