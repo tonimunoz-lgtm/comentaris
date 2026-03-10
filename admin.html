@@ -1,0 +1,207 @@
+<!DOCTYPE html>
+<html lang="ca">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ComentaIA · Admin</title>
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <style>
+    body { font-family: 'Outfit', sans-serif; background: #f4f4f8; }
+    .card { background:#fff; border-radius:12px; border:1px solid #e8e8f0; padding:24px; }
+    table { border-collapse: collapse; width: 100%; }
+    th { background: #f4f4f8; padding: 10px 14px; text-align: left; font-size:13px; font-weight:600; color:#3d3d58; }
+    td { padding: 10px 14px; border-bottom: 1px solid #f0f0f6; font-size:13px; color:#1e1e32; }
+    tr:hover td { background: #fafafa; }
+    .badge { display:inline-flex;padding:3px 9px;border-radius:99px;font-size:11px;font-weight:600; }
+    .badge-green { background:#d1fae5;color:#065f46; }
+    .badge-red { background:#fee2e2;color:#991b1b; }
+    .badge-gray { background:#f3f4f6;color:#4b5563; }
+    .btn { padding:7px 14px;border-radius:7px;font-size:12px;font-weight:600;cursor:pointer;border:none;font-family:inherit;transition:all .15s; }
+    .btn-sm { padding:5px 10px;font-size:11px; }
+    .btn-red { background:#fee2e2;color:#dc2626; }
+    .btn-red:hover { background:#dc2626;color:#fff; }
+    .btn-blue { background:#dbeafe;color:#1d4ed8; }
+    .btn-blue:hover { background:#1d4ed8;color:#fff; }
+    .btn-yellow { background:#fef3c7;color:#d97706; }
+    .btn-yellow:hover { background:#d97706;color:#fff; }
+    .btn-purple { background:#ede9fe;color:#7c3aed; }
+    .btn-purple:hover { background:#7c3aed;color:#fff; }
+    .btn-primary { background:#ff5f6d;color:#fff; }
+    .btn-primary:hover { background:#e04050; }
+    .btn-gray { background:#f3f4f6;color:#374151; }
+    .btn-gray:hover { background:#e5e7eb; }
+  </style>
+</head>
+<body>
+
+<div style="max-width:1100px;margin:32px auto;padding:0 20px;">
+
+  <header style="display:flex;justify-content:space-between;align-items:center;margin-bottom:24px;">
+    <div>
+      <h1 style="font-size:26px;font-weight:800;color:#0f0f1a;">💬 ComentaIA · Administració</h1>
+      <p style="color:#7c7c9a;font-size:14px;margin-top:4px;">Panell de gestió d'usuaris</p>
+    </div>
+    <div style="display:flex;gap:8px;">
+      <button id="btnBackToApp" class="btn btn-gray">← Tornar</button>
+      <button id="btnLogout" class="btn btn-red">Sortir</button>
+    </div>
+  </header>
+
+  <!-- Usuaris -->
+  <div class="card" style="margin-bottom:20px;">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
+      <h2 style="font-size:17px;font-weight:700;color:#0f0f1a;">Usuaris registrats</h2>
+      <button id="btnAddAdmin" class="btn btn-primary">+ Nou usuari</button>
+    </div>
+    <div style="overflow-x:auto;">
+      <table>
+        <thead>
+          <tr>
+            <th>Nom</th>
+            <th>Email</th>
+            <th>Creat</th>
+            <th>Admin</th>
+            <th>Estat</th>
+            <th>Accions</th>
+          </tr>
+        </thead>
+        <tbody id="usersTableBody">
+          <tr><td colspan="6" style="color:#9ca3af;text-align:center;padding:20px;">Carregant...</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- Últims accessos -->
+  <div class="card" style="margin-bottom:20px;">
+    <h2 style="font-size:17px;font-weight:700;color:#0f0f1a;margin-bottom:16px;">Últims accessos</h2>
+    <div id="lastLoginsContainer" style="display:flex;flex-direction:column;gap:8px;"></div>
+  </div>
+
+  <!-- Enviar missatge -->
+  <div class="card">
+    <h2 style="font-size:17px;font-weight:700;color:#0f0f1a;margin-bottom:16px;">Enviar avís a usuari</h2>
+    <input type="email" id="emailRecipient" placeholder="Email de l'usuari"
+      style="width:100%;border:1px solid #e8e8f0;border-radius:8px;padding:10px 14px;font-size:13px;font-family:inherit;margin-bottom:10px;outline:none;">
+    <textarea id="emailMessage" placeholder="Missatge"
+      style="width:100%;border:1px solid #e8e8f0;border-radius:8px;padding:10px 14px;font-size:13px;font-family:inherit;height:80px;resize:vertical;margin-bottom:10px;outline:none;"></textarea>
+    <button id="btnSendEmail" class="btn btn-primary">Enviar</button>
+  </div>
+
+</div>
+
+<script>
+const firebaseConfig = {
+  apiKey: "AIzaSyCmvYTICbPClYb1Ttk-OJYuNjIT52k3R1M",
+  authDomain: "comentaris-1028e.firebaseapp.com",
+  projectId: "comentaris-1028e",
+  storageBucket: "comentaris-1028e.firebasestorage.app",
+  messagingSenderId: "626077398455",
+  appId: "1:626077398455:web:8eb557ea7793e6d9f5a432"
+};
+firebase.initializeApp(firebaseConfig);
+const auth = firebase.auth();
+const db   = firebase.firestore();
+
+// Auth check
+auth.onAuthStateChanged(async user => {
+  if (!user) { window.location.href = 'index.html'; return; }
+  const doc = await db.collection('professors').doc(user.uid).get();
+  if (!doc.exists || !doc.data().isAdmin) {
+    alert('No tens permisos d\'administrador');
+    window.location.href = 'index.html';
+    return;
+  }
+  loadUsers();
+  loadLastLogins();
+});
+
+document.getElementById('btnLogout').onclick = () => auth.signOut().then(() => window.location.href = 'index.html');
+document.getElementById('btnBackToApp').onclick = () => window.location.href = 'index.html';
+
+async function loadUsers() {
+  const body = document.getElementById('usersTableBody');
+  const snap = await db.collection('professors').orderBy('createdAt', 'desc').get();
+  body.innerHTML = '';
+
+  snap.forEach(doc => {
+    const d = doc.data();
+    const tr = document.createElement('tr');
+    const estatBadge = d.deleted   ? '<span class="badge badge-red">Eliminat</span>'
+                     : d.suspended ? '<span class="badge badge-red">Suspès</span>'
+                                   : '<span class="badge badge-green">Actiu</span>';
+    tr.innerHTML = `
+      <td>${d.nom || '-'}</td>
+      <td>${d.email || '-'}</td>
+      <td>${d.createdAt ? new Date(d.createdAt.seconds*1000).toLocaleDateString('ca') : '-'}</td>
+      <td>${d.isAdmin ? '<span class="badge badge-purple">Admin</span>' : '<span class="badge badge-gray">No</span>'}</td>
+      <td>${estatBadge}</td>
+      <td style="display:flex;gap:4px;flex-wrap:wrap;">
+        <button class="btn btn-sm btn-yellow" onclick="toggleSuspend('${doc.id}', ${!!d.suspended})">${d.suspended ? 'Reactivar' : 'Suspendre'}</button>
+        <button class="btn btn-sm btn-blue" onclick="resetPassword('${d.email}')">Reset PW</button>
+        <button class="btn btn-sm btn-purple" onclick="toggleAdmin('${doc.id}', ${!!d.isAdmin})">${d.isAdmin ? 'Treure admin' : 'Fer admin'}</button>
+        <button class="btn btn-sm btn-red" onclick="deleteUser('${doc.id}')">Eliminar</button>
+      </td>
+    `;
+    body.appendChild(tr);
+  });
+}
+
+async function loadLastLogins() {
+  const cont = document.getElementById('lastLoginsContainer');
+  const snap = await db.collectionGroup('logins').orderBy('timestamp', 'desc').limit(20).get();
+  const byUser = {};
+  snap.forEach(doc => {
+    const uid = doc.ref.parent.parent.id;
+    if (!byUser[uid]) byUser[uid] = [];
+    byUser[uid].push(doc.data().timestamp?.toDate?.() || new Date());
+  });
+  cont.innerHTML = Object.entries(byUser).slice(0,10).map(([uid, times]) => `
+    <div style="display:flex;justify-content:space-between;align-items:center;background:#f9f9fb;border-radius:8px;padding:10px 14px;">
+      <span style="font-size:13px;color:#3d3d58;font-family:monospace;">${uid.slice(0,12)}...</span>
+      <span style="font-size:12px;color:#7c7c9a;">Últim: ${times[0].toLocaleString('ca')}</span>
+      <span style="font-size:12px;color:#7c7c9a;">${times.length} accessos</span>
+    </div>
+  `).join('');
+}
+
+async function toggleSuspend(uid, current) {
+  await db.collection('professors').doc(uid).update({ suspended: !current });
+  loadUsers();
+}
+
+async function resetPassword(email) {
+  if (!email) return alert('Usuari sense email');
+  await auth.sendPasswordResetEmail(email);
+  alert('Email de reset enviat a ' + email);
+}
+
+async function toggleAdmin(uid, current) {
+  await db.collection('professors').doc(uid).update({ isAdmin: !current });
+  loadUsers();
+}
+
+async function deleteUser(uid) {
+  if (!confirm('Eliminar aquest usuari?')) return;
+  await db.collection('professors').doc(uid).update({ deleted: true });
+  loadUsers();
+}
+
+document.getElementById('btnAddAdmin').onclick = async () => {
+  const email = prompt('Email del nou usuari:');
+  const pw    = prompt('Contrasenya provisional:');
+  if (!email || !pw) return;
+  // Creem usuari directament
+  alert('Per crear un usuari nou, que es registri des de la pàgina principal.');
+};
+
+document.getElementById('btnSendEmail').onclick = () => {
+  alert('Funcionalitat d\'enviament de correu disponible a través de Firebase Functions o EmailJS.');
+};
+</script>
+</body>
+</html>
