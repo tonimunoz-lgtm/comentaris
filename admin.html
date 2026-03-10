@@ -153,20 +153,54 @@ async function loadUsers() {
 
 async function loadLastLogins() {
   const cont = document.getElementById('lastLoginsContainer');
-  const snap = await db.collectionGroup('logins').orderBy('timestamp', 'desc').limit(20).get();
-  const byUser = {};
-  snap.forEach(doc => {
-    const uid = doc.ref.parent.parent.id;
-    if (!byUser[uid]) byUser[uid] = [];
-    byUser[uid].push(doc.data().timestamp?.toDate?.() || new Date());
-  });
-  cont.innerHTML = Object.entries(byUser).slice(0,10).map(([uid, times]) => `
-    <div style="display:flex;justify-content:space-between;align-items:center;background:#f9f9fb;border-radius:8px;padding:10px 14px;">
-      <span style="font-size:13px;color:#3d3d58;font-family:monospace;">${uid.slice(0,12)}...</span>
-      <span style="font-size:12px;color:#7c7c9a;">Últim: ${times[0].toLocaleString('ca')}</span>
-      <span style="font-size:12px;color:#7c7c9a;">${times.length} accessos</span>
-    </div>
-  `).join('');
+  cont.innerHTML = '<p style="color:#aaa;font-size:13px;">Carregant...</p>';
+  try {
+    // Llegir tots els professors i els seus logins
+    const profSnap = await db.collection('professors').get();
+    const resultats = [];
+
+    await Promise.all(profSnap.docs.map(async profDoc => {
+      const profData = profDoc.data();
+      if (profData.deleted) return;
+      try {
+        const loginsSnap = await db.collection('professors').doc(profDoc.id)
+          .collection('logins').orderBy('timestamp', 'desc').limit(5).get();
+        if (loginsSnap.empty) return;
+        const times = loginsSnap.docs.map(d => d.data().timestamp?.toDate?.() || new Date());
+        resultats.push({
+          uid:    profDoc.id,
+          nom:    profData.nom || profData.email || profDoc.id.slice(0,12),
+          email:  profData.email || '',
+          ultim:  times[0],
+          total:  times.length,
+        });
+      } catch(e) { /* sense logins */ }
+    }));
+
+    // Ordenar per últim accés
+    resultats.sort((a, b) => b.ultim - a.ultim);
+
+    if (!resultats.length) {
+      cont.innerHTML = '<p style="color:#aaa;font-size:13px;">Cap accés registrat encara.</p>';
+      return;
+    }
+
+    cont.innerHTML = resultats.slice(0, 15).map(r => `
+      <div style="display:flex;justify-content:space-between;align-items:center;background:#f9f9fb;border-radius:8px;padding:10px 14px;gap:12px;">
+        <div style="flex:1;min-width:0;">
+          <div style="font-size:13px;font-weight:600;color:#3d3d58;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${r.nom}</div>
+          <div style="font-size:11px;color:#9ca3af;">${r.email}</div>
+        </div>
+        <div style="text-align:right;flex-shrink:0;">
+          <div style="font-size:12px;color:#7c7c9a;">Últim: ${r.ultim.toLocaleString('ca')}</div>
+          <div style="font-size:11px;color:#9ca3af;">${r.total} accés${r.total !== 1 ? 'os' : ''} registrats</div>
+        </div>
+      </div>
+    `).join('');
+  } catch(e) {
+    cont.innerHTML = `<p style="color:#e53e3e;font-size:13px;">Error: ${e.message}</p>`;
+    console.error('loadLastLogins error:', e);
+  }
 }
 
 async function toggleSuspend(uid, current) {
