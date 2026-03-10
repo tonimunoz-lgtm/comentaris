@@ -742,9 +742,33 @@ function tcPrompt(d) {
     c('Punts forts', d.puntsForts), c('Recomanacions', d.recomanacions),
   ].filter(Boolean).join('\n');
 
-  const idiomaInstruccio = d.idioma === 'castella'
-    ? `Escriu en castellano. Usa "${d.article === 'El' ? 'El' : 'La'} ${d.nom}" i pronoms él/ella.`
-    : `Escriu en català. Usa "${d.nomAmbArticle}". Omet el pronom subjecte ell/ella quan el subjecte és conegut (pro-drop).`;
+  const esCastella = d.idioma === 'castella';
+  const nomInici   = esCastella
+    ? `${d.article === 'El' ? 'El' : 'La'} ${d.nom}`
+    : d.nomAmbArticle;
+
+  if (esCastella) {
+    return `Eres un tutor/a escolar que escribe comentarios para el boletín de notas.
+
+DATOS:
+${ctx}
+
+INSTRUCCIONES:
+- Escribe ÚNICAMENTE en castellano.
+- Empieza SIEMPRE con "${nomInici}" (nunca con "Estimada familia").
+- El comentario es sobre el alumno/a, no dirigido a la familia.
+- ${d.llargada === 'curt' ? 'Entre 50 y 80 palabras (muy conciso)' : d.llargada === 'llarg' ? 'Entre 150 y 250 palabras (desarrollado)' : 'Entre 80 y 150 palabras'}. Párrafos fluidos, sin listas.
+- No menciones notas numéricas.
+- ${d.trimestre ? `Es el ${d.trimestre}: ${d.trimestre === 'final de curs' ? 'reflexiona sobre todo el curso' : 'anima a mejorar de cara a los próximos trimestres'}.` : ''}
+- ${toInstr}
+- Si hay asignaturas suspensas, menciónalas y explica las carencias.
+- Si hay apartados personalizados (trabajo cooperativo, proyectos...), intégralos de forma natural.
+- Si hay recomendaciones, inclúyelas de forma natural.
+- Termina con un ánimo genuino.
+- Concordancia de género correcta. Usa pronombres él/ella según corresponda.
+
+Escribe SOLO el comentario final, sin título ni explicación.`;
+  }
 
   const trimestreCtx = d.trimestre
     ? `És el ${d.trimestre}: ${d.trimestre === 'final de curs' ? 'reflexiona sobre tot el curs' : 'anima a millorar de cara als propers trimestres'}.`
@@ -756,8 +780,8 @@ DADES:
 ${ctx}
 
 INSTRUCCIONS:
-- ${idiomaInstruccio}
-- Comença SEMPRE amb "${d.nomAmbArticle}" (mai amb "Estimada família").
+- Escriu en català. Usa "${nomInici}". Omet el pronom subjecte ell/ella quan el subjecte és conegut (pro-drop).
+- Comença SEMPRE amb "${nomInici}" (mai amb "Estimada família").
 - El comentari és sobre l'alumne/a, no adreçat a la família.
 - ${d.llargada === 'curt' ? 'Entre 50 i 80 paraules (molt concís)' : d.llargada === 'llarg' ? 'Entre 150 i 250 paraules (desenvolupat)' : 'Entre 80 i 150 paraules'}. Paràgrafs fluids, sense llistes.
 - No mencions notes numèriques.
