@@ -458,6 +458,19 @@ function loadClassData() {
    STUDENTS
 ══════════════════════════════════════ */
 // Add student
+// Tutoria button — obrirà openTutoriaModal quan ultracomentator.js NO l'hagi transformat encara
+// Quan ultracomentator.js el transforma, canvia id a btnTutoria_hidden i li afegeix el click
+// Aquí assegurem que btnTutoria_hidden també cridi openTutoriaModal
+const _setupBtnTutoria = () => {
+  const btn = document.getElementById('btnTutoria');
+  if (btn) {
+    btn.addEventListener('click', () => {
+      if (typeof window.openTutoriaModal === 'function') window.openTutoriaModal();
+    });
+  }
+};
+document.addEventListener('DOMContentLoaded', _setupBtnTutoria);
+
 document.getElementById('btnAddStudent').addEventListener('click', () => {
   document.getElementById('modalStudentName').value = '';
   openModal('modalAddStudent');
@@ -708,6 +721,11 @@ function showStudentComment(studentId, nom, comentari) {
   window._tcStudentId   = studentId;
   window._tcStudentName = nom;
   window._tcClassId     = currentClassId;
+
+  // Sincronitzar variables locals de tutoria-comentaris.js
+  if (typeof window._tcSetStudent === 'function') {
+    window._tcSetStudent(studentId, nom, currentClassId);
+  }
 
   document.getElementById('commentsEmptyState').classList.add('hidden');
   const grid = document.getElementById('commentsGrid');
