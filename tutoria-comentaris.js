@@ -868,3 +868,13 @@ async function tcGuardar(modal, btn) {
 
 // Exposar funcions globals
 window.openTCFormulari = openTCFormulari;
+
+// Setter per sincronitzar context des de app.js sense passar per openCommentsModal
+window._tcSetStudent = function(studentId, studentName, classId) {
+  _tcStudentId   = studentId;
+  _tcStudentName = studentName;
+  _tcClassId     = classId;
+  window._tcStudentId   = studentId;
+  window._tcStudentName = studentName;
+  window._tcClassId     = classId;
+};
