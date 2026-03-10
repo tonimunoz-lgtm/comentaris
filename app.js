@@ -264,7 +264,7 @@ document.getElementById('modalCreateClassBtn').addEventListener('click', async (
   const name = document.getElementById('modalClassName').value.trim();
   if (!name) return alert('Posa un nom al grup');
   const ref = db.collection('classes').doc();
-  await ref.set({ nom: name, alumnes: [] });
+  await ref.set({ nom: name, alumnes: [], ownerUid: professorUID });
   await db.collection('professors').doc(professorUID).update({
     classes: firebase.firestore.FieldValue.arrayUnion(ref.id)
   });
@@ -552,7 +552,7 @@ document.getElementById('modalAddStudentBtn').addEventListener('click', async ()
   const name = document.getElementById('modalStudentName').value.trim();
   if (!name) return alert('Escriu el nom de l\'alumne/a');
   const ref = db.collection('alumnes').doc();
-  await ref.set({ nom: name, comentari: '' });
+  await ref.set({ nom: name, comentari: '', ownerUid: professorUID });
   await db.collection('classes').doc(currentClassId).update({
     alumnes: firebase.firestore.FieldValue.arrayUnion(ref.id)
   });
@@ -669,7 +669,7 @@ document.getElementById('btnImportALConfirm').addEventListener('click', async ()
   const ids   = [];
   names.forEach(nom => {
     const ref = db.collection('alumnes').doc();
-    batch.set(ref, { nom, comentari: '' });
+    batch.set(ref, { nom, comentari: '', ownerUid: professorUID });
     ids.push(ref.id);
   });
   await batch.commit();
