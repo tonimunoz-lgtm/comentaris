@@ -1303,3 +1303,33 @@ body {
 .sidebar-class-item.active .sidebar-class-dot {
   background: var(--accent);
 }
+
+/* ══════════════════════════════════════
+   COPY BUTTON + HISTORY
+══════════════════════════════════════ */
+.btn-copy-comment {
+  background: none;
+  border: 1px solid var(--ink-10);
+  border-radius: 6px;
+  padding: 4px 8px;
+  font-size: 14px;
+  cursor: pointer;
+  color: var(--ink-40);
+  transition: all 0.15s;
+  line-height: 1;
+}
+.btn-copy-comment:hover { background: var(--ink-05); color: var(--ink); border-color: var(--ink-20); }
+
+.history-details {
+  margin-top: 12px;
+  padding-top: 10px;
+  border-top: 1px dashed var(--ink-10);
+}
+.history-details summary::-webkit-details-marker { display: none; }
+.history-item {
+  background: #f9fafb;
+  border: 1px solid #f3f4f6;
+  border-radius: 8px;
+  padding: 10px 12px;
+}
+.history-item:hover { border-color: #e5e7eb; }
