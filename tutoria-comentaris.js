@@ -705,14 +705,14 @@ function tcDades(modal) {
 // ============================================================
 function tcToInstruccio(to, situacioGreu) {
   const tos = {
-    felicitacio: `TO: FELICITACIÓ. Comença amb una felicitació explícita i entusiasta (ex: "Felicitem al/la [nom] per..."). El comentari ha de ser com un premi, celebrant els èxits concrets. Ressalta els punts forts amb entusiasme. Si no hi ha suspesos, que es noti l'orgull. Acaba animant a mantenir aquest nivell excel·lent.`,
-    positiu: `TO: POSITIU I OPTIMISTA. Destaca els aspectes bons per sobre dels negatius. Si hi ha suspesos, presenta'ls breument com a reptes superables sense que dominin el missatge. Acaba amb confiança en les capacitats de l'alumne/a.`,
-    neutre: `TO: EQUILIBRAT I OBJECTIU. Presenta els punts forts i els aspectes a millorar de forma proporcionada. ${situacioGreu ? 'Menciona clarament les mancances però de forma constructiva.' : 'Menciona els reptes com a oportunitats de creixement.'} Acaba amb un missatge d'encoratjament realista.`,
-    anims: `TO: ÀNIM I MOTIVACIÓ. L'alumne/a necessita motivació. Reconeix l'esforç fet fins ara, per petit que sigui. Si hi ha suspesos, emfatitza que és possible superar-los amb dedicació. El final ha de ser un missatge d'ànim fort i sincer: "Estem segurs que pots millorar", "Confia en les teves capacitats", etc. Que se sentin recolzats.`,
-    avertencia: `TO: SERIÓS I DIRECTE (però respectuós). La situació és preocupant i cal dir-ho clarament. Menciona explícitament que la manca de treball, assistència o comportament han perjudicat el rendiment. El missatge ha de transmetre preocupació real i la necessitat d'un canvi d'actitud. Acaba demanant un esforç concret i mostrant disponibilitat per ajudar.`,
-    segueix: `TO: FELICITA I ANIMA A MANTENIR EL RITME. L'alumne/a ho fa bé i cal reconèixer-ho. Usa expressions com "Segueix així!", "Manté aquest excel·lent treball", "Estem molt contents amb la teva evolució". Que se sentin valorats i motivats a continuar pel mateix camí.`,
+    felicitacio: `TO FELICITACIÓ: Comença amb una felicitació explícita i entusiasta (ex: "Felicitem al/la [nom] per..."). Celebra els èxits concrets. Ressalta els punts forts amb entusiasme. Acaba animant a mantenir aquest nivell excel·lent.`,
+    positiu:     `TO POSITIU: Destaca els aspectes bons per sobre dels negatius. Si hi ha suspesos, presenta'ls breument com a reptes superables sense que dominin el missatge. Acaba amb confiança en les capacitats de l'alumne/a.`,
+    neutre:      `TO EQUILIBRAT: Presenta punts forts i aspectes a millorar de forma proporcionada. ${situacioGreu ? "Menciona les mancances clarament però de forma constructiva." : "Menciona els reptes com a oportunitats de creixement."} Acaba amb encoratjament realista.`,
+    anims:       `TO ÀNIM: L'alumne/a necessita motivació. Reconeix l'esforç fet, per petit que sigui. Si hi ha suspesos, emfatitza que és possible superar-los. El final ha de ser un missatge d'ànim fort i sincer. Que se sentin recolzats.`,
+    avertencia:  `TO SERIÓS (respectuós però directe): La situació és preocupant. Menciona explícitament que la manca de treball, assistència o comportament ha perjudicat el rendiment. Transmetre preocupació real i necessitat de canvi. Acaba demanant esforç concret.`,
+    segueix:     `TO SEGUEIX AIXÍ: L'alumne/a ho fa bé, cal reconèixer-ho. Usa expressions com "Segueix així!", "Manté aquest excel·lent treball", "Estem molt contents amb la teva evolució". Que se sentin valorats i motivats a continuar.`,
   };
-  return tos[to] || tos['neutre'];
+  return tos[to] || tos.neutre;
 }
 
 // ============================================================
@@ -741,26 +741,34 @@ function tcPrompt(d) {
     c('Punts forts', d.puntsForts), c('Recomanacions', d.recomanacions),
   ].filter(Boolean).join('\n');
 
-  const idioma = d.idioma === 'castella'
-    ? `Escriu en castellano. Usa "${d.nomAmbArticle}" i pronoms él/ella.`
+  const idiomaInstruccio = d.idioma === 'castella'
+    ? `Escriu en castellano. Usa "${d.article === 'El' ? 'El' : 'La'} ${d.nom}" i pronoms él/ella.`
     : `Escriu en català. Usa "${d.nomAmbArticle}". Omet el pronom subjecte ell/ella quan el subjecte és conegut (pro-drop).`;
 
-  return `Ets un tutor/a que escriu comentaris per al butlletí de notes.
+  const trimestreCtx = d.trimestre
+    ? `És el ${d.trimestre}: ${d.trimestre === 'final de curs' ? 'reflexiona sobre tot el curs' : 'anima a millorar de cara als propers trimestres'}.`
+    : '';
+
+  return `Ets un tutor/a escolar que escriu comentaris per al butlletí de notes.
 
 DADES:
 ${ctx}
 
 INSTRUCCIONS:
-- ${idioma}
-- Comença SEMPRE amb "${d.nomAmbArticle}". Mai amb "Estimada família".
-- ${d.llargada === 'curt' ? '50-80 paraules (molt concís)' : d.llargada === 'llarg' ? '150-250 paraules (desenvolupat)' : '80-150 paraules'}. Paràgrafs fluids, sense llistes, sense notes numèriques.
-- ${d.trimestre === 'final de curs' ? 'Reflexiona sobre tot el curs.' : d.trimestre ? `Anima a millorar de cara als propers trimestres.` : ''}
-- ${greu ? 'Sigues honest/a: menciona les mancances clarament però de forma constructiva.' : 'Tracta els aspectes a millorar com a reptes.'}
-- Si hi ha suspeses, menciona-les i explica les carències concretes.
-- Integra recomanacions i apartats personalitzats de forma natural.
-- Acaba amb encoratjament genuí. Usa concordança de gènere correcta.
+- ${idiomaInstruccio}
+- Comença SEMPRE amb "${d.nomAmbArticle}" (mai amb "Estimada família").
+- El comentari és sobre l'alumne/a, no adreçat a la família.
+- ${d.llargada === 'curt' ? 'Entre 50 i 80 paraules (molt concís)' : d.llargada === 'llarg' ? 'Entre 150 i 250 paraules (desenvolupat)' : 'Entre 80 i 150 paraules'}. Paràgrafs fluids, sense llistes.
+- No mencions notes numèriques.
+- ${trimestreCtx}
+- ${toInstr}
+- Si hi ha assignatures suspeses, menciona-les i explica les carències.
+- Si hi ha apartats personalitzats (treball cooperatiu, projectes...), integra'ls naturalment.
+- Si hi ha recomanacions, inclou-les de forma natural.
+- Acaba amb encoratjament genuí.
+- Concordança de gènere correcta.
 
-Escriu NOMÉS el comentari final.`;
+Escriu NOMÉS el comentari final, sense títol ni explicació.`;
 }
 
 // ============================================================
@@ -857,3 +865,6 @@ async function tcGuardar(modal, btn) {
     alert('Error guardant: ' + e.message);
   }
 }
+
+// Exposar funcions globals
+window.openTCFormulari = openTCFormulari;
