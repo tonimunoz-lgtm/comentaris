@@ -99,8 +99,117 @@ function confirmAction(title, msg, cb) {
 window.confirmAction = confirmAction;
 
 /* ══════════════════════════════════════
-   AUTH
+   MODAL ACCEPTACIÓ CONDICIONS D'ÚS
 ══════════════════════════════════════ */
+function mostrarModalTermes(onAccept) {
+  const old = document.getElementById('modalTermes');
+  if (old) old.remove();
+
+  const modal = document.createElement('div');
+  modal.id = 'modalTermes';
+  modal.style.cssText = `
+    position:fixed;inset:0;z-index:99999;display:flex;align-items:center;justify-content:center;
+    background:rgba(0,0,0,0.65);backdrop-filter:blur(4px);padding:20px;
+  `;
+  modal.innerHTML = `
+    <div style="
+      background:#fff;border-radius:20px;width:min(580px,95vw);max-height:90vh;
+      display:flex;flex-direction:column;
+      font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
+      box-shadow:0 24px 80px rgba(0,0,0,0.3);
+    ">
+      <!-- Capçalera fixa -->
+      <div style="background:linear-gradient(135deg,#1e1b4b,#4c1d95);padding:22px 28px;color:#fff;border-radius:20px 20px 0 0;flex-shrink:0;">
+        <div style="font-size:11px;opacity:.7;margin-bottom:4px;text-transform:uppercase;letter-spacing:.05em;">⚡ Ultracomentator</div>
+        <h2 style="margin:0;font-size:19px;font-weight:800;">Condicions d'ús i avís legal</h2>
+        <p style="margin:6px 0 0;font-size:12px;opacity:.8;">Has de llegir i acceptar les condicions per crear un compte.</p>
+      </div>
+
+      <!-- Text lliscable — cal arribar al final per activar el botó -->
+      <div id="termesScroll" style="flex:1;overflow-y:auto;padding:24px 28px;font-size:13px;color:#374151;line-height:1.8;display:flex;flex-direction:column;gap:14px;max-height:55vh;">
+
+        <div>
+          <strong style="color:#1a1a2e;font-size:14px;">1. Programari lliure i gratuït</strong><br>
+          Ultracomentator és una aplicació de programari lliure distribuïda gratuïtament per a ús educatiu. Qualsevol docent o centre educatiu pot usar-la, copiar-la i adaptar-la sense restriccions comercials.
+        </div>
+
+        <div>
+          <strong style="color:#1a1a2e;font-size:14px;">2. Responsabilitat sobre les dades introduïdes</strong><br>
+          Cada usuari és l'únic i exclusiu responsable de tota la informació que introdueixi a l'aplicació, incloent noms d'alumnes, comentaris i qualsevol altra dada personal. El propietari (Institut Matadepera) i el desenvolupador (Toni Muñoz) <strong>no assumeixen cap responsabilitat</strong> pel contingut introduït pels usuaris ni per l'ús que en facin.
+        </div>
+
+        <div>
+          <strong style="color:#1a1a2e;font-size:14px;">3. Dades de menors d'edat · RGPD (UE 2016/679)</strong><br>
+          Aquesta aplicació pot utilitzar-se per emmagatzemar dades personals de menors d'edat. En crear un compte, l'usuari declara i accepta expressament que:
+          <ul style="margin:8px 0 0 16px;display:flex;flex-direction:column;gap:4px;">
+            <li>És responsable del tractament d'aquestes dades d'acord amb el RGPD i la normativa aplicable.</li>
+            <li>Disposa de les autoritzacions necessàries del centre educatiu per tractar les dades dels alumnes.</li>
+            <li>No emmagatzemarà informació sensible innecessària.</li>
+            <li>Aplicarà les mesures de seguretat adequades per protegir les dades dels menors.</li>
+          </ul>
+        </div>
+
+        <div>
+          <strong style="color:#1a1a2e;font-size:14px;">4. Absència de garanties</strong><br>
+          L'aplicació es proporciona "tal com és" (<em>as is</em>), sense garanties de cap tipus quant a disponibilitat, continuïtat o absència d'errors. El desenvolupador no es fa responsable de pèrdues de dades, interrupcions del servei ni danys de cap tipus derivats de l'ús de l'aplicació.
+        </div>
+
+        <div>
+          <strong style="color:#1a1a2e;font-size:14px;">5. Infraestructura de tercers</strong><br>
+          Les dades s'emmagatzemen a Google Firebase (Firestore). En usar aquesta aplicació, l'usuari accepta les condicions de servei de Google Cloud Platform. El propietari i el desenvolupador no controlen ni són responsables de la infraestructura de Google.
+        </div>
+
+        <div style="background:#fef3c7;border-radius:10px;padding:12px 14px;border-left:3px solid #f59e0b;">
+          <strong style="color:#92400e;">⚠️ Important</strong><br>
+          <span style="color:#78350f;">En crear un compte acceptes ser l'únic responsable de les dades que introdueixis, especialment les dades personals dels alumnes. Ni l'Institut Matadepera ni Toni Muñoz no podran ser considerats responsables del tractament incorrecte de dades per part teva.</span>
+        </div>
+
+        <!-- Sentinella per detectar scroll final -->
+        <div id="termesBottom" style="height:1px;"></div>
+      </div>
+
+      <!-- Peu fix -->
+      <div style="padding:16px 28px;border-top:1px solid #e5e7eb;flex-shrink:0;background:#f9fafb;border-radius:0 0 20px 20px;">
+        <div id="termesScrollMsg" style="font-size:12px;color:#9ca3af;text-align:center;margin-bottom:10px;">
+          📜 Desplaça't fins al final per poder acceptar
+        </div>
+        <div style="display:flex;gap:10px;justify-content:flex-end;">
+          <button id="termesCancel" style="background:#f3f4f6;color:#374151;border:none;border-radius:8px;padding:10px 18px;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit;">Cancel·lar</button>
+          <button id="termesAccept" disabled style="background:#e5e7eb;color:#9ca3af;border:none;border-radius:8px;padding:10px 20px;font-size:13px;font-weight:700;cursor:not-allowed;font-family:inherit;transition:all .2s;">✓ Accepto les condicions</button>
+        </div>
+      </div>
+    </div>
+  `;
+
+  document.body.appendChild(modal);
+
+  // Detectar quan s'arriba al final del scroll
+  const scrollEl = document.getElementById('termesScroll');
+  const acceptBtn = document.getElementById('termesAccept');
+  const scrollMsg = document.getElementById('termesScrollMsg');
+
+  function checkScroll() {
+    const arribaFinal = scrollEl.scrollTop + scrollEl.clientHeight >= scrollEl.scrollHeight - 10;
+    if (arribaFinal) {
+      acceptBtn.disabled = false;
+      acceptBtn.style.background = '#4c1d95';
+      acceptBtn.style.color = '#fff';
+      acceptBtn.style.cursor = 'pointer';
+      scrollMsg.textContent = '✅ Has llegit les condicions. Ara pots acceptar.';
+      scrollMsg.style.color = '#059669';
+    }
+  }
+  scrollEl.addEventListener('scroll', checkScroll);
+
+  document.getElementById('termesCancel').addEventListener('click', () => modal.remove());
+  acceptBtn.addEventListener('click', () => {
+    if (acceptBtn.disabled) return;
+    modal.remove();
+    onAccept();
+  });
+}
+
+
 document.getElementById('btnLogin').addEventListener('click', async () => {
   const email = document.getElementById('loginEmail').value.trim();
   const pw    = document.getElementById('loginPassword').value;
@@ -125,53 +234,72 @@ async function signInWithGoogle() {
     const user = result.user;
     const profRef = db.collection('professors').doc(user.uid);
     const docSnap = await profRef.get();
+
     if (!docSnap.exists) {
-      await profRef.set({
-        email: user.email,
-        nom: user.displayName || user.email.split('@')[0],
-        google: true,
-        isAdmin: false,
-        suspended: false,
-        deleted: false,
-        classes: [],
-        createdAt: firebase.firestore.Timestamp.now()
+      // Usuari nou — cal acceptar les condicions primer
+      mostrarModalTermes(async () => {
+        try {
+          await profRef.set({
+            email: user.email,
+            nom: user.displayName || user.email.split('@')[0],
+            google: true,
+            isAdmin: false,
+            suspended: false,
+            deleted: false,
+            classes: [],
+            termsAcceptedAt: firebase.firestore.Timestamp.now(),
+            createdAt: firebase.firestore.Timestamp.now()
+          });
+          professorUID = user.uid;
+          setupAfterAuth(user);
+        } catch (err) {
+          await auth.signOut();
+          alert("Error creant el compte: " + err.message);
+        }
       });
+      return;
     }
-    const profDoc = await profRef.get();
-    const d = profDoc.data();
+
+    // Usuari existent — login normal
+    const d = docSnap.data();
     if (d.deleted)   { await auth.signOut(); return alert("⚠️ Compte eliminat."); }
     if (d.suspended) { await auth.signOut(); return alert("⚠️ Compte suspès. Contacta l'administrador."); }
     professorUID = user.uid;
     setupAfterAuth(user);
   } catch (err) {
-    alert("Error amb Google: " + err.message);
+    if (err.code !== 'auth/popup-closed-by-user') {
+      alert("Error amb Google: " + err.message);
+    }
   }
 }
 document.getElementById('googleLoginBtn').addEventListener('click', signInWithGoogle);
 
-document.getElementById('btnRegister').addEventListener('click', async () => {
+document.getElementById('btnRegister').addEventListener('click', () => {
   const email = document.getElementById('loginEmail').value.trim();
   const pw    = document.getElementById('loginPassword').value;
   if (!email || !pw) return alert('Introdueix email i contrasenya');
-  try {
-    const u = await auth.createUserWithEmailAndPassword(email, pw);
-    professorUID = u.user.uid;
-    await db.collection('professors').doc(professorUID).set({
-      email,
-      nom: email.split('@')[0],
-      isAdmin: false,
-      suspended: false,
-      deleted: false,
-      classes: [],
-      createdAt: firebase.firestore.Timestamp.now()
-    });
-    setupAfterAuth(u.user);
-    alert("Compte creat!");
-  } catch (e) {
-    if (e.code === 'auth/email-already-in-use') alert("Email ja registrat.");
-    else if (e.code === 'auth/weak-password') alert("Contrasenya massa dèbil (mínim 6 caràcters).");
-    else alert('Error: ' + e.message);
-  }
+  mostrarModalTermes(async () => {
+    try {
+      const u = await auth.createUserWithEmailAndPassword(email, pw);
+      professorUID = u.user.uid;
+      await db.collection('professors').doc(professorUID).set({
+        email,
+        nom: email.split('@')[0],
+        isAdmin: false,
+        suspended: false,
+        deleted: false,
+        classes: [],
+        termsAcceptedAt: firebase.firestore.Timestamp.now(),
+        createdAt: firebase.firestore.Timestamp.now()
+      });
+      setupAfterAuth(u.user);
+      alert("Compte creat!");
+    } catch (e) {
+      if (e.code === 'auth/email-already-in-use') alert("Email ja registrat.");
+      else if (e.code === 'auth/weak-password') alert("Contrasenya massa dèbil (mínim 6 caràcters).");
+      else alert('Error: ' + e.message);
+    }
+  });
 });
 
 document.getElementById('btnRecover').addEventListener('click', () => {
