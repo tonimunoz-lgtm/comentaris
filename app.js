@@ -971,6 +971,7 @@ async function showStudentComment(studentId, nom, comentariLocal) {
       'no cursa':               { color: '#6b7280', bg: '#f3f4f6' },
       'no avaluat':             { color: '#9ca3af', bg: '#f9fafb' },
     };
+    let assolamentsHTML = '';
     if (metadades.length > 0) {
       const badges = metadades.filter(m => m.assoliment).map(m => {
         const colors = ASSOLIMENTS_MAP[m.assoliment.toLowerCase()] || { color: '#6b7280', bg: '#f3f4f6' };
@@ -981,7 +982,6 @@ async function showStudentComment(studentId, nom, comentariLocal) {
       }
     }
 
-    // Re-renderitzar amb dades fresques
     _renderCommentPanel(nom, comentariFresh, assolamentsHTML, studentId);
 
   } catch(e) { console.error('showStudentComment error:', e); }
