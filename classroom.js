@@ -1,6 +1,6 @@
 // classroom.js - Integración con Google Classroom usando REST API
 
-const CLASSROOM_CLIENT_ID = "324570393360-2ib4925pbobfbggu8t0nnj14q5n414nv.apps.googleusercontent.com"; // Reemplaza con tu ID
+const CLASSROOM_CLIENT_ID = "774623644283-48v1crfkqkrkcvcrpivjpaq26t82692m.apps.googleusercontent.com"; // Reemplaza con tu ID
 const CLASSROOM_DISCOVERY_DOCS = [
   "https://www.googleapis.com/discovery/v1/apis/classroom/v1/rest"
 ];
