@@ -780,8 +780,13 @@ async function tcGenerar(modal) {
   textDiv.innerHTML = '<span class="text-gray-400 italic">La IA està escrivint...</span>';
 
   try {
-    if (!window.callTutoriaAPI) throw new Error('API no configurada. Comprova api-config.js');
-    const data = await window.callTutoriaAPI(tcPrompt(dades));
+    const res = await fetch('/api/tutoria', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ prompt: tcPrompt(dades) }),
+    });
+    if (!res.ok) throw new Error(`Error API: ${res.status}`);
+    const data = await res.json();
     textDiv.textContent = data.text || 'No s\'ha pogut generar.';
     resultat.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
     btnGu.classList.remove('hidden');
