@@ -857,7 +857,7 @@ function openCarregarPlantillaModal() {
 // Retorna el nom a mostrar al comentari segons preferències guardades
 function _ucCap(s) { return s ? s.charAt(0).toUpperCase() + s.slice(1) : s; }
 function _ucNomDisplay(nomComplet) {
-  if (!nomComplet || nomComplet === "l'alumne/a") return nomComplet || "l'alumne/a";
+  if (!nomComplet || nomComplet === "l'alumne/a" || nomComplet === 'alumne/a') return '';
   const parts = nomComplet.trim().split(/\s+/);
   const nom     = _ucCap(parts[0] || '');
   const cognom1 = _ucCap(parts[1] || '');
@@ -1257,15 +1257,30 @@ async function generarAmbIA(modal) {
   const nomEl = document.getElementById('ucAlumneNom');
   const nomFromEl = nomEl ? nomEl.value.trim() : '';
   const nomComplet = window._tcStudentName || nomFromEl || '';
-  const alumne = _ucNomDisplay(nomComplet); // buit si cap checkbox actiu
+  const alumne = _ucNomDisplay(nomComplet);
   const idioma = document.getElementById('ucIdioma').value;
   const genereRadio = document.querySelector('input[name="ucGenere"]:checked');
   const genere = genereRadio ? genereRadio.value : 'noi';
+
   // Si no hi ha nom seleccionat -> mode neutre (sense nom ni article)
   const modeNeutre = !alumne || !alumne.trim();
-  const esVocalOH = !modeNeutre && /^[aeiouàèéíïóòúüh]/i.test(alumne.trim());
+
+  // Construir article + nom correctament
+  // Cas especial: si _ucNomDisplay retorna "l'alumne/a" (sense nom real),
+  // no afegir cap article — ja en porta
+  const alumneEsGeneric = modeNeutre || alumne === "l'alumne/a" || alumne === 'alumne/a';
+  const esVocalOH = !alumneEsGeneric && /^[aeiouàèéíïóòúüh]/i.test(alumne.trim());
   const articleBase = genere === 'noia' ? 'La' : 'El';
-  const nomAmbArticle = modeNeutre ? '' : (esVocalOH ? `l'${alumne}` : `${articleBase} ${alumne}`);
+  let nomAmbArticle;
+  if (alumneEsGeneric) {
+    nomAmbArticle = idioma === 'castella'
+      ? (genere === 'noia' ? 'La alumna' : 'El alumno')
+      : "L'alumne/a";
+  } else if (idioma === 'castella') {
+    nomAmbArticle = `${articleBase} ${alumne}`;
+  } else {
+    nomAmbArticle = esVocalOH ? `l'${alumne}` : `${articleBase} ${alumne}`;
+  }
 
   // Recollir assoliments per ítem (desplegable independent)
   const assoliments = {};
@@ -1334,13 +1349,20 @@ async function generarAmbIA(modal) {
     }
   });
 
-  const instrNom = modeNeutre
+  // Exemple concret per al prompt (mostra com ha de quedar la frase)
+  const exempleCapcelera = 'Pel que fa al mètode científic,';
+  const exempleResultat  = `${exempleCapcelera} ${nomAmbArticle} demostra un bon domini...`;
+
+  const instrNom = (modeNeutre || alumneEsGeneric)
     ? `- Cada bloc ha de COMENÇAR OBLIGATÒRIAMENT amb la capçalera indicada però SENSE els dos punts finals (ex: "Pel que fa al mètode científic,"). Immediatament després, SENSE nom ni article, continua directament amb el verb en tercera persona (ex: "Pel que fa al mètode científic, demostra un bon domini..."). NO escriguis cap nom ni article.`
-    : `- Cada bloc ha de COMENÇAR OBLIGATÒRIAMENT amb la capçalera indicada però SENSE els dos punts finals (ex: "Pel que fa al mètode científic,"). Immediatament després, sense punt ni majúscula, continua amb "${nomAmbArticle}" en minúscules (ex: "Pel que fa al mètode científic, ${nomAmbArticle} ..."). Tot ha de ser una frase contínua i fluida.
-- Usa sempre "${nomAmbArticle}" per referir-te a l'alumne/a (mai cap genèric).`;
+    : `- Cada bloc ha de COMENÇAR OBLIGATÒRIAMENT amb la capçalera indicada però SENSE els dos punts finals.
+- Immediatament després de la capçalera, escriu EXACTAMENT "${nomAmbArticle}" (ja inclou l'article, NO n'afegeixis cap més).
+- Exemple de resultat correcte: "${exempleResultat}"
+- PROHIBIT escriure "El ${nomAmbArticle}" o "La ${nomAmbArticle}" — l'article ja està inclòs.
+- Usa sempre "${nomAmbArticle}" per referir-te a l'alumne/a (mai cap altre article ni genèric).`;
 
   const prompt = `Ets un professor expert en redacció de comentaris per a butlletins de notes escolars.
-${modeNeutre ? '' : `\nAlumne/a: ${nomAmbArticle} (gènere: ${genere === 'noia' ? 'femení' : 'masculí'})`}
+${(modeNeutre || alumneEsGeneric) ? '' : `\nAlumne/a: "${nomAmbArticle}" — usa EXACTAMENT aquesta forma, que JA inclou l'article (gènere: ${genere === 'noia' ? 'femení' : 'masculí'})`}
 Idioma: ${idiomaStr}
 
 Ítems d'avaluació:
