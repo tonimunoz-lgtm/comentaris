@@ -698,7 +698,7 @@ document.getElementById('btnImportALConfirm').addEventListener('click', async ()
 /* ══════════════════════════════════════
    PERÍODES (trimestres / projectes)
 ══════════════════════════════════════ */
-function renderPeriodesTabs() {
+function renderPeriodesTabs(progres) {
   const container = document.getElementById('periodesTabs');
   if (!container) return;
   container.innerHTML = '';
@@ -714,8 +714,6 @@ function renderPeriodesTabs() {
       <span class="periode-tab-label">${pdata.nom || 'Sense nom'}</span>
       <span class="periode-tab-menu" data-pid="${pid}" title="Opcions">⋮</span>
     `;
-
-    // Clicar la tab (però no el menú)
     tab.addEventListener('click', e => {
       if (e.target.classList.contains('periode-tab-menu')) return;
       if (pid === currentPeriodeId) return;
@@ -728,15 +726,27 @@ function renderPeriodesTabs() {
       renderStudentsList();
       showCommentsEmpty();
     });
-
-    // Menú d'opcions ⋮
     tab.querySelector('.periode-tab-menu').addEventListener('click', e => {
       e.stopPropagation();
       showPeriodeMenu(pid, pdata.nom, e.target);
     });
-
     container.appendChild(tab);
   });
+
+  // Barra de progrés
+  const barContainer = document.getElementById('periodeProgresBar');
+  if (barContainer && progres) {
+    const pct = progres.total > 0 ? Math.round((progres.amb / progres.total) * 100) : 0;
+    const color = pct === 100 ? '#059669' : pct >= 50 ? '#2563eb' : '#d97706';
+    barContainer.innerHTML = `
+      <div style="display:flex;align-items:center;gap:8px;font-size:12px;color:#6b7280;white-space:nowrap;">
+        <div style="width:80px;height:6px;background:#f3f4f6;border-radius:99px;overflow:hidden;">
+          <div style="height:100%;width:${pct}%;background:${color};border-radius:99px;transition:width .4s;"></div>
+        </div>
+        <span style="font-weight:600;color:${color};">${progres.amb}/${progres.total}</span>
+        <span>amb comentari</span>
+      </div>`;
+  }
 }
 
 function showPeriodeMenu(pid, nomActual, anchor) {
@@ -865,6 +875,16 @@ function renderStudentsList() {
   document.getElementById('deleteStudentsModeBtn').textContent = deleteStudentsMode ? 'Modo eliminar actiu' : 'Eliminar alumnes';
 
   Promise.all(classStudents.map(id => db.collection('alumnes').doc(id).get())).then(docs => {
+    // Calcular progrés del periode actiu
+    let ambComentari = 0;
+    docs.forEach(doc => {
+      if (!doc.exists) return;
+      const data = doc.data();
+      const periodeData = data.comentarisPerPeriode?.[currentPeriodeId] || {};
+      if ((periodeData.comentari || data.comentari || '').trim()) ambComentari++;
+    });
+    renderPeriodesTabs({ amb: ambComentari, total: docs.filter(d => d.exists).length });
+
     docs.forEach((doc, idx) => {
       if (!doc.exists) return;
       const data = doc.data();
@@ -1042,22 +1062,53 @@ async function showStudentComment(studentId, nom, comentariLocal) {
       }
     }
 
-    _renderCommentPanel(nom, comentariFresh, assolamentsHTML, studentId);
+    const historial = periodeData.historial || [];
+
+    _renderCommentPanel(nom, comentariFresh, assolamentsHTML, studentId, historial);
 
   } catch(e) { console.error('showStudentComment error:', e); }
 }
 
-function _renderCommentPanel(nom, comentari, assolamentsHTML, studentId) {
+function _renderCommentPanel(nom, comentari, assolamentsHTML, studentId, historial = []) {
   const grid = document.getElementById('commentsGrid');
+  const teComentari = !!comentari.trim();
+
+  // Historial HTML (últimes 3 versions anteriors)
+  let historialHTML = '';
+  if (historial.length > 0) {
+    const items = historial.slice(0, 3).map((h, i) => {
+      const data = h.timestamp ? new Date(h.timestamp).toLocaleString('ca', { day:'2-digit', month:'2-digit', hour:'2-digit', minute:'2-digit' }) : '';
+      const preview = (h.text || '').slice(0, 80) + ((h.text || '').length > 80 ? '…' : '');
+      return `
+        <div class="history-item" data-idx="${i}">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:3px;">
+            <span style="font-size:11px;font-weight:600;color:#9ca3af;">Versió anterior ${i + 1}</span>
+            <span style="font-size:10px;color:#d1d5db;">${data}</span>
+          </div>
+          <div style="font-size:12px;color:#6b7280;line-height:1.5;">${preview}</div>
+          <button class="btn-restore-history" data-idx="${i}" style="margin-top:6px;font-size:11px;padding:3px 10px;border:1px solid #e5e7eb;border-radius:5px;background:#f9fafb;color:#6b7280;cursor:pointer;font-family:inherit;">↩ Restaurar</button>
+        </div>`;
+    }).join('');
+    historialHTML = `
+      <details class="history-details">
+        <summary style="font-size:12px;font-weight:600;color:#9ca3af;cursor:pointer;user-select:none;list-style:none;display:flex;align-items:center;gap:5px;padding:8px 0 4px;">
+          <span>🕓</span> Versions anteriors (${historial.length})
+        </summary>
+        <div style="display:flex;flex-direction:column;gap:8px;margin-top:6px;">${items}</div>
+      </details>`;
+  }
+
   grid.innerHTML = `
     <div class="comment-card">
       <div class="comment-card-header">
         <span class="comment-card-name">💬 ${nom}</span>
+        ${teComentari ? `<button id="btnCopyComment" class="btn-copy-comment" title="Copiar comentari">📋</button>` : ''}
       </div>
       ${assolamentsHTML}
-      <div id="commentDisplayText" class="comment-text ${!comentari.trim() ? 'empty' : ''}">
+      <div id="commentDisplayText" class="comment-text ${!teComentari ? 'empty' : ''}">
         ${comentari.trim() || 'Cap comentari. Fes clic a un botó per crear-ne un.'}
       </div>
+      ${historialHTML}
       <div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:12px;">
         <button id="btnEditComment" class="btn-outline btn-sm">✏️ Editar</button>
         <button id="btnGenCommentIA" class="btn-tutoria btn-sm">🤖 Comentari IA</button>
@@ -1065,6 +1116,27 @@ function _renderCommentPanel(nom, comentari, assolamentsHTML, studentId) {
       </div>
     </div>
   `;
+
+  // Copiar
+  document.getElementById('btnCopyComment')?.addEventListener('click', async (e) => {
+    try {
+      await navigator.clipboard.writeText(comentari.trim());
+      e.target.textContent = '✅';
+      setTimeout(() => { e.target.textContent = '📋'; }, 1500);
+    } catch { alert('No s\'ha pogut copiar. Selecciona el text manualment.'); }
+  });
+
+  // Restaurar historial
+  grid.querySelectorAll('.btn-restore-history').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      const idx = parseInt(btn.dataset.idx);
+      const versio = historial[idx];
+      if (!versio || !confirm(`Restaurar la versió anterior?\n\n"${(versio.text||'').slice(0,100)}..."`)) return;
+      // Guardar l'actual a l'historial i restaurar l'antiga
+      await _saveComentariWithHistory(studentId, versio.text, comentari);
+      showStudentComment(studentId, nom, versio.text);
+    });
+  });
 
   document.getElementById('btnEditComment').addEventListener('click', () => {
     openCommentsModal(studentId, nom, comentari);
@@ -1095,9 +1167,26 @@ function _renderCommentPanel(nom, comentari, assolamentsHTML, studentId) {
   
 }
 
-/* ══════════════════════════════════════
-   COMMENTS MODAL
-══════════════════════════════════════ */
+// Guarda comentari preservant historial de les últimes 3 versions
+async function _saveComentariWithHistory(studentId, nouText, textAnterior) {
+  const docRef = db.collection('alumnes').doc(studentId);
+  const doc = await docRef.get();
+  const periodeData = doc.data()?.comentarisPerPeriode?.[currentPeriodeId] || {};
+  const historialActual = periodeData.historial || [];
+
+  // Afegir versió anterior a l'historial (si té contingut i és diferent)
+  const nouHistorial = textAnterior?.trim()
+    ? [{ text: textAnterior.trim(), timestamp: Date.now() }, ...historialActual].slice(0, 3)
+    : historialActual;
+
+  await docRef.update({
+    [`comentarisPerPeriode.${currentPeriodeId}.comentari`]: nouText,
+    [`comentarisPerPeriode.${currentPeriodeId}.historial`]: nouHistorial,
+  });
+  return nouHistorial;
+}
+
+
 window.openCommentsModal = function(studentId, nom, comentariActual) {
   currentCommentStudent = { id: studentId, nom };
   window._tcStudentId   = studentId;
@@ -1128,27 +1217,22 @@ document.getElementById('saveCommentBtn').addEventListener('click', async () => 
     alert('Error: no hi ha alumne seleccionat. Tanca el modal i torna a clicar l\'alumne.');
     return;
   }
-  const text = document.getElementById('commentTextarea').value.trim();
+  const nouText    = document.getElementById('commentTextarea').value.trim();
+  const textActual = document.getElementById('commentDisplayText')?.textContent?.trim() || '';
   try {
-    await db.collection('alumnes').doc(currentCommentStudent.id).update({
-      [`comentarisPerPeriode.${currentPeriodeId}.comentari`]: text
-    });
+    await _saveComentariWithHistory(currentCommentStudent.id, nouText, textActual);
     closeModal('modalComments');
-    // Refresc immediat del panell dret sense recàrrega completa
-    showStudentComment(currentCommentStudent.id, currentCommentStudent.nom, text);
-    // Actualitzar el punt verd de l'alumne a la llista sense reload complet
+    showStudentComment(currentCommentStudent.id, currentCommentStudent.nom, nouText);
     const li = document.querySelector(`#studentsList li[data-id="${currentCommentStudent.id}"]`);
     if (li) {
       const dot = li.querySelector('.student-comment-dot');
-      if (text && !dot) {
+      if (nouText && !dot) {
         const nameSpan = li.querySelector('.student-name');
         const newDot = document.createElement('span');
         newDot.className = 'student-comment-dot';
         newDot.title = 'Té comentari';
         nameSpan?.after(newDot);
-      } else if (!text && dot) {
-        dot.remove();
-      }
+      } else if (!nouText && dot) dot.remove();
     }
   } catch(e) {
     console.error('Error guardant comentari:', e);
