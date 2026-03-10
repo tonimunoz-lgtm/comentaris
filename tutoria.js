@@ -813,13 +813,8 @@ async function generarComentari(modal) {
   comentariText.innerHTML = '<span class="text-gray-400 italic">La IA està escrivint el comentari...</span>';
 
   try {
-    const response = await fetch('/api/tutoria', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ prompt: buildPrompt(dades) }),
-    });
-    if (!response.ok) throw new Error(`Error API: ${response.status}`);
-    const data = await response.json();
+    if (!window.callTutoriaAPI) throw new Error('API no configurada. Comprova api-config.js');
+    const data = await window.callTutoriaAPI(buildPrompt(dades));
     comentariText.textContent = data.text || 'No s\'ha pogut generar el comentari.';
     resultatDiv.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
   } catch (err) {
