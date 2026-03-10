@@ -582,8 +582,9 @@ body {
 
 .class-card-menu {
   position: absolute;
-  top: 14px;
-  right: 14px;
+  top: 10px;
+  right: 10px;
+  z-index: 10;
 }
 
 .class-card .card-menu-dropdown {
@@ -595,7 +596,8 @@ body {
   border-radius: var(--radius-sm);
   box-shadow: var(--shadow-md);
   min-width: 140px;
-  z-index: 50;
+  width: max-content;
+  z-index: 200;
   overflow: hidden;
 }
 
