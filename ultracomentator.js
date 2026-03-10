@@ -1468,7 +1468,9 @@ async function guardarComentariAlumne(comentari, modal, items = [], passarAlSegu
     if (passarAlSeguent) {
       // Trobar el seguent alumne a la classe
       if (btnActiu) btnActiu.innerHTML = '⏳ Buscant...';
-      const classDoc = await db.collection('classes').doc(classIdActual).get();
+      // IMPORTANT: classIdActual és el periodeId — per la llista d'alumnes cal el classId real
+      const realClassId = window.currentClassId || classIdActual;
+      const classDoc = await db.collection('classes').doc(realClassId).get();
       const alumnesIds = (classDoc.exists ? classDoc.data().alumnes : null) || [];
       const idxActual = alumnesIds.indexOf(studentIdActual);
       const idxSeguent = idxActual + 1;
