@@ -502,7 +502,7 @@ function renderSidebarClasses(ids, docs) {
   });
 }
 
-
+function loadClassData() {
   if (!currentClassId) return;
   db.collection('classes').doc(currentClassId).get().then(async doc => {
     if (!doc.exists) { alert('Classe no trobada'); return; }
