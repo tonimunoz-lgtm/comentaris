@@ -475,6 +475,15 @@ document.getElementById('modalAddStudentBtn').addEventListener('click', async ()
   loadClassData();
 });
 
+// Export Excel
+document.getElementById('btnExportExcel').addEventListener('click', () => {
+  if (typeof window.exportarComentarisExcel === 'function') {
+    window.exportarComentarisExcel();
+  } else {
+    exportarComentarisExcel();
+  }
+});
+
 // Sort alpha
 document.getElementById('btnSortAlpha').addEventListener('click', async () => {
   const docs = await Promise.all(classStudents.map(id => db.collection('alumnes').doc(id).get()));
