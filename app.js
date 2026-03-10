@@ -223,11 +223,14 @@ async function setupAfterAuth(user) {
   // Admin check
   const userDoc = await db.collection('professors').doc(user.uid).get();
   if (userDoc.exists && userDoc.data().isAdmin) {
-    const adminBtn = document.createElement('button');
-    adminBtn.className = 'nav-item';
-    adminBtn.innerHTML = '<span class="nav-icon">⚙️</span><span>Administrar</span>';
-    adminBtn.addEventListener('click', () => { window.location.href = 'admin.html'; });
-    document.querySelector('.sidebar-nav').appendChild(adminBtn);
+    if (!document.getElementById('adminNavBtn')) {
+      const adminBtn = document.createElement('button');
+      adminBtn.id = 'adminNavBtn';
+      adminBtn.className = 'nav-item';
+      adminBtn.innerHTML = '<span class="nav-icon">⚙️</span><span>Administrar</span>';
+      adminBtn.addEventListener('click', () => { window.location.href = 'admin.html'; });
+      document.querySelector('.sidebar-nav').appendChild(adminBtn);
+    }
   }
 
   loadClassesScreen();
@@ -292,6 +295,7 @@ function loadClassesScreen() {
     }
 
     Promise.all(ids.map(id => db.collection('classes').doc(id).get())).then(docs => {
+      renderSidebarClasses(ids, docs);
       classesGrid.innerHTML = '';
       docs.forEach(d => {
         if (!d.exists) return;
@@ -319,13 +323,29 @@ function loadClassesScreen() {
         `;
 
         if (!deleteClassMode) {
-          // Toggle menu
+          // Toggle menu — usem position:fixed per escapar de qualsevol overflow
           const menuBtn = card.querySelector('.card-menu-btn');
           const menuDrop = card.querySelector('.card-menu-dropdown');
           menuBtn?.addEventListener('click', e => {
             e.stopPropagation();
-            document.querySelectorAll('.card-menu-dropdown').forEach(m => m.classList.add('hidden'));
-            menuDrop.classList.toggle('hidden');
+            // Tancar altres menús oberts
+            document.querySelectorAll('.card-menu-dropdown').forEach(m => {
+              if (m !== menuDrop) { m.classList.add('hidden'); m.style.cssText = ''; }
+            });
+            if (menuDrop.classList.contains('hidden')) {
+              menuDrop.classList.remove('hidden');
+              // Posicionar amb fixed per sortir del overflow
+              const rect = menuBtn.getBoundingClientRect();
+              menuDrop.style.cssText = `
+                position:fixed;
+                top:${rect.bottom + 4}px;
+                left:${Math.min(rect.right - 150, window.innerWidth - 160)}px;
+                z-index:9999;
+              `;
+            } else {
+              menuDrop.classList.add('hidden');
+              menuDrop.style.cssText = '';
+            }
           });
 
           // Edit
@@ -404,20 +424,27 @@ async function confirmDeleteSelectedClasses() {
 function openClass(id) {
   currentClassId = id;
   window.currentClassId = id;
+  currentPeriodeId = null;
   screenClasses.classList.add('hidden');
   screenClass.classList.remove('hidden');
   document.getElementById('btnMobileBack').classList.remove('hidden');
   document.getElementById('btnMobileStudents').classList.remove('hidden');
+  // Marcar actiu al sidebar
+  document.querySelectorAll('.sidebar-class-item').forEach(b => {
+    b.classList.toggle('active', b.dataset.classId === id);
+  });
   loadClassData();
 }
 
 document.getElementById('btnBack').addEventListener('click', () => {
   currentClassId = null;
   window.currentClassId = null;
+  currentPeriodeId = null;
   screenClass.classList.add('hidden');
   screenClasses.classList.remove('hidden');
   document.getElementById('btnMobileBack').classList.add('hidden');
   document.getElementById('btnMobileStudents').classList.add('hidden');
+  document.querySelectorAll('.sidebar-class-item').forEach(b => b.classList.remove('active'));
   loadClassesScreen();
 });
 
@@ -442,7 +469,40 @@ document.getElementById('mobileSidebarOverlay').addEventListener('click', () => 
   document.getElementById('mobileSidebarOverlay').classList.add('hidden');
 });
 
-function loadClassData() {
+function renderSidebarClasses(ids, docs) {
+  const container = document.getElementById('sidebarClassesList');
+  if (!container) return;
+  container.innerHTML = '';
+  if (!ids || !ids.length) {
+    container.innerHTML = '<div style="font-size:12px;color:rgba(255,255,255,0.2);padding:4px 12px;">Cap grup creat</div>';
+    return;
+  }
+  ids.forEach((id, i) => {
+    const data = docs[i]?.data?.();
+    if (!data) return;
+    const btn = document.createElement('button');
+    btn.className = 'sidebar-class-item' + (id === currentClassId ? ' active' : '');
+    btn.dataset.classId = id;
+    btn.innerHTML = `<span class="sidebar-class-dot"></span><span style="overflow:hidden;text-overflow:ellipsis;">${data.nom || 'Sense nom'}</span>`;
+    btn.addEventListener('click', () => {
+      // Si estem a la pantalla de classes, obrir directament
+      screenClasses.classList.add('hidden');
+      screenClass.classList.remove('hidden');
+      document.getElementById('btnMobileBack').classList.remove('hidden');
+      document.getElementById('btnMobileStudents').classList.remove('hidden');
+      // Actualitzar actiu
+      document.querySelectorAll('.sidebar-class-item').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      currentClassId = id;
+      window.currentClassId = id;
+      currentPeriodeId = null;
+      loadClassData();
+    });
+    container.appendChild(btn);
+  });
+}
+
+
   if (!currentClassId) return;
   db.collection('classes').doc(currentClassId).get().then(async doc => {
     if (!doc.exists) { alert('Classe no trobada'); return; }
