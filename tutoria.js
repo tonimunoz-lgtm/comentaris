@@ -762,15 +762,39 @@ function buildPrompt(dades) {
     campOpcional('Recomanacions', dades.recomanacions),
   ].filter(Boolean).join('\n');
 
-  const idiomaInstruccio = dades.idioma === 'castella'
-    ? `Escriu en castellano. Usa "${article === 'El' ? 'El' : 'La'} ${nom}" i pronoms él/ella.`
-    : `Escriu en català. Usa "${nomAmbArticle}". Omet el pronom subjecte ell/ella quan el subjecte és conegut (pro-drop).`;
+  const esCastella = dades.idioma === 'castella';
+  const nomInici   = esCastella
+    ? `${article === 'El' ? 'El' : 'La'} ${nom}`
+    : nomAmbArticle;
+
+  const toInstr = toInstruccio(dades.to, situacioGreu);
+
+  if (esCastella) {
+    return `Eres un tutor/a escolar que escribe comentarios para el boletín de notas.
+
+DATOS:
+${context}
+
+INSTRUCCIONES:
+- Escribe ÚNICAMENTE en castellano.
+- Empieza SIEMPRE con "${nomInici}" (nunca con "Estimada familia").
+- El comentario es sobre el alumno/a, no dirigido a la familia.
+- ${dades.llargada === 'curt' ? 'Entre 50 y 80 palabras (muy conciso)' : dades.llargada === 'llarg' ? 'Entre 150 y 250 palabras (desarrollado)' : 'Entre 80 y 150 palabras'}. Párrafos fluidos, sin listas.
+- No menciones notas numéricas.
+- ${dades.trimestre ? `Es el ${dades.trimestre}: ${dades.trimestre === 'final de curs' ? 'reflexiona sobre todo el curso' : 'anima a mejorar de cara a los próximos trimestres'}.` : ''}
+- ${toInstr}
+- Si hay asignaturas suspensas, menciónalas y explica las carencias.
+- Si hay apartados personalizados (trabajo cooperativo, proyectos...), intégralos de forma natural.
+- Si hay recomendaciones, inclúyelas de forma natural.
+- Termina con un ánimo genuino.
+- Concordancia de género correcta. Usa pronombres él/ella según corresponda.
+
+Escribe SOLO el comentario final, sin título ni explicación.`;
+  }
 
   const trimestreCtx = dades.trimestre
     ? `És el ${dades.trimestre}: ${dades.trimestre === 'final de curs' ? 'reflexiona sobre tot el curs' : 'anima a millorar de cara als propers trimestres'}.`
     : '';
-
-  const toInstr = toInstruccio(dades.to, situacioGreu);
 
   return `Ets un tutor/a escolar que escriu comentaris per al butlletí de notes.
 
@@ -778,8 +802,8 @@ DADES:
 ${context}
 
 INSTRUCCIONS:
-- ${idiomaInstruccio}
-- Comença SEMPRE amb "${nomAmbArticle}" (mai amb "Estimada família").
+- Escriu en català. Usa "${nomInici}". Omet el pronom subjecte ell/ella quan el subjecte és conegut (pro-drop).
+- Comença SEMPRE amb "${nomInici}" (mai amb "Estimada família").
 - El comentari és sobre l'alumne/a, no adreçat a la família.
 - ${dades.llargada === 'curt' ? 'Entre 50 i 80 paraules (molt concís)' : dades.llargada === 'llarg' ? 'Entre 150 i 250 paraules (desenvolupat)' : 'Entre 80 i 150 paraules'}. Paràgrafs fluids, sense llistes.
 - No mencions notes numèriques.
