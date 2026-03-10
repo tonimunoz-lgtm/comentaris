@@ -27,6 +27,8 @@ let classStudents  = [];
 let deleteStudentsMode = false;
 let deleteClassMode    = false;
 let currentCommentStudent = null; // { id, nom }
+let currentPeriodeId = null;      // periode actiu
+let currentPeriodes  = {};        // { periodeId: { nom, ordre } }
 
 window.currentClassId = null;
 
@@ -442,13 +444,37 @@ document.getElementById('mobileSidebarOverlay').addEventListener('click', () => 
 
 function loadClassData() {
   if (!currentClassId) return;
-  db.collection('classes').doc(currentClassId).get().then(doc => {
+  db.collection('classes').doc(currentClassId).get().then(async doc => {
     if (!doc.exists) { alert('Classe no trobada'); return; }
     const data = doc.data();
     classStudents = data.alumnes || [];
     document.getElementById('classTitle').textContent = data.nom || 'Sense nom';
     document.getElementById('classSub').textContent   = `${classStudents.length} alumnes`;
     window._currentClassName = data.nom || '';
+
+    // Carregar períodes
+    currentPeriodes = data.periodes || {};
+
+    // Si no hi ha cap període, crear "General" per defecte
+    if (Object.keys(currentPeriodes).length === 0) {
+      const pid = `p_${Date.now()}`;
+      currentPeriodes[pid] = { nom: '1r Trimestre', ordre: 0 };
+      await db.collection('classes').doc(currentClassId).update({ periodes: currentPeriodes });
+    }
+
+    // Si el periode actiu ja no existeix, agafar el primer
+    if (!currentPeriodeId || !currentPeriodes[currentPeriodeId]) {
+      const ids = Object.entries(currentPeriodes).sort((a,b) => (a[1].ordre||0)-(b[1].ordre||0));
+      currentPeriodeId = ids[0]?.[0] || null;
+    }
+
+    // Sincronitzar period com a "classId" per als mòduls de tutoria
+    window._tcClassId = currentPeriodeId;
+    if (typeof window._tcSetStudent === 'function' && currentCommentStudent) {
+      window._tcSetStudent(currentCommentStudent.id, currentCommentStudent.nom, currentPeriodeId);
+    }
+
+    renderPeriodesTabs();
     renderStudentsList();
     showCommentsEmpty();
   }).catch(e => console.error(e));
@@ -609,6 +635,155 @@ document.getElementById('btnImportALConfirm').addEventListener('click', async ()
   alert(`✅ ${names.length} alumnes importats!`);
 });
 
+/* ══════════════════════════════════════
+   PERÍODES (trimestres / projectes)
+══════════════════════════════════════ */
+function renderPeriodesTabs() {
+  const container = document.getElementById('periodesTabs');
+  if (!container) return;
+  container.innerHTML = '';
+
+  const sorted = Object.entries(currentPeriodes)
+    .sort((a, b) => (a[1].ordre || 0) - (b[1].ordre || 0));
+
+  sorted.forEach(([pid, pdata]) => {
+    const tab = document.createElement('button');
+    tab.className = 'periode-tab' + (pid === currentPeriodeId ? ' active' : '');
+    tab.dataset.pid = pid;
+    tab.innerHTML = `
+      <span class="periode-tab-label">${pdata.nom || 'Sense nom'}</span>
+      <span class="periode-tab-menu" data-pid="${pid}" title="Opcions">⋮</span>
+    `;
+
+    // Clicar la tab (però no el menú)
+    tab.addEventListener('click', e => {
+      if (e.target.classList.contains('periode-tab-menu')) return;
+      if (pid === currentPeriodeId) return;
+      currentPeriodeId = pid;
+      window._tcClassId = pid;
+      if (typeof window._tcSetStudent === 'function' && currentCommentStudent) {
+        window._tcSetStudent(currentCommentStudent.id, currentCommentStudent.nom, pid);
+      }
+      renderPeriodesTabs();
+      renderStudentsList();
+      showCommentsEmpty();
+    });
+
+    // Menú d'opcions ⋮
+    tab.querySelector('.periode-tab-menu').addEventListener('click', e => {
+      e.stopPropagation();
+      showPeriodeMenu(pid, pdata.nom, e.target);
+    });
+
+    container.appendChild(tab);
+  });
+}
+
+function showPeriodeMenu(pid, nomActual, anchor) {
+  // Tancar qualsevol menú obert
+  document.getElementById('periodeCtxMenu')?.remove();
+
+  const menu = document.createElement('div');
+  menu.id = 'periodeCtxMenu';
+  menu.style.cssText = `
+    position:fixed;background:#fff;border:1px solid #e5e7eb;border-radius:8px;
+    box-shadow:0 8px 24px rgba(0,0,0,0.14);z-index:9999;overflow:hidden;min-width:170px;
+  `;
+  menu.innerHTML = `
+    <div style="padding:4px 0;">
+      <button data-action="rename" style="width:100%;text-align:left;padding:9px 16px;background:none;border:none;cursor:pointer;font-size:13px;color:#374151;font-family:inherit;display:flex;align-items:center;gap:8px;">✏️ Canviar nom</button>
+      <button data-action="duplicate" style="width:100%;text-align:left;padding:9px 16px;background:none;border:none;cursor:pointer;font-size:13px;color:#374151;font-family:inherit;display:flex;align-items:center;gap:8px;">📋 Duplicar (sense comentaris)</button>
+      <div style="height:1px;background:#f3f4f6;"></div>
+      <button data-action="delete" style="width:100%;text-align:left;padding:9px 16px;background:none;border:none;cursor:pointer;font-size:13px;color:#dc2626;font-family:inherit;display:flex;align-items:center;gap:8px;">🗑️ Eliminar</button>
+    </div>
+  `;
+
+  // Posicionar el menú sota l'anchor
+  const rect = anchor.getBoundingClientRect();
+  menu.style.top  = (rect.bottom + 4) + 'px';
+  menu.style.left = Math.min(rect.left, window.innerWidth - 200) + 'px';
+  document.body.appendChild(menu);
+
+  const close = () => menu.remove();
+  setTimeout(() => document.addEventListener('click', close, { once: true }), 10);
+
+  menu.querySelector('[data-action="rename"]').addEventListener('click', async () => {
+    close();
+    const nou = prompt('Nou nom:', nomActual);
+    if (!nou || !nou.trim() || nou.trim() === nomActual) return;
+    currentPeriodes[pid].nom = nou.trim();
+    await db.collection('classes').doc(currentClassId).update({ periodes: currentPeriodes });
+    renderPeriodesTabs();
+  });
+
+  menu.querySelector('[data-action="duplicate"]').addEventListener('click', async () => {
+    close();
+    const base = nomActual.replace(/\s*\(còpia.*\)$/, '').trim();
+    const nom = prompt('Nom del nou període:', base + ' (còpia)');
+    if (!nom || !nom.trim()) return;
+    const nouId = `p_${Date.now()}`;
+    const maxOrdre = Math.max(...Object.values(currentPeriodes).map(p => p.ordre || 0));
+    currentPeriodes[nouId] = { nom: nom.trim(), ordre: maxOrdre + 1 };
+    await db.collection('classes').doc(currentClassId).update({ periodes: currentPeriodes });
+    // Canviar a nou període (alumnes sense comentaris)
+    currentPeriodeId = nouId;
+    window._tcClassId = nouId;
+    renderPeriodesTabs();
+    renderStudentsList();
+    showCommentsEmpty();
+  });
+
+  menu.querySelector('[data-action="delete"]').addEventListener('click', async () => {
+    close();
+    if (Object.keys(currentPeriodes).length <= 1) {
+      alert('Cal tenir almenys un període. Canvia el nom en lloc d\'eliminar-lo.');
+      return;
+    }
+    if (!confirm(`Eliminar el període "${nomActual}"?\nEls comentaris d'aquest període s'esborraran de tots els alumnes.`)) return;
+
+    // Esborrar comentaris d'aquest periode de tots els alumnes
+    const batch = db.batch();
+    classStudents.forEach(sid => {
+      batch.update(db.collection('alumnes').doc(sid), {
+        [`comentarisPerPeriode.${pid}`]: firebase.firestore.FieldValue.delete()
+      });
+    });
+    await batch.commit();
+
+    delete currentPeriodes[pid];
+    // Recalcular ordres
+    Object.values(currentPeriodes).forEach((p, i) => { p.ordre = i; });
+    await db.collection('classes').doc(currentClassId).update({ periodes: currentPeriodes });
+
+    // Canviar a primer periode disponible
+    const primer = Object.entries(currentPeriodes).sort((a,b) => (a[1].ordre||0)-(b[1].ordre||0))[0];
+    currentPeriodeId = primer?.[0] || null;
+    window._tcClassId = currentPeriodeId;
+    renderPeriodesTabs();
+    renderStudentsList();
+    showCommentsEmpty();
+  });
+}
+
+// Botó + nou període
+document.getElementById('btnAddPeriode').addEventListener('click', async () => {
+  const sugerits = ['1r Trimestre','2n Trimestre','3r Trimestre','Final de curs','Projecte 1','Projecte 2'];
+  const existents = Object.values(currentPeriodes).map(p => p.nom);
+  const seguent = sugerits.find(s => !existents.includes(s)) || 'Nou període';
+  const nom = prompt('Nom del nou període:', seguent);
+  if (!nom || !nom.trim()) return;
+  const nouId = `p_${Date.now()}`;
+  const maxOrdre = Object.keys(currentPeriodes).length === 0 ? 0 :
+    Math.max(...Object.values(currentPeriodes).map(p => p.ordre || 0)) + 1;
+  currentPeriodes[nouId] = { nom: nom.trim(), ordre: maxOrdre };
+  await db.collection('classes').doc(currentClassId).update({ periodes: currentPeriodes });
+  currentPeriodeId = nouId;
+  window._tcClassId = nouId;
+  renderPeriodesTabs();
+  renderStudentsList();
+  showCommentsEmpty();
+});
+
 // Render students list
 function renderStudentsList() {
   studentsList.innerHTML = '';
@@ -634,7 +809,9 @@ function renderStudentsList() {
       if (!doc.exists) return;
       const data = doc.data();
       const nom  = data.nom || 'Desconegut';
-      const hasComment = !!(data.comentari || '').trim();
+      // Llegir comentari del periode actiu
+      const periodeData = data.comentarisPerPeriode?.[currentPeriodeId] || {};
+      const hasComment = !!(periodeData.comentari || data.comentari || '').trim();
 
       const li = document.createElement('li');
       li.className = 'student-item';
@@ -664,7 +841,9 @@ function renderStudentsList() {
         li.addEventListener('click', () => {
           document.querySelectorAll('.student-item').forEach(s => s.classList.remove('active'));
           li.classList.add('active');
-          showStudentComment(doc.id, nom, data.comentari || '');
+          const periodeData = data.comentarisPerPeriode?.[currentPeriodeId] || {};
+          const comentariActual = periodeData.comentari || data.comentari || '';
+          showStudentComment(doc.id, nom, comentariActual);
         });
 
         // Drag & drop
@@ -762,10 +941,10 @@ async function showStudentComment(studentId, nom, comentariLocal) {
   currentCommentStudent = { id: studentId, nom };
   window._tcStudentId   = studentId;
   window._tcStudentName = nom;
-  window._tcClassId     = currentClassId;
+  window._tcClassId     = currentPeriodeId;
 
   if (typeof window._tcSetStudent === 'function') {
-    window._tcSetStudent(studentId, nom, currentClassId);
+    window._tcSetStudent(studentId, nom, currentPeriodeId);
   }
 
   document.getElementById('commentsEmptyState').classList.add('hidden');
@@ -780,7 +959,9 @@ async function showStudentComment(studentId, nom, comentariLocal) {
     const doc = await db.collection('alumnes').doc(studentId).get();
     if (!doc.exists) return;
     const data = doc.data();
-    const comentariFresh = data.comentari || data.comentarios?.[currentClassId] || '';
+    const periodeData    = data.comentarisPerPeriode?.[currentPeriodeId] || {};
+    const comentariFresh = periodeData.comentari || data.comentari || '';
+    const metadades      = periodeData.comentarisItems || data.comentarisItems?.[currentPeriodeId] || [];
 
     const ASSOLIMENTS_MAP = {
       'assoliment excel·lent':  { color: '#059669', bg: '#d1fae5' },
@@ -790,9 +971,6 @@ async function showStudentComment(studentId, nom, comentariLocal) {
       'no cursa':               { color: '#6b7280', bg: '#f3f4f6' },
       'no avaluat':             { color: '#9ca3af', bg: '#f9fafb' },
     };
-
-    let assolamentsHTML = '';
-    const metadades = data.comentarisItems?.[currentClassId] || [];
     if (metadades.length > 0) {
       const badges = metadades.filter(m => m.assoliment).map(m => {
         const colors = ASSOLIMENTS_MAP[m.assoliment.toLowerCase()] || { color: '#6b7280', bg: '#f3f4f6' };
@@ -892,7 +1070,9 @@ document.getElementById('saveCommentBtn').addEventListener('click', async () => 
   }
   const text = document.getElementById('commentTextarea').value.trim();
   try {
-    await db.collection('alumnes').doc(currentCommentStudent.id).update({ comentari: text });
+    await db.collection('alumnes').doc(currentCommentStudent.id).update({
+      [`comentarisPerPeriode.${currentPeriodeId}.comentari`]: text
+    });
     closeModal('modalComments');
     // Refresc immediat del panell dret sense recàrrega completa
     showStudentComment(currentCommentStudent.id, currentCommentStudent.nom, text);
@@ -920,7 +1100,9 @@ window.saveComment = async function() {
   if (!currentCommentStudent?.id) return;
   const text = document.getElementById('commentTextarea').value.trim();
   try {
-    await db.collection('alumnes').doc(currentCommentStudent.id).update({ comentari: text });
+    await db.collection('alumnes').doc(currentCommentStudent.id).update({
+      [`comentarisPerPeriode.${currentPeriodeId}.comentari`]: text
+    });
     closeModal('modalComments');
     showStudentComment(currentCommentStudent.id, currentCommentStudent.nom, text);
     // Actualitzar dot a la llista
@@ -973,9 +1155,9 @@ async function exportarComentarisExcel() {
 
     const alumnes = docs.filter(d => d.exists).map(d => {
       const data = d.data();
-      // Compatibilitat: camp nou (comentari) o camp antic per classe (comentarios.classId)
-      const comentariText = data.comentari || data.comentarios?.[currentClassId] || '';
-      const metadades = data.comentarisItems?.[currentClassId] || [];
+      const periodeData   = data.comentarisPerPeriode?.[currentPeriodeId] || {};
+      const comentariText = periodeData.comentari || data.comentari || data.comentarios?.[currentClassId] || '';
+      const metadades     = periodeData.comentarisItems || data.comentarisItems?.[currentPeriodeId] || [];
       const blocs = _parsarComentariItems(comentariText);
       const items = blocs.map((bloc, i) => ({
         titol:      metadades[i]?.titol      || bloc.item || `Ítem ${i+1}`,
