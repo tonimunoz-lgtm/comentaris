@@ -91,10 +91,20 @@ function transformarBotoTutoria(originalBtn) {
   // Tancar en clicar fora
   document.addEventListener('click', () => { menu.classList.add('hidden'); });
 
-  // Opció 1: Comentari IA
+  // Opció 1: Comentari IA → obre openTutoriaModal (formulari amb input text per escriure nom)
   document.getElementById('ucOptIA').addEventListener('click', () => {
     menu.classList.add('hidden');
-    document.getElementById('btnTutoria_hidden').click();
+    // Netejar context d'alumne (vé del desplegable general, no d'un alumne concret)
+    window._tcStudentName = null;
+    window._tcStudentId   = null;
+    // Cridar openTutoriaModal directament
+    if (typeof window.openTutoriaModal === 'function') {
+      window.openTutoriaModal();
+    } else {
+      // Fallback: clicar el botó hidden original
+      const btnH = document.getElementById('btnTutoria_hidden');
+      if (btnH) btnH.click();
+    }
   });
 
   // Opció 2: Ultracomentator
