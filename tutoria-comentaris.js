@@ -257,76 +257,77 @@ function _parsarComentariItems(text) {
 }
 
 async function exportarComentarisExcel() {
-  const classId = _tcClassId;
+  const classId = _tcClassId || window.currentClassId;
   if (!classId || !_tcDB) { alert('Selecciona una classe primer'); return; }
 
   try {
     const classDoc = await _tcDB.collection('classes').doc(classId).get();
     if (!classDoc.exists) { alert('Classe no trobada'); return; }
+    const nomClasse = classDoc.data().nom || 'Classe';
     const alumnesIds = classDoc.data().alumnes || [];
-    if (alumnesIds.length === 0) { alert('No hi ha alumnes'); return; }
+    if (!alumnesIds.length) { alert('No hi ha alumnes'); return; }
 
     const docs = await Promise.all(alumnesIds.map(id => _tcDB.collection('alumnes').doc(id).get()));
     const alumnes = docs.filter(d => d.exists).map(d => {
       const data = d.data();
-      const comentari = data.comentarios?.[classId] || '';
-      const metadades = data.comentarisItems?.[classId] || []; // títols + assoliments guardats
-      const blocs = _parsarComentariItems(comentari);
-      // Combinar blocs de text amb metadades (títol real + assoliment)
+      // Compatibilitat: llegir del camp nou (comentari) o de l'antic (comentarios.classId)
+      const comentariText = data.comentari || data.comentarios?.[classId] || '';
+      const metadades = data.comentarisItems?.[classId] || [];
+      const blocs = _parsarComentariItems(comentariText);
       const items = blocs.map((bloc, i) => ({
         titol: metadades[i]?.titol || bloc.item || `Ítem ${i+1}`,
         comentari: bloc.comentari,
         assoliment: metadades[i]?.assoliment || ''
       }));
-      return { nom: data.nom || 'Desconegut', items };
+      return { nom: data.nom || 'Desconegut', items, comentariComplet: comentariText };
     });
 
     if (!window.XLSX) { alert('La llibreria XLSX no està disponible'); return; }
 
     const maxItems = Math.max(1, ...alumnes.map(a => a.items.length));
+    const tenItems = alumnes.some(a => a.items.length > 1);
 
-    // Capçalera dinàmica amb títols reals del primer alumne que els tingui
-    const titolsCapcalera = [];
-    for (let i = 0; i < maxItems; i++) {
-      const titol = alumnes.find(a => a.items[i]?.titol && !a.items[i].titol.startsWith('Ítem'))?.items[i].titol || `Ítem ${i+1}`;
-      titolsCapcalera.push(titol);
-    }
+    let ws, wb = window.XLSX.utils.book_new();
 
-    const capcalera = ['Alumne'];
-    for (let i = 1; i <= maxItems; i++) {
-      capcalera.push(`Ítem ${i}`, `Comentari ${i}`, `Assoliment ${i}`);
-    }
-
-    // Files de dades
-    const files = alumnes.map(a => {
-      const fila = [a.nom];
-      for (let i = 0; i < maxItems; i++) {
-        const it = a.items[i];
-        fila.push(it ? it.titol : '');
-        fila.push(it ? it.comentari : '');
-        fila.push(it ? it.assoliment : '');
+    if (tenItems) {
+      // Format amb ítems (com original)
+      const capcalera = ['Alumne'];
+      for (let i = 1; i <= maxItems; i++) {
+        capcalera.push(`Ítem ${i}`, `Comentari ${i}`, `Assoliment ${i}`);
       }
-      return fila;
-    });
-
-    const wb = window.XLSX.utils.book_new();
-    const ws = window.XLSX.utils.aoa_to_sheet([capcalera, ...files]);
-
-    // Amplades: Alumne=25, Ítem=30, Comentari=80, Assoliment=20
-    ws['!cols'] = [{ wch: 25 }];
-    for (let i = 0; i < maxItems; i++) {
-      ws['!cols'].push({ wch: 30 }, { wch: 90 }, { wch: 22 });
+      const files = alumnes.map(a => {
+        const fila = [a.nom];
+        for (let i = 0; i < maxItems; i++) {
+          const it = a.items[i];
+          fila.push(it ? it.titol : '');
+          fila.push(it ? it.comentari : '');
+          fila.push(it ? it.assoliment : '');
+        }
+        return fila;
+      });
+      ws = window.XLSX.utils.aoa_to_sheet([capcalera, ...files]);
+      ws['!cols'] = [{ wch: 25 }];
+      for (let i = 0; i < maxItems; i++) {
+        ws['!cols'].push({ wch: 30 }, { wch: 90 }, { wch: 22 });
+      }
+    } else {
+      // Format simple: Alumne | Comentari
+      const files = alumnes.map(a => [a.nom, a.comentariComplet]);
+      ws = window.XLSX.utils.aoa_to_sheet([['Alumne', 'Comentari'], ...files]);
+      ws['!cols'] = [{ wch: 28 }, { wch: 100 }];
     }
 
     window.XLSX.utils.book_append_sheet(wb, ws, 'Comentaris');
     const avui = new Date();
-    const data = `${avui.getFullYear()}${String(avui.getMonth()+1).padStart(2,'0')}${String(avui.getDate()).padStart(2,'0')}`;
-    window.XLSX.writeFile(wb, `comentaris_${data}.xlsx`);
+    const dataStr = `${avui.getFullYear()}${String(avui.getMonth()+1).padStart(2,'0')}${String(avui.getDate()).padStart(2,'0')}`;
+    window.XLSX.writeFile(wb, `comentaris_${nomClasse.replace(/\s+/g,'_')}_${dataStr}.xlsx`);
   } catch(e) {
     console.error('Error exportant:', e);
     alert('Error: ' + e.message);
   }
 }
+// Exposar globalment perquè app.js i el botó de capçalera hi puguin accedir
+window.exportarComentarisExcel = exportarComentarisExcel;
 
 // ============================================================
 // CARREGAR / GUARDAR CONFIG FIRESTORE
@@ -779,13 +780,8 @@ async function tcGenerar(modal) {
   textDiv.innerHTML = '<span class="text-gray-400 italic">La IA està escrivint...</span>';
 
   try {
-    const res = await fetch('/api/tutoria', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ prompt: tcPrompt(dades) }),
-    });
-    if (!res.ok) throw new Error(`Error API: ${res.status}`);
-    const data = await res.json();
+    if (!window.callTutoriaAPI) throw new Error('API no configurada. Comprova api-config.js');
+    const data = await window.callTutoriaAPI(tcPrompt(dades));
     textDiv.textContent = data.text || 'No s\'ha pogut generar.';
     resultat.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
     btnGu.classList.remove('hidden');
@@ -827,7 +823,7 @@ async function tcGuardar(modal, btn) {
     btn.textContent = '⏳ Guardant...';
 
     await _tcDB.collection('alumnes').doc(_tcStudentId).update({
-      [`comentarios.${_tcClassId}`]: text,
+      comentari: text,
     });
 
     // Posar el text al textarea del modal de comentaris
@@ -838,12 +834,15 @@ async function tcGuardar(modal, btn) {
     }
 
     btn.textContent = '✅ Guardat!';
-    btn.className = btn.className.replace('bg-green-500 hover:bg-green-600', 'bg-gray-400');
+
+    // Refrescar el panell dret de l'app
+    if (typeof window._refreshCommentDisplay === 'function') {
+      window._refreshCommentDisplay(_tcStudentId, text);
+    }
 
     // Tancar i refrescar
     setTimeout(() => {
       modal.remove();
-      if (typeof window.renderNotesGrid === 'function') window.renderNotesGrid();
     }, 700);
 
   } catch(e) {
