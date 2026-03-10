@@ -830,3 +830,6 @@ async function generarComentari(modal) {
     btnGenerar.innerHTML = '✨ Generar comentari amb IA';
   }
 }
+
+// Exposar funcions globals
+window.openTutoriaModal = openTutoriaModal;
