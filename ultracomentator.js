@@ -1369,7 +1369,8 @@ Idioma: ${idiomaStr}
 ${promptItems}
 
 INSTRUCCIONS ESTRICTES:
-- Escriu UN BLOC DE TEXT per cada ítem, en el mateix ordre que apareixen.
+- Escriu EXACTAMENT ${itesMActius.length} bloc${itesMActius.length !== 1 ? 's' : ''} de text, UN per cada ítem llistat. NI MÉS NI MENYS.
+- PROHIBIT escriure res sobre ítems que NO apareguin a la llista anterior. Si no està llistat, no existeix.
 ${instrNom}
 - Dins de cada bloc, integra el nivell d'assoliment i els comentaris en un text fluid i natural (com escriuria un professor), NO una llista.
 - Separa els blocs amb un salt de línia.
@@ -1379,7 +1380,7 @@ ${instrNom}
 - Idioma: ${idiomaStr}.
 - No menciones notes numèriques.
 
-Escriu ÚNICAMENT els blocs de comentari, res més.`;
+Escriu ÚNICAMENT els ${itesMActius.length} bloc${itesMActius.length !== 1 ? 's' : ''} dels ítems llistats, res més.`;
 
   try {
     const response = await fetch('/api/tutoria', {
@@ -1476,7 +1477,12 @@ async function guardarComentariAlumne(comentari, modal, items = [], passarAlSegu
       update[`comentarisPerPeriode.${classIdActual}.comentarisItems`] = metadades;
     }
 
-    await db.collection('alumnes').doc(studentIdActual).update(update);
+    // Guardar amb historial si disponible, sinó update directe
+    if (typeof window._saveComentariWithHistory === 'function') {
+      await window._saveComentariWithHistory(studentIdActual, comentari, metadades.length > 0 ? metadades : null);
+    } else {
+      await db.collection('alumnes').doc(studentIdActual).update(update);
+    }
 
     // Refrescar panell dret, dot verd i barra de progrés
     if (typeof window._refreshCommentDisplay === 'function') {
