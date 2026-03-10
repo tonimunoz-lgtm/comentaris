@@ -257,29 +257,35 @@ function _parsarComentariItems(text) {
 }
 
 async function exportarComentarisExcel() {
-  const classId = _tcClassId || window.currentClassId;
+  // classId real per buscar la classe i els alumnes
+  const classId   = window.currentClassId;
+  // periodeId per llegir els comentaris del trimestre actiu
+  const periodeId = _tcClassId || window.currentClassId;
+
   if (!classId || !_tcDB) { alert('Selecciona una classe primer'); return; }
 
   try {
     const classDoc = await _tcDB.collection('classes').doc(classId).get();
     if (!classDoc.exists) { alert('Classe no trobada'); return; }
-    const nomClasse = classDoc.data().nom || 'Classe';
+    const nomClasse  = classDoc.data().nom || 'Classe';
     const alumnesIds = classDoc.data().alumnes || [];
     if (!alumnesIds.length) { alert('No hi ha alumnes'); return; }
+
+    const nomPeriode = classDoc.data().periodes?.[periodeId]?.nom || '';
 
     const docs = await Promise.all(alumnesIds.map(id => _tcDB.collection('alumnes').doc(id).get()));
     const alumnes = docs.filter(d => d.exists).map(d => {
       const data = d.data();
-      // Compatibilitat: llegir del camp nou (comentari) o de l'antic (comentarios.classId)
-      const comentariText = data.comentari || data.comentarios?.[classId] || '';
-      const metadades = data.comentarisItems?.[classId] || [];
+      const periodeData   = data.comentarisPerPeriode?.[periodeId] || {};
+      const comentariText = periodeData.comentari || data.comentari || data.comentarios?.[classId] || '';
+      const metadades     = periodeData.comentarisItems || data.comentarisItems?.[periodeId] || [];
       const blocs = _parsarComentariItems(comentariText);
       const items = blocs.map((bloc, i) => ({
-        titol: metadades[i]?.titol || bloc.item || `Ítem ${i+1}`,
-        comentari: bloc.comentari,
+        titol:      metadades[i]?.titol      || bloc.item || `Ítem ${i+1}`,
+        comentari:  bloc.comentari,
         assoliment: metadades[i]?.assoliment || ''
       }));
-      return { nom: data.nom || 'Desconegut', items, comentariComplet: comentariText };
+      return { nom: data.nom || 'Desconegut', items, comentariText };
     });
 
     if (!window.XLSX) { alert('La llibreria XLSX no està disponible'); return; }
@@ -290,37 +296,32 @@ async function exportarComentarisExcel() {
     let ws, wb = window.XLSX.utils.book_new();
 
     if (tenItems) {
-      // Format amb ítems (com original)
       const capcalera = ['Alumne'];
       for (let i = 1; i <= maxItems; i++) {
-        capcalera.push(`Ítem ${i}`, `Comentari ${i}`, `Assoliment ${i}`);
+        capcalera.push(`Títol ${i}`, `Comentari ${i}`, `Assoliment ${i}`);
       }
       const files = alumnes.map(a => {
         const fila = [a.nom];
         for (let i = 0; i < maxItems; i++) {
           const it = a.items[i];
-          fila.push(it ? it.titol : '');
-          fila.push(it ? it.comentari : '');
-          fila.push(it ? it.assoliment : '');
+          fila.push(it ? it.titol : '', it ? it.comentari : '', it ? it.assoliment : '');
         }
         return fila;
       });
       ws = window.XLSX.utils.aoa_to_sheet([capcalera, ...files]);
       ws['!cols'] = [{ wch: 25 }];
-      for (let i = 0; i < maxItems; i++) {
-        ws['!cols'].push({ wch: 30 }, { wch: 90 }, { wch: 22 });
-      }
+      for (let i = 0; i < maxItems; i++) ws['!cols'].push({ wch: 30 }, { wch: 90 }, { wch: 22 });
     } else {
-      // Format simple: Alumne | Comentari
-      const files = alumnes.map(a => [a.nom, a.comentariComplet]);
+      const files = alumnes.map(a => [a.nom, a.comentariText]);
       ws = window.XLSX.utils.aoa_to_sheet([['Alumne', 'Comentari'], ...files]);
       ws['!cols'] = [{ wch: 28 }, { wch: 100 }];
     }
 
-    window.XLSX.utils.book_append_sheet(wb, ws, 'Comentaris');
+    const nomFull = nomPeriode ? `${nomClasse}_${nomPeriode}` : nomClasse;
+    window.XLSX.utils.book_append_sheet(wb, ws, nomPeriode || 'Comentaris');
     const avui = new Date();
     const dataStr = `${avui.getFullYear()}${String(avui.getMonth()+1).padStart(2,'0')}${String(avui.getDate()).padStart(2,'0')}`;
-    window.XLSX.writeFile(wb, `comentaris_${nomClasse.replace(/\s+/g,'_')}_${dataStr}.xlsx`);
+    window.XLSX.writeFile(wb, `comentaris_${nomFull.replace(/\s+/g,'_')}_${dataStr}.xlsx`);
   } catch(e) {
     console.error('Error exportant:', e);
     alert('Error: ' + e.message);
