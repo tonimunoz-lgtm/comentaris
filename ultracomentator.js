@@ -1640,7 +1640,9 @@ async function openMevesPlantillesModal() {
             <button class="ucMevesConvidar" data-codi="${p.codi}" data-nom="${p.nom.replace(/"/g,'&quot;')}" style="background:#f0f9ff;color:#0369a1;border:1px solid #bae6fd;border-radius:8px;padding:7px 10px;font-size:12px;cursor:pointer;font-family:inherit;" title="Convidar usuaris">👥</button>
             <button class="ucMevesEditar" data-codi="${p.codi}" style="background:#fef3c7;color:#92400e;border:none;border-radius:8px;padding:7px 10px;font-size:12px;cursor:pointer;font-family:inherit;" title="Editar">✏️</button>
             <button class="ucMevesEsborrar" data-codi="${p.codi}" data-nom="${p.nom.replace(/"/g,'&quot;')}" style="background:#fee2e2;color:#ef4444;border:none;border-radius:8px;padding:7px 10px;font-size:12px;cursor:pointer;font-family:inherit;" title="Esborrar">🗑</button>
-          ` : ''}
+          ` : `
+            <button class="ucMevesCopia" data-codi="${p.codi}" data-nom="${p.nom.replace(/"/g,'&quot;')}" style="background:#f0fdf4;color:#059669;border:1px solid #86efac;border-radius:8px;padding:7px 10px;font-size:12px;font-weight:600;cursor:pointer;font-family:inherit;" title="Crear còpia pròpia editable">📋 Còpia</button>
+          `}
         </div>
       `;
       llista.appendChild(card);
@@ -1661,6 +1663,9 @@ async function openMevesPlantillesModal() {
     });
     llista.querySelectorAll('.ucMevesEsborrar').forEach(btn => {
       btn.addEventListener('click', () => esborrarPlantilla(btn.dataset.codi, btn.dataset.nom, modal));
+    });
+    llista.querySelectorAll('.ucMevesCopia').forEach(btn => {
+      btn.addEventListener('click', () => crearCopiaPlantilla(btn.dataset.codi, btn.dataset.nom, modal));
     });
 
   } catch (err) {
@@ -1888,6 +1893,64 @@ Aquesta acció no es pot desfer.`)) return;
     openMevesPlantillesModal();
   } catch (err) {
     alert('Error esborrant: ' + err.message);
+  }
+}
+
+// ============================================================
+// CREAR CÒPIA D'UNA PLANTILLA (per membres no propietaris)
+// ============================================================
+async function crearCopiaPlantilla(codiOriginal, nomOriginal, mevesModal) {
+  const uid = window._tutoriaUID;
+  const auth = window.firebase && window.firebase.auth && window.firebase.auth();
+  const email = auth?.currentUser?.email || null;
+  const db = window._tutoriaDB;
+  if (!uid || !db) return;
+
+  const btn = mevesModal.querySelector(`.ucMevesCopia[data-codi="${codiOriginal}"]`);
+  if (btn) { btn.innerHTML = '⏳'; btn.disabled = true; }
+
+  try {
+    // Llegir plantilla original
+    const docOrig = await db.collection('ultracomentator_plantilles').doc(codiOriginal).get();
+    if (!docOrig.exists) throw new Error('Plantilla original no trobada');
+    const orig = docOrig.data();
+
+    // Crear còpia amb nou codi i el professor actual com a propietari
+    const nouCodi = generarCodi();
+    const dadesCopia = {
+      ...orig,
+      nom: `Còpia · ${orig.nom}`,
+      codi: nouCodi,
+      creatPer: uid,
+      creatPerEmail: email,
+      creatEn: new Date().toISOString(),
+      membres: [uid],
+      membresEmail: email ? [email] : [],
+      copiatDe: codiOriginal,   // referència a l'original per traçabilitat
+      invitacionsPendents: [],
+    };
+
+    await db.collection('ultracomentator_plantilles').doc(nouCodi).set(dadesCopia);
+
+    // Recarregar "les meves" per veure la còpia nova
+    mevesModal.remove();
+    openMevesPlantillesModal();
+
+    // Missatge breu de confirmació
+    setTimeout(() => {
+      const llista = document.getElementById('ucMevesLlista');
+      if (llista) {
+        const banner = document.createElement('div');
+        banner.style.cssText = 'background:#f0fdf4;border:1px solid #86efac;border-radius:10px;padding:12px 16px;margin-bottom:12px;font-size:13px;color:#059669;font-weight:600;';
+        banner.textContent = `✅ Còpia creada! Ara ets propietari de "Còpia · ${orig.nom}" i pots editar-la.`;
+        llista.prepend(banner);
+        setTimeout(() => banner.remove(), 4000);
+      }
+    }, 400);
+
+  } catch (err) {
+    alert('Error creant còpia: ' + err.message);
+    if (btn) { btn.innerHTML = '📋 Còpia'; btn.disabled = false; }
   }
 }
 
