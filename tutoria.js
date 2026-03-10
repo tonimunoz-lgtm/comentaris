@@ -763,9 +763,16 @@ function buildPrompt(dades) {
   ].filter(Boolean).join('\n');
 
   const esCastella = dades.idioma === 'castella';
-  const nomInici   = esCastella
-    ? `${article === 'El' ? 'El' : 'La'} ${nom}`
-    : nomAmbArticle;
+  const senseNom   = !nom || nom === "l'alumne/a";
+
+  let nomInici;
+  if (esCastella) {
+    nomInici = senseNom
+      ? (genere === 'noia' ? 'La alumna' : 'El alumno')
+      : `${genere === 'noia' ? 'La' : 'El'} ${nom}`;
+  } else {
+    nomInici = senseNom ? "L'alumne/a" : nomAmbArticle;
+  }
 
   const toInstr = toInstruccio(dades.to, situacioGreu);
 
