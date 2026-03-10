@@ -323,29 +323,15 @@ function loadClassesScreen() {
         `;
 
         if (!deleteClassMode) {
-          // Toggle menu — usem position:fixed per escapar de qualsevol overflow
+          // Toggle menu
           const menuBtn = card.querySelector('.card-menu-btn');
           const menuDrop = card.querySelector('.card-menu-dropdown');
           menuBtn?.addEventListener('click', e => {
             e.stopPropagation();
-            // Tancar altres menús oberts
             document.querySelectorAll('.card-menu-dropdown').forEach(m => {
-              if (m !== menuDrop) { m.classList.add('hidden'); m.style.cssText = ''; }
+              if (m !== menuDrop) m.classList.add('hidden');
             });
-            if (menuDrop.classList.contains('hidden')) {
-              menuDrop.classList.remove('hidden');
-              // Posicionar amb fixed per sortir del overflow
-              const rect = menuBtn.getBoundingClientRect();
-              menuDrop.style.cssText = `
-                position:fixed;
-                top:${rect.bottom + 4}px;
-                left:${Math.min(rect.right - 150, window.innerWidth - 160)}px;
-                z-index:9999;
-              `;
-            } else {
-              menuDrop.classList.add('hidden');
-              menuDrop.style.cssText = '';
-            }
+            menuDrop.classList.toggle('hidden');
           });
 
           // Edit
@@ -1078,24 +1064,23 @@ function _renderCommentPanel(nom, comentari, assolamentsHTML, studentId, histori
   if (historial.length > 0) {
     const items = historial.slice(0, 3).map((h, i) => {
       const data = h.timestamp ? new Date(h.timestamp).toLocaleString('ca', { day:'2-digit', month:'2-digit', hour:'2-digit', minute:'2-digit' }) : '';
-      const preview = (h.text || '').slice(0, 80) + ((h.text || '').length > 80 ? '…' : '');
+      const preview = (h.text || '').slice(0, 100) + ((h.text || '').length > 100 ? '…' : '');
       return `
         <div class="history-item" data-idx="${i}">
-          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:3px;">
-            <span style="font-size:11px;font-weight:600;color:#9ca3af;">Versió anterior ${i + 1}</span>
-            <span style="font-size:10px;color:#d1d5db;">${data}</span>
+          <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px;">
+            <div style="font-size:12px;color:#6b7280;line-height:1.5;flex:1;">${preview}</div>
+            <div style="display:flex;flex-direction:column;align-items:flex-end;gap:4px;flex-shrink:0;">
+              <span style="font-size:10px;color:#d1d5db;white-space:nowrap;">${data}</span>
+              <button class="btn-restore-history" data-idx="${i}" style="font-size:11px;padding:2px 8px;border:1px solid #e5e7eb;border-radius:5px;background:#f9fafb;color:#6b7280;cursor:pointer;font-family:inherit;white-space:nowrap;">↩ Restaurar</button>
+            </div>
           </div>
-          <div style="font-size:12px;color:#6b7280;line-height:1.5;">${preview}</div>
-          <button class="btn-restore-history" data-idx="${i}" style="margin-top:6px;font-size:11px;padding:3px 10px;border:1px solid #e5e7eb;border-radius:5px;background:#f9fafb;color:#6b7280;cursor:pointer;font-family:inherit;">↩ Restaurar</button>
         </div>`;
     }).join('');
     historialHTML = `
-      <details class="history-details">
-        <summary style="font-size:12px;font-weight:600;color:#9ca3af;cursor:pointer;user-select:none;list-style:none;display:flex;align-items:center;gap:5px;padding:8px 0 4px;">
-          <span>🕓</span> Versions anteriors (${historial.length})
-        </summary>
-        <div style="display:flex;flex-direction:column;gap:8px;margin-top:6px;">${items}</div>
-      </details>`;
+      <div style="margin-top:14px;padding-top:12px;border-top:1px dashed #e5e7eb;">
+        <div style="font-size:11px;font-weight:700;color:#9ca3af;letter-spacing:.05em;text-transform:uppercase;margin-bottom:8px;">🕓 Versions anteriors</div>
+        <div style="display:flex;flex-direction:column;gap:6px;">${items}</div>
+      </div>`;
   }
 
   grid.innerHTML = `
@@ -1133,7 +1118,7 @@ function _renderCommentPanel(nom, comentari, assolamentsHTML, studentId, histori
       const versio = historial[idx];
       if (!versio || !confirm(`Restaurar la versió anterior?\n\n"${(versio.text||'').slice(0,100)}..."`)) return;
       // Guardar l'actual a l'historial i restaurar l'antiga
-      await _saveComentariWithHistory(studentId, versio.text, comentari);
+      await _saveComentariWithHistory(studentId, versio.text);
       showStudentComment(studentId, nom, versio.text);
     });
   });
@@ -1168,14 +1153,15 @@ function _renderCommentPanel(nom, comentari, assolamentsHTML, studentId, histori
 }
 
 // Guarda comentari preservant historial de les últimes 3 versions
-async function _saveComentariWithHistory(studentId, nouText, textAnterior) {
+async function _saveComentariWithHistory(studentId, nouText) {
   const docRef = db.collection('alumnes').doc(studentId);
   const doc = await docRef.get();
   const periodeData = doc.data()?.comentarisPerPeriode?.[currentPeriodeId] || {};
+  const textAnterior = periodeData.comentari || '';
   const historialActual = periodeData.historial || [];
 
-  // Afegir versió anterior a l'historial (si té contingut i és diferent)
-  const nouHistorial = textAnterior?.trim()
+  // Afegir versió anterior a l'historial (si té contingut i és diferent del nou)
+  const nouHistorial = textAnterior.trim() && textAnterior.trim() !== nouText.trim()
     ? [{ text: textAnterior.trim(), timestamp: Date.now() }, ...historialActual].slice(0, 3)
     : historialActual;
 
@@ -1217,10 +1203,9 @@ document.getElementById('saveCommentBtn').addEventListener('click', async () => 
     alert('Error: no hi ha alumne seleccionat. Tanca el modal i torna a clicar l\'alumne.');
     return;
   }
-  const nouText    = document.getElementById('commentTextarea').value.trim();
-  const textActual = document.getElementById('commentDisplayText')?.textContent?.trim() || '';
+  const nouText = document.getElementById('commentTextarea').value.trim();
   try {
-    await _saveComentariWithHistory(currentCommentStudent.id, nouText, textActual);
+    await _saveComentariWithHistory(currentCommentStudent.id, nouText);
     closeModal('modalComments');
     showStudentComment(currentCommentStudent.id, currentCommentStudent.nom, nouText);
     const li = document.querySelector(`#studentsList li[data-id="${currentCommentStudent.id}"]`);
