@@ -1,4 +1,5 @@
 // api/tutoria.js — Vercel Serverless Function
+
 // Usa Groq API (igual que el projecte original)
 // Configura GROQ_API_KEY a Vercel Dashboard → Settings → Environment Variables
 
