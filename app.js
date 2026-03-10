@@ -709,12 +709,16 @@ function showStudentComment(studentId, nom, comentari) {
       <div class="comment-card-header">
         <span class="comment-card-name">💬 ${nom}</span>
         <div class="comment-card-actions">
-          <button id="btnEditComment" class="btn-outline btn-sm">✏️ Editar</button>
-          <button id="btnGenCommentIA" class="btn-tutoria btn-sm">🤖 Generar IA</button>
+          <button id="btnExportComentarisGrup" class="btn-outline btn-sm" title="Exportar tots els comentaris a Excel">📥 Excel</button>
         </div>
       </div>
       <div id="commentDisplayText" class="comment-text ${!comentari.trim() ? 'empty' : ''}">
-        ${comentari.trim() || 'Cap comentari encara. Fes clic a "Editar" o "Generar IA" per crear-ne un.'}
+        ${comentari.trim() || 'Cap comentari. Fes clic a un botó per crear-ne un.'}
+      </div>
+      <div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:12px;">
+        <button id="btnEditComment" class="btn-outline btn-sm">✏️ Editar</button>
+        <button id="btnGenCommentIA" class="btn-tutoria btn-sm">🤖 Comentari IA</button>
+        <button id="btnOpenUltra" class="btn-sm" style="background:linear-gradient(135deg,#7c3aed,#a855f7);color:#fff;border:none;border-radius:6px;cursor:pointer;font-family:inherit;font-weight:600;">⚡ Ultracomentator</button>
       </div>
     </div>
   `;
@@ -724,10 +728,47 @@ function showStudentComment(studentId, nom, comentari) {
   });
 
   document.getElementById('btnGenCommentIA').addEventListener('click', () => {
-    // Trigger tutoria IA
-    const btn = document.getElementById('btnTutoria_hidden') || document.getElementById('btnTutoriaMain');
-    if (btn) btn.click();
-    else alert('El sistema de IA no ha carregat. Refresca la pàgina.');
+    // Obre el modal de Tutoria IA directament
+    if (typeof window.openTutoriaModal === 'function') {
+      window.openTutoriaModal();
+    } else {
+      // Fallback: simular click al botó tutoria original
+      const btn = document.getElementById('btnTutoria_hidden') || document.getElementById('btnTutoriaMain');
+      if (btn) {
+        // Clicar l'opció IA del desplegable
+        btn.click();
+        setTimeout(() => {
+          const optIA = document.getElementById('ucOptIA');
+          if (optIA) optIA.click();
+        }, 100);
+      } else {
+        alert('El sistema de IA no ha carregat. Refresca la pàgina.');
+      }
+    }
+  });
+
+  document.getElementById('btnOpenUltra').addEventListener('click', () => {
+    if (typeof window.openUltracomentatorModal === 'function') {
+      window.openUltracomentatorModal();
+    } else if (typeof window.openMevesPlantillesModal === 'function') {
+      window.openMevesPlantillesModal();
+    } else {
+      // Fallback via botó tutoria
+      const btn = document.getElementById('btnTutoria_hidden') || document.getElementById('btnTutoriaMain');
+      if (btn) {
+        btn.click();
+        setTimeout(() => {
+          const optUltra = document.getElementById('ucOptUltra');
+          if (optUltra) optUltra.click();
+        }, 100);
+      } else {
+        alert('Ultracomentator no disponible. Refresca la pàgina.');
+      }
+    }
+  });
+
+  document.getElementById('btnExportComentarisGrup').addEventListener('click', () => {
+    exportarComentarisExcel();
   });
 }
 
@@ -781,6 +822,36 @@ window.saveComment = async function() {
 };
 
 window.updateCommentChars = updateCommentChars;
+
+/* ══════════════════════════════════════
+   EXPORT COMENTARIS A EXCEL
+══════════════════════════════════════ */
+async function exportarComentarisExcel() {
+  if (!currentClassId) return alert('Obre una classe primer');
+  try {
+    const classDoc = await db.collection('classes').doc(currentClassId).get();
+    const nomClasse = classDoc.data()?.nom || 'Classe';
+    const alumneIds = classDoc.data()?.alumnes || [];
+    if (!alumneIds.length) return alert('No hi ha alumnes en aquesta classe');
+
+    const docs = await Promise.all(alumneIds.map(id => db.collection('alumnes').doc(id).get()));
+    const rows = [['Alumne/a', 'Comentari']];
+    docs.forEach(d => {
+      if (!d.exists) return;
+      rows.push([d.data().nom || '', d.data().comentari || '']);
+    });
+
+    const ws = XLSX.utils.aoa_to_sheet(rows);
+    // Amplada de columnes
+    ws['!cols'] = [{ wch: 30 }, { wch: 80 }];
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Comentaris');
+    XLSX.writeFile(wb, `Comentaris_${nomClasse.replace(/\s+/g, '_')}.xlsx`);
+  } catch (e) {
+    alert('Error exportant: ' + e.message);
+  }
+}
+window.exportarComentarisExcel = exportarComentarisExcel;
 
 /* ══════════════════════════════════════
    EXPOSE FOR TUTORIA MODULES
