@@ -1077,10 +1077,13 @@ function _renderCommentPanel(nom, comentari, assolamentsHTML, studentId, histori
         </div>`;
     }).join('');
     historialHTML = `
-      <div style="margin-top:14px;padding-top:12px;border-top:1px dashed #e5e7eb;">
-        <div style="font-size:11px;font-weight:700;color:#9ca3af;letter-spacing:.05em;text-transform:uppercase;margin-bottom:8px;">🕓 Versions anteriors</div>
-        <div style="display:flex;flex-direction:column;gap:6px;">${items}</div>
-      </div>`;
+      <details style="margin-top:12px;padding-top:10px;border-top:1px dashed #e5e7eb;">
+        <summary style="font-size:12px;color:#9ca3af;cursor:pointer;user-select:none;list-style:none;display:flex;align-items:center;gap:5px;">
+          <span style="font-size:11px;">🕓</span>
+          <span style="font-weight:600;">Versions anteriors (${historial.length})</span>
+        </summary>
+        <div style="display:flex;flex-direction:column;gap:6px;margin-top:8px;">${items}</div>
+      </details>`;
   }
 
   grid.innerHTML = `
@@ -1153,7 +1156,8 @@ function _renderCommentPanel(nom, comentari, assolamentsHTML, studentId, histori
 }
 
 // Guarda comentari preservant historial de les últimes 3 versions
-async function _saveComentariWithHistory(studentId, nouText) {
+window._saveComentariWithHistory =
+async function _saveComentariWithHistory(studentId, nouText, metadades = null) {
   const docRef = db.collection('alumnes').doc(studentId);
   const doc = await docRef.get();
   const periodeData = doc.data()?.comentarisPerPeriode?.[currentPeriodeId] || {};
@@ -1165,10 +1169,14 @@ async function _saveComentariWithHistory(studentId, nouText) {
     ? [{ text: textAnterior.trim(), timestamp: Date.now() }, ...historialActual].slice(0, 3)
     : historialActual;
 
-  await docRef.update({
+  const updateData = {
     [`comentarisPerPeriode.${currentPeriodeId}.comentari`]: nouText,
     [`comentarisPerPeriode.${currentPeriodeId}.historial`]: nouHistorial,
-  });
+  };
+  if (metadades && metadades.length > 0) {
+    updateData[`comentarisPerPeriode.${currentPeriodeId}.comentarisItems`] = metadades;
+  }
+  await docRef.update(updateData);
   return nouHistorial;
 }
 
