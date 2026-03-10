@@ -716,7 +716,7 @@ function showCommentsEmpty() {
   currentCommentStudent = null;
 }
 
-function showStudentComment(studentId, nom, comentari) {
+async function showStudentComment(studentId, nom, comentari) {
   currentCommentStudent = { id: studentId, nom };
   window._tcStudentId   = studentId;
   window._tcStudentName = nom;
@@ -731,11 +731,51 @@ function showStudentComment(studentId, nom, comentari) {
   const grid = document.getElementById('commentsGrid');
   grid.classList.remove('hidden');
 
+  // Mapa d'assoliments per color i badge
+  const ASSOLIMENTS_MAP = {
+    'assoliment excel·lent':  { color: '#059669', bg: '#d1fae5' },
+    'assoliment notable':     { color: '#2563eb', bg: '#dbeafe' },
+    'assoliment satisfactori':{ color: '#d97706', bg: '#fef3c7' },
+    'no assolit':             { color: '#dc2626', bg: '#fee2e2' },
+    'no cursa':               { color: '#6b7280', bg: '#f3f4f6' },
+    'no avaluat':             { color: '#9ca3af', bg: '#f9fafb' },
+  };
+
+  // Llegir metadades d'assoliments de Firestore
+  let assolamentsHTML = '';
+  try {
+    const doc = await db.collection('alumnes').doc(studentId).get();
+    if (doc.exists) {
+      const metadades = doc.data().comentarisItems?.[currentClassId] || [];
+      if (metadades.length > 0) {
+        const badges = metadades
+          .filter(m => m.assoliment)
+          .map(m => {
+            const key = m.assoliment.toLowerCase();
+            const colors = ASSOLIMENTS_MAP[key] || { color: '#6b7280', bg: '#f3f4f6' };
+            return `<span style="
+              display:inline-flex;align-items:center;gap:5px;
+              background:${colors.bg};color:${colors.color};
+              font-size:12px;font-weight:700;padding:3px 10px;
+              border-radius:20px;border:1.5px solid ${colors.color}33;
+            ">${m.assoliment}${m.titol ? ` <span style="font-weight:400;opacity:.75;">· ${m.titol}</span>` : ''}</span>`;
+          });
+        if (badges.length > 0) {
+          assolamentsHTML = `
+            <div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:12px;padding-bottom:12px;border-bottom:1px solid #f0f0f0;">
+              ${badges.join('')}
+            </div>`;
+        }
+      }
+    }
+  } catch(e) { /* silenci si no hi ha metadades */ }
+
   grid.innerHTML = `
     <div class="comment-card">
       <div class="comment-card-header">
         <span class="comment-card-name">💬 ${nom}</span>
       </div>
+      ${assolamentsHTML}
       <div id="commentDisplayText" class="comment-text ${!comentari.trim() ? 'empty' : ''}">
         ${comentari.trim() || 'Cap comentari. Fes clic a un botó per crear-ne un.'}
       </div>
