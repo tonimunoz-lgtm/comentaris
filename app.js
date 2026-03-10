@@ -497,14 +497,56 @@ document.getElementById('btnExportExcel').addEventListener('click', () => {
   }
 });
 
-// Sort alpha
-document.getElementById('btnSortAlpha').addEventListener('click', async () => {
-  const docs = await Promise.all(classStudents.map(id => db.collection('alumnes').doc(id).get()));
-  const pairs = docs.map(d => ({ id: d.id, nom: d.exists ? (d.data().nom || '') : '' }));
-  pairs.sort((a, b) => a.nom.localeCompare(b.nom, 'ca'));
-  const newOrder = pairs.map(p => p.id);
-  await db.collection('classes').doc(currentClassId).update({ alumnes: newOrder });
-  loadClassData();
+// Sort alpha — menú desplegable
+const btnSort = document.getElementById('btnSortAlpha');
+const sortMenu = document.createElement('div');
+sortMenu.id = 'sortMenu';
+sortMenu.style.cssText = `
+  display:none;position:absolute;top:calc(100% + 4px);right:0;min-width:200px;
+  background:#fff;border:1px solid #e5e7eb;border-radius:8px;
+  box-shadow:0 8px 24px rgba(0,0,0,0.13);z-index:9999;overflow:hidden;
+`;
+sortMenu.innerHTML = `
+  <div style="padding:4px 0;">
+    <div style="padding:6px 14px 4px;font-size:11px;font-weight:700;color:#9ca3af;text-transform:uppercase;letter-spacing:.5px;">Per nom</div>
+    <button data-sort="nom-az"  style="width:100%;text-align:left;padding:8px 16px;background:none;border:none;cursor:pointer;font-size:13px;color:#374151;font-family:inherit;">🔤 Nom A → Z</button>
+    <button data-sort="nom-za"  style="width:100%;text-align:left;padding:8px 16px;background:none;border:none;cursor:pointer;font-size:13px;color:#374151;font-family:inherit;">🔤 Nom Z → A</button>
+    <div style="height:1px;background:#f3f4f6;margin:4px 0;"></div>
+    <div style="padding:6px 14px 4px;font-size:11px;font-weight:700;color:#9ca3af;text-transform:uppercase;letter-spacing:.5px;">Per cognom</div>
+    <button data-sort="cog-az" style="width:100%;text-align:left;padding:8px 16px;background:none;border:none;cursor:pointer;font-size:13px;color:#374151;font-family:inherit;">🔤 Cognom A → Z</button>
+    <button data-sort="cog-za" style="width:100%;text-align:left;padding:8px 16px;background:none;border:none;cursor:pointer;font-size:13px;color:#374151;font-family:inherit;">🔤 Cognom Z → A</button>
+  </div>
+`;
+btnSort.style.position = 'relative';
+btnSort.parentNode.appendChild(sortMenu);
+
+btnSort.addEventListener('click', e => {
+  e.stopPropagation();
+  const open = sortMenu.style.display === 'block';
+  sortMenu.style.display = open ? 'none' : 'block';
+});
+document.addEventListener('click', () => { sortMenu.style.display = 'none'; });
+
+sortMenu.querySelectorAll('button[data-sort]').forEach(btn => {
+  btn.addEventListener('click', async () => {
+    sortMenu.style.display = 'none';
+    const mode = btn.dataset.sort;
+    const docs = await Promise.all(classStudents.map(id => db.collection('alumnes').doc(id).get()));
+    const pairs = docs.map(d => {
+      const nom = d.exists ? (d.data().nom || '') : '';
+      const parts = nom.trim().split(/\s+/);
+      return { id: d.id, nom, cognom: parts.slice(1).join(' ') || parts[0] || '' };
+    });
+    pairs.sort((a, b) => {
+      const va = mode.startsWith('cog') ? a.cognom : a.nom;
+      const vb = mode.startsWith('cog') ? b.cognom : b.nom;
+      const cmp = va.localeCompare(vb, 'ca', { sensitivity: 'base' });
+      return mode.endsWith('za') ? -cmp : cmp;
+    });
+    const newOrder = pairs.map(p => p.id);
+    await db.collection('classes').doc(currentClassId).update({ alumnes: newOrder });
+    loadClassData();
+  });
 });
 
 // Students menu
@@ -716,13 +758,12 @@ function showCommentsEmpty() {
   currentCommentStudent = null;
 }
 
-async function showStudentComment(studentId, nom, comentari) {
+async function showStudentComment(studentId, nom, comentariLocal) {
   currentCommentStudent = { id: studentId, nom };
   window._tcStudentId   = studentId;
   window._tcStudentName = nom;
   window._tcClassId     = currentClassId;
 
-  // Sincronitzar variables locals de tutoria-comentaris.js
   if (typeof window._tcSetStudent === 'function') {
     window._tcSetStudent(studentId, nom, currentClassId);
   }
@@ -731,45 +772,45 @@ async function showStudentComment(studentId, nom, comentari) {
   const grid = document.getElementById('commentsGrid');
   grid.classList.remove('hidden');
 
-  // Mapa d'assoliments per color i badge
-  const ASSOLIMENTS_MAP = {
-    'assoliment excel·lent':  { color: '#059669', bg: '#d1fae5' },
-    'assoliment notable':     { color: '#2563eb', bg: '#dbeafe' },
-    'assoliment satisfactori':{ color: '#d97706', bg: '#fef3c7' },
-    'no assolit':             { color: '#dc2626', bg: '#fee2e2' },
-    'no cursa':               { color: '#6b7280', bg: '#f3f4f6' },
-    'no avaluat':             { color: '#9ca3af', bg: '#f9fafb' },
-  };
+  // Mostrar comentari local immediatament (sense esperar Firestore)
+  _renderCommentPanel(nom, comentariLocal || '', '', studentId);
 
-  // Llegir metadades d'assoliments de Firestore
-  let assolamentsHTML = '';
+  // Llegir dades fresques de Firestore (assoliments + comentari real)
   try {
     const doc = await db.collection('alumnes').doc(studentId).get();
-    if (doc.exists) {
-      const metadades = doc.data().comentarisItems?.[currentClassId] || [];
-      if (metadades.length > 0) {
-        const badges = metadades
-          .filter(m => m.assoliment)
-          .map(m => {
-            const key = m.assoliment.toLowerCase();
-            const colors = ASSOLIMENTS_MAP[key] || { color: '#6b7280', bg: '#f3f4f6' };
-            return `<span style="
-              display:inline-flex;align-items:center;gap:5px;
-              background:${colors.bg};color:${colors.color};
-              font-size:12px;font-weight:700;padding:3px 10px;
-              border-radius:20px;border:1.5px solid ${colors.color}33;
-            ">${m.assoliment}${m.titol ? ` <span style="font-weight:400;opacity:.75;">· ${m.titol}</span>` : ''}</span>`;
-          });
-        if (badges.length > 0) {
-          assolamentsHTML = `
-            <div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:12px;padding-bottom:12px;border-bottom:1px solid #f0f0f0;">
-              ${badges.join('')}
-            </div>`;
-        }
+    if (!doc.exists) return;
+    const data = doc.data();
+    const comentariFresh = data.comentari || data.comentarios?.[currentClassId] || '';
+
+    const ASSOLIMENTS_MAP = {
+      'assoliment excel·lent':  { color: '#059669', bg: '#d1fae5' },
+      'assoliment notable':     { color: '#2563eb', bg: '#dbeafe' },
+      'assoliment satisfactori':{ color: '#d97706', bg: '#fef3c7' },
+      'no assolit':             { color: '#dc2626', bg: '#fee2e2' },
+      'no cursa':               { color: '#6b7280', bg: '#f3f4f6' },
+      'no avaluat':             { color: '#9ca3af', bg: '#f9fafb' },
+    };
+
+    let assolamentsHTML = '';
+    const metadades = data.comentarisItems?.[currentClassId] || [];
+    if (metadades.length > 0) {
+      const badges = metadades.filter(m => m.assoliment).map(m => {
+        const colors = ASSOLIMENTS_MAP[m.assoliment.toLowerCase()] || { color: '#6b7280', bg: '#f3f4f6' };
+        return `<span style="display:inline-flex;align-items:center;gap:5px;background:${colors.bg};color:${colors.color};font-size:12px;font-weight:700;padding:3px 10px;border-radius:20px;border:1.5px solid ${colors.color}33;">${m.assoliment}${m.titol ? ` <span style="font-weight:400;opacity:.75;">· ${m.titol}</span>` : ''}</span>`;
+      });
+      if (badges.length > 0) {
+        assolamentsHTML = `<div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:12px;padding-bottom:12px;border-bottom:1px solid #f0f0f0;">${badges.join('')}</div>`;
       }
     }
-  } catch(e) { /* silenci si no hi ha metadades */ }
 
+    // Re-renderitzar amb dades fresques
+    _renderCommentPanel(nom, comentariFresh, assolamentsHTML, studentId);
+
+  } catch(e) { console.error('showStudentComment error:', e); }
+}
+
+function _renderCommentPanel(nom, comentari, assolamentsHTML, studentId) {
+  const grid = document.getElementById('commentsGrid');
   grid.innerHTML = `
     <div class="comment-card">
       <div class="comment-card-header">
@@ -1000,9 +1041,11 @@ window.exportarComentarisExcel = exportarComentarisExcel;
 window.firebase = firebase;
 
 window._refreshCommentDisplay = function(studentId, text) {
-  // Refresc immediat del panell dret
   if (currentCommentStudent?.id === studentId) {
-    showStudentComment(studentId, currentCommentStudent.nom, text);
+    // Refresc immediat sense esperar Firestore — mantenim assoliments si ja existien
+    const assolamentsExistents = document.querySelector('#commentsGrid .comment-card > div:first-of-type + div');
+    const assolamentsHTML = (assolamentsExistents && assolamentsExistents.querySelector('span')) ? assolamentsExistents.outerHTML : '';
+    _renderCommentPanel(currentCommentStudent.nom, text, assolamentsHTML, studentId);
   }
   // Actualitzar dot a la llista sense recarregar tot
   const li = document.querySelector(`#studentsList li[data-id="${studentId}"]`);
