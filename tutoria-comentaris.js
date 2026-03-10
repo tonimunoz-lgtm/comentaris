@@ -743,9 +743,22 @@ function tcPrompt(d) {
   ].filter(Boolean).join('\n');
 
   const esCastella = d.idioma === 'castella';
-  const nomInici   = esCastella
-    ? `${d.article === 'El' ? 'El' : 'La'} ${d.nom}`
-    : d.nomAmbArticle;
+  const senseNom   = !d.nom || d.nom === 'alumne/a';
+
+  // Català: l'Albert, la Maria, l'alumne/a  (mai "El l'...")
+  // Castellà: El Alberto, La María, El alumno/La alumna
+  let nomInici;
+  if (esCastella) {
+    if (senseNom) {
+      nomInici = d.genere === 'noia' ? 'La alumna' : 'El alumno';
+    } else {
+      // En castellà no hi ha apòstrof — sempre El/La + nom
+      nomInici = `${d.genere === 'noia' ? 'La' : 'El'} ${d.nom}`;
+    }
+  } else {
+    // Català: nomAmbArticle ja és correcte (l'Albert, La Maria, l'alumne/a)
+    nomInici = senseNom ? "L'alumne/a" : d.nomAmbArticle;
+  }
 
   if (esCastella) {
     return `Eres un tutor/a escolar que escribe comentarios para el boletín de notas.
