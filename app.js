@@ -735,9 +735,6 @@ function showStudentComment(studentId, nom, comentari) {
     <div class="comment-card">
       <div class="comment-card-header">
         <span class="comment-card-name">💬 ${nom}</span>
-        <div class="comment-card-actions">
-          <button id="btnExportComentarisGrup" class="btn-outline btn-sm" title="Exportar tots els comentaris a Excel">📥 Excel</button>
-        </div>
       </div>
       <div id="commentDisplayText" class="comment-text ${!comentari.trim() ? 'empty' : ''}">
         ${comentari.trim() || 'Cap comentari. Fes clic a un botó per crear-ne un.'}
@@ -753,7 +750,6 @@ function showStudentComment(studentId, nom, comentari) {
   document.getElementById('btnEditComment').addEventListener('click', () => {
     openCommentsModal(studentId, nom, comentari);
   });
-
   document.getElementById('btnGenCommentIA').addEventListener('click', async () => {
     // Context ja configurat: window._tcStudentId, _tcStudentName, _tcClassId
     // Cridem openTCFormulari directament (igual que el botó IA del modal de comentaris original)
@@ -777,9 +773,7 @@ function showStudentComment(studentId, nom, comentari) {
     }
   });
 
-  document.getElementById('btnExportComentarisGrup').addEventListener('click', () => {
-    exportarComentarisExcel();
-  });
+  
 }
 
 /* ══════════════════════════════════════
@@ -811,53 +805,145 @@ document.getElementById('closeCommentsModalBtn').addEventListener('click', () =>
 document.getElementById('cancelCommentsBtn').addEventListener('click', () => closeModal('modalComments'));
 
 document.getElementById('saveCommentBtn').addEventListener('click', async () => {
-  if (!currentCommentStudent) return;
+  if (!currentCommentStudent?.id) {
+    alert('Error: no hi ha alumne seleccionat. Tanca el modal i torna a clicar l\'alumne.');
+    return;
+  }
   const text = document.getElementById('commentTextarea').value.trim();
-  await db.collection('alumnes').doc(currentCommentStudent.id).update({ comentari: text });
-  closeModal('modalComments');
-  // Refresh display
-  showStudentComment(currentCommentStudent.id, currentCommentStudent.nom, text);
-  // Update dot in list
-  loadClassData();
-  window.saveComment?.();
+  try {
+    await db.collection('alumnes').doc(currentCommentStudent.id).update({ comentari: text });
+    closeModal('modalComments');
+    // Refresc immediat del panell dret sense recàrrega completa
+    showStudentComment(currentCommentStudent.id, currentCommentStudent.nom, text);
+    // Actualitzar el punt verd de l'alumne a la llista sense reload complet
+    const li = document.querySelector(`#studentsList li[data-id="${currentCommentStudent.id}"]`);
+    if (li) {
+      const dot = li.querySelector('.student-comment-dot');
+      if (text && !dot) {
+        const nameSpan = li.querySelector('.student-name');
+        const newDot = document.createElement('span');
+        newDot.className = 'student-comment-dot';
+        newDot.title = 'Té comentari';
+        nameSpan?.after(newDot);
+      } else if (!text && dot) {
+        dot.remove();
+      }
+    }
+  } catch(e) {
+    console.error('Error guardant comentari:', e);
+    alert('Error guardant: ' + e.message);
+  }
 });
 
 window.saveComment = async function() {
-  if (!currentCommentStudent) return;
+  if (!currentCommentStudent?.id) return;
   const text = document.getElementById('commentTextarea').value.trim();
-  await db.collection('alumnes').doc(currentCommentStudent.id).update({ comentari: text });
-  closeModal('modalComments');
-  showStudentComment(currentCommentStudent.id, currentCommentStudent.nom, text);
-  loadClassData();
+  try {
+    await db.collection('alumnes').doc(currentCommentStudent.id).update({ comentari: text });
+    closeModal('modalComments');
+    showStudentComment(currentCommentStudent.id, currentCommentStudent.nom, text);
+    // Actualitzar dot a la llista
+    const li = document.querySelector(`#studentsList li[data-id="${currentCommentStudent.id}"]`);
+    if (li) {
+      const dot = li.querySelector('.student-comment-dot');
+      if (text && !dot) {
+        const nameSpan = li.querySelector('.student-name');
+        const newDot = document.createElement('span');
+        newDot.className = 'student-comment-dot';
+        newDot.title = 'Té comentari';
+        nameSpan?.after(newDot);
+      } else if (!text && dot) dot.remove();
+    }
+  } catch(e) {
+    alert('Error guardant: ' + e.message);
+  }
 };
 
 window.updateCommentChars = updateCommentChars;
 
 /* ══════════════════════════════════════
    EXPORT COMENTARIS A EXCEL
+   Format: Alumne | Títol 1 | Comentari 1 | Assoliment 1 | Títol 2 | ...
+   (igual que el projecte original)
 ══════════════════════════════════════ */
+function _parsarComentariItems(text) {
+  if (!text) return [];
+  return text.split(/\n\s*\n/).map(bloc => {
+    const net = bloc.trim();
+    if (!net) return null;
+    const comaIdx = net.indexOf(',');
+    const item = (comaIdx > 0 && comaIdx < 80) ? net.slice(0, comaIdx).trim() : '';
+    return { item, comentari: net };
+  }).filter(Boolean);
+}
+
 async function exportarComentarisExcel() {
   if (!currentClassId) return alert('Obre una classe primer');
   try {
     const classDoc = await db.collection('classes').doc(currentClassId).get();
+    if (!classDoc.exists) return alert('Classe no trobada');
     const nomClasse = classDoc.data()?.nom || 'Classe';
     const alumneIds = classDoc.data()?.alumnes || [];
     if (!alumneIds.length) return alert('No hi ha alumnes en aquesta classe');
 
+    if (!window.XLSX) return alert('La llibreria XLSX no està disponible');
+
     const docs = await Promise.all(alumneIds.map(id => db.collection('alumnes').doc(id).get()));
-    const rows = [['Alumne/a', 'Comentari']];
-    docs.forEach(d => {
-      if (!d.exists) return;
-      rows.push([d.data().nom || '', d.data().comentari || '']);
+
+    const alumnes = docs.filter(d => d.exists).map(d => {
+      const data = d.data();
+      // Compatibilitat: camp nou (comentari) o camp antic per classe (comentarios.classId)
+      const comentariText = data.comentari || data.comentarios?.[currentClassId] || '';
+      const metadades = data.comentarisItems?.[currentClassId] || [];
+      const blocs = _parsarComentariItems(comentariText);
+      const items = blocs.map((bloc, i) => ({
+        titol:      metadades[i]?.titol      || bloc.item || `Ítem ${i+1}`,
+        comentari:  bloc.comentari,
+        assoliment: metadades[i]?.assoliment || ''
+      }));
+      return { nom: data.nom || 'Desconegut', items, comentariText };
     });
 
-    const ws = XLSX.utils.aoa_to_sheet(rows);
-    // Amplada de columnes
-    ws['!cols'] = [{ wch: 30 }, { wch: 80 }];
-    const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, 'Comentaris');
-    XLSX.writeFile(wb, `Comentaris_${nomClasse.replace(/\s+/g, '_')}.xlsx`);
-  } catch (e) {
+    const maxItems = Math.max(1, ...alumnes.map(a => a.items.length));
+    const tenItems = alumnes.some(a => a.items.length > 1);
+
+    let ws;
+    const wb = window.XLSX.utils.book_new();
+
+    if (tenItems) {
+      // Format complet amb ítems: Alumne | Títol 1 | Comentari 1 | Assoliment 1 | ...
+      const capcalera = ['Alumne'];
+      for (let i = 1; i <= maxItems; i++) {
+        capcalera.push(`Títol ${i}`, `Comentari ${i}`, `Assoliment ${i}`);
+      }
+      const files = alumnes.map(a => {
+        const fila = [a.nom];
+        for (let i = 0; i < maxItems; i++) {
+          const it = a.items[i];
+          fila.push(it ? it.titol     : '');
+          fila.push(it ? it.comentari : '');
+          fila.push(it ? it.assoliment: '');
+        }
+        return fila;
+      });
+      ws = window.XLSX.utils.aoa_to_sheet([capcalera, ...files]);
+      ws['!cols'] = [{ wch: 25 }];
+      for (let i = 0; i < maxItems; i++) {
+        ws['!cols'].push({ wch: 30 }, { wch: 90 }, { wch: 22 });
+      }
+    } else {
+      // Format simple: Alumne | Comentari
+      const files = alumnes.map(a => [a.nom, a.comentariText]);
+      ws = window.XLSX.utils.aoa_to_sheet([['Alumne', 'Comentari'], ...files]);
+      ws['!cols'] = [{ wch: 28 }, { wch: 100 }];
+    }
+
+    window.XLSX.utils.book_append_sheet(wb, ws, 'Comentaris');
+    const avui = new Date();
+    const dataStr = `${avui.getFullYear()}${String(avui.getMonth()+1).padStart(2,'0')}${String(avui.getDate()).padStart(2,'0')}`;
+    window.XLSX.writeFile(wb, `comentaris_${nomClasse.replace(/\s+/g,'_')}_${dataStr}.xlsx`);
+  } catch(e) {
+    console.error('Error exportant:', e);
     alert('Error exportant: ' + e.message);
   }
 }
@@ -873,10 +959,21 @@ window.exportarComentarisExcel = exportarComentarisExcel;
 // Per compatibilitat amb tutoria-comentaris.js que busca db/auth via window.firebase
 window.firebase = firebase;
 
-// Refresh comment display after saving from tutoria modal
 window._refreshCommentDisplay = function(studentId, text) {
+  // Refresc immediat del panell dret
   if (currentCommentStudent?.id === studentId) {
     showStudentComment(studentId, currentCommentStudent.nom, text);
-    loadClassData();
+  }
+  // Actualitzar dot a la llista sense recarregar tot
+  const li = document.querySelector(`#studentsList li[data-id="${studentId}"]`);
+  if (li) {
+    const dot = li.querySelector('.student-comment-dot');
+    if (text && !dot) {
+      const nameSpan = li.querySelector('.student-name');
+      const newDot = document.createElement('span');
+      newDot.className = 'student-comment-dot';
+      newDot.title = 'Té comentari';
+      nameSpan?.after(newDot);
+    } else if (!text && dot) dot.remove();
   }
 };
