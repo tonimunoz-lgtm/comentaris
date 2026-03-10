@@ -1,0 +1,293 @@
+<!DOCTYPE html>
+<html lang="ca">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>ComentaIA · Gestor de Comentaris</title>
+
+  <!-- Tailwind -->
+  <script src="https://cdn.tailwindcss.com"></script>
+
+  <!-- Google API para Classroom -->
+  <script src="https://apis.google.com/js/api.js"></script>
+  <script src="https://accounts.google.com/gsi/client" async defer></script>
+
+  <!-- Firebase compat -->
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
+
+  <!-- XLSX per export/import -->
+  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+
+  <!-- Google Fonts -->
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800;900&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<!-- ═══════════════════════════════════════════════════════ -->
+<!--  LOGIN SCREEN                                           -->
+<!-- ═══════════════════════════════════════════════════════ -->
+<section id="loginScreen" class="min-h-screen flex items-center justify-center p-4">
+  <div class="login-card">
+    <div class="login-logo">
+      <span class="logo-icon">💬</span>
+    </div>
+    <h1 class="login-title">ComentaIA</h1>
+    <p class="login-sub">Gestor intel·ligent de comentaris d'alumnes</p>
+
+    <div class="login-form">
+      <input id="loginEmail" type="email" placeholder="Email" class="login-input" />
+      <input id="loginPassword" type="password" placeholder="Contrasenya" class="login-input" />
+
+      <button id="btnLogin" class="btn-primary w-full">Inicia sessió</button>
+      <button id="googleLoginBtn" class="btn-google w-full">
+        <svg class="w-5 h-5" viewBox="0 0 24 24"><path fill="#fff" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/><path fill="#fff" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/><path fill="#fff" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/><path fill="#fff" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/></svg>
+        Continua amb Google
+      </button>
+
+      <div class="login-divider"><span>o</span></div>
+
+      <button id="btnRegister" class="btn-secondary w-full">Crear compte nou</button>
+      <button id="btnRecover" class="btn-link w-full">He oblidat la contrasenya</button>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════════════════════════════════════════════ -->
+<!--  MAIN APP                                               -->
+<!-- ═══════════════════════════════════════════════════════ -->
+<div id="appRoot" class="hidden">
+
+  <!-- SIDEBAR (desktop) -->
+  <aside id="sidebar" class="sidebar">
+    <div class="sidebar-header">
+      <span class="sidebar-logo">💬</span>
+      <span class="sidebar-title">ComentaIA</span>
+    </div>
+    <nav class="sidebar-nav">
+      <button id="navClasses" class="nav-item active" data-screen="classes">
+        <span class="nav-icon">🏫</span>
+        <span>Grups</span>
+      </button>
+    </nav>
+    <div class="sidebar-footer">
+      <div class="user-info">
+        <span class="user-avatar" id="userAvatar">?</span>
+        <span class="user-email" id="usuariNom">usuari</span>
+      </div>
+      <div class="user-actions">
+        <button id="changePasswordBtn" class="btn-icon" title="Canviar contrasenya">🔑</button>
+        <button id="btnLogout" class="btn-icon" title="Sortir">🚪</button>
+      </div>
+    </div>
+  </aside>
+
+  <!-- MAIN CONTENT -->
+  <main id="mainContent" class="main-content">
+
+    <!-- TOP BAR (mobile) -->
+    <header class="mobile-header">
+      <button id="btnMobileMenu" class="btn-icon">☰</button>
+      <span class="mobile-logo">💬 ComentaIA</span>
+      <div class="flex gap-2">
+        <button id="btnMobileStudents" class="btn-icon hidden">👥</button>
+        <button id="btnMobileBack" class="btn-icon hidden">←</button>
+      </div>
+    </header>
+
+    <!-- ─────────── SCREEN: CLASSES GRID ─────────── -->
+    <section id="screen-classes" class="app-screen">
+      <div class="screen-header">
+        <div>
+          <h1 class="screen-title">Els meus grups</h1>
+          <p class="screen-sub">Gestiona els teus grups de classe i alumnes</p>
+        </div>
+        <div class="header-actions">
+          <button id="btnImportClassroom" class="btn-outline">
+            <span>📚</span> Importar de Classroom
+          </button>
+          <button id="btnCreateClass" class="btn-primary">
+            <span>+</span> Nou grup
+          </button>
+          <button id="btnDeleteMode" class="btn-danger-outline">🗑️</button>
+        </div>
+      </div>
+      <div id="classesGrid" class="classes-grid"></div>
+    </section>
+
+    <!-- ─────────── SCREEN: CLASS VIEW ─────────── -->
+    <section id="screen-class" class="app-screen hidden">
+
+      <!-- Class header -->
+      <div class="class-header">
+        <div class="class-header-left">
+          <button id="btnBack" class="btn-back">← Tornar</button>
+          <div>
+            <h2 id="classTitle" class="class-title"></h2>
+            <p id="classSub" class="class-sub"></p>
+          </div>
+        </div>
+        <div class="class-header-actions">
+          <button id="btnSortAlpha" class="btn-outline btn-sm">↕ Ordenar</button>
+          <button id="btnImportAL" class="btn-outline btn-sm">📥 Importar</button>
+          <button id="btnAddStudent" class="btn-primary btn-sm">+ Alumne</button>
+          <button id="btnTutoria" class="btn-tutoria btn-sm">🤖 Tutoria ▾</button>
+        </div>
+      </div>
+
+      <!-- Class body: students + comments panel -->
+      <div id="classBody" class="class-body">
+
+        <!-- Students list -->
+        <aside id="studentsPanel" class="students-panel">
+          <div class="students-panel-inner">
+            <button id="closeMobileStudents" class="close-mobile-btn">✕</button>
+
+            <div class="students-panel-header">
+              <h3>Alumnes <span id="studentsCount" class="count-badge"></span></h3>
+              <div class="relative">
+                <button id="studentsMenuBtn" class="btn-icon">⋮</button>
+                <div id="studentsMenu" class="dropdown-menu hidden">
+                  <button id="deleteStudentsModeBtn" class="dropdown-item">Eliminar alumnes</button>
+                  <button id="btnCancelDeleteStudents" class="dropdown-item hidden">❌ Cancel·lar eliminar</button>
+                </div>
+              </div>
+            </div>
+
+            <input id="studentSearch" type="text" placeholder="Cerca per nom…" class="search-input" />
+            <ul id="studentsList" class="students-list"></ul>
+            <p class="drag-hint">Arrossega per ordenar</p>
+          </div>
+        </aside>
+
+        <!-- Comments grid / view -->
+        <div id="commentsPanel" class="comments-panel">
+          <!-- will be filled by JS -->
+          <div class="comments-empty-state" id="commentsEmptyState">
+            <div class="empty-icon">💬</div>
+            <h3>Selecciona un alumne</h3>
+            <p>Fes clic a un alumne de la llista per veure i editar el seu comentari</p>
+          </div>
+          <div id="commentsGrid" class="comments-grid hidden"></div>
+        </div>
+
+      </div>
+    </section>
+
+  </main>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════ -->
+<!--  MODALS                                                  -->
+<!-- ═══════════════════════════════════════════════════════ -->
+
+<!-- Modal Crear Classe -->
+<div id="modalCreateClass" class="modal-overlay hidden">
+  <div class="modal-box">
+    <h3 class="modal-title">Crear nou grup</h3>
+    <input id="modalClassName" class="modal-input" placeholder="Nom del grup (ex: 1r ESO A)">
+    <div class="modal-actions">
+      <button data-modal-close="modalCreateClass" class="modal-close btn-secondary">Cancel·lar</button>
+      <button id="modalCreateClassBtn" class="btn-primary">Crear</button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal Afegir Alumne -->
+<div id="modalAddStudent" class="modal-overlay hidden">
+  <div class="modal-box">
+    <h3 class="modal-title">Afegir alumne/a</h3>
+    <input id="modalStudentName" class="modal-input" placeholder="Nom complet">
+    <div class="modal-actions">
+      <button data-modal-close="modalAddStudent" class="modal-close btn-secondary">Cancel·lar</button>
+      <button id="modalAddStudentBtn" class="btn-primary">Afegir</button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal Importar Alumnes -->
+<div id="modalImportAL" class="modal-overlay hidden">
+  <div class="modal-box">
+    <h3 class="modal-title">Importar alumnes</h3>
+    <div class="import-instructions">
+      <strong>Instruccions:</strong>
+      <ul>
+        <li>Fitxer <code>.xlsx</code> o <code>.csv</code></li>
+        <li>Noms a la primera columna, sense capçalera</li>
+        <li>Un alumne per fila</li>
+      </ul>
+    </div>
+    <input type="file" id="fileImport" accept=".csv,.xlsx" class="file-input" />
+    <div class="modal-actions">
+      <button data-modal-close="modalImportAL" class="modal-close btn-secondary">Cancel·lar</button>
+      <button id="btnImportALConfirm" class="btn-primary">Importar</button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal Importar Classroom -->
+<div id="modalClassroomImport" class="modal-overlay hidden">
+  <div class="modal-box modal-lg">
+    <h3 class="modal-title">📚 Importar de Google Classroom</h3>
+    <div id="classroomLoadingState" class="text-center py-8">
+      <div class="spinner mx-auto mb-3"></div>
+      <p class="text-gray-500">Carregant cursos de Classroom...</p>
+    </div>
+    <div id="classroomCoursesList" class="hidden max-h-80 overflow-y-auto space-y-2"></div>
+    <div id="classroomErrorState" class="hidden p-3 bg-red-50 border border-red-200 rounded text-sm text-red-700"></div>
+    <div class="modal-actions">
+      <button data-modal-close="modalClassroomImport" class="modal-close btn-secondary">Cancel·lar</button>
+      <button id="btnImportSelectedCourse" class="btn-primary" disabled>Importar seleccionats</button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal Confirmació -->
+<div id="modalConfirm" class="modal-overlay hidden">
+  <div class="modal-box modal-sm">
+    <h3 id="confirmTitle" class="modal-title">Confirmació</h3>
+    <p id="confirmMsg" class="text-sm text-gray-600 mb-4"></p>
+    <div class="modal-actions">
+      <button data-modal-close="modalConfirm" class="modal-close btn-secondary">Cancel·lar</button>
+      <button id="confirmYes" class="btn-danger">Sí, eliminar</button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal Comentari de l'alumne -->
+<div id="modalComments" class="modal-overlay hidden">
+  <div class="modal-box modal-lg">
+    <div class="flex justify-between items-start mb-4">
+      <h3 id="modalCommentsTitle" class="modal-title mb-0">Comentari</h3>
+      <button id="closeCommentsModalBtn" class="btn-icon text-gray-400 hover:text-gray-700">✕</button>
+    </div>
+    <textarea
+      id="commentTextarea"
+      class="comment-textarea"
+      placeholder="Escriu aquí el comentari de l'alumne/a..."
+      maxlength="1000"
+    ></textarea>
+    <div class="flex justify-between items-center mt-1 mb-4">
+      <span class="text-xs text-gray-400"><span id="commentChars">0</span>/1000</span>
+    </div>
+    <div class="modal-actions">
+      <button id="cancelCommentsBtn" class="btn-secondary">Cancel·lar</button>
+      <button id="saveCommentBtn" class="btn-primary">💾 Guardar</button>
+    </div>
+  </div>
+</div>
+
+<!-- Mobile Sidebar Overlay -->
+<div id="mobileSidebarOverlay" class="mobile-overlay hidden"></div>
+
+<script type="module" src="app.js"></script>
+<script type="module" src="classroom-ui.js"></script>
+<script type="module" src="tutoria.js"></script>
+<script type="module" src="tutoria-comentaris.js"></script>
+<script type="module" src="ultracomentator.js"></script>
+
+</body>
+</html>
