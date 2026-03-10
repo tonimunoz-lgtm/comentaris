@@ -1386,3 +1386,116 @@ window._refreshCommentDisplay = function(studentId, text) {
   const amb = [...allLis].filter(l => l.querySelector('.student-comment-dot')).length;
   renderPeriodesTabs({ amb, total });
 };
+
+/* ══════════════════════════════════════
+   MODAL SOBRE L'APP
+══════════════════════════════════════ */
+document.getElementById('btnAbout')?.addEventListener('click', () => {
+  const old = document.getElementById('modalAbout');
+  if (old) { old.remove(); return; }
+
+  const modal = document.createElement('div');
+  modal.id = 'modalAbout';
+  modal.style.cssText = `
+    position:fixed;inset:0;z-index:9999;display:flex;align-items:center;justify-content:center;
+    background:rgba(0,0,0,0.55);backdrop-filter:blur(4px);padding:20px;
+  `;
+  modal.innerHTML = `
+    <div style="
+      background:#fff;border-radius:20px;width:min(560px,95vw);max-height:90vh;overflow-y:auto;
+      font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
+      box-shadow:0 24px 80px rgba(0,0,0,0.25);
+    ">
+      <!-- Capçalera -->
+      <div style="background:linear-gradient(135deg,#1e1b4b,#4c1d95);padding:28px 32px;color:#fff;border-radius:20px 20px 0 0;position:relative;">
+        <div style="font-size:36px;margin-bottom:8px;">⚡</div>
+        <h2 style="margin:0 0 4px;font-size:24px;font-weight:900;letter-spacing:-.5px;">Ultracomentator</h2>
+        <div style="font-size:13px;opacity:.75;">Versió Beta · Institut Matadepera</div>
+        <button id="btnAboutClose" style="position:absolute;top:16px;right:16px;background:rgba(255,255,255,.15);border:none;color:#fff;width:32px;height:32px;border-radius:50%;cursor:pointer;font-size:16px;display:flex;align-items:center;justify-content:center;">✕</button>
+      </div>
+
+      <!-- Contingut -->
+      <div style="padding:28px 32px;display:flex;flex-direction:column;gap:20px;">
+
+        <!-- Autoria -->
+        <div>
+          <div style="font-size:11px;font-weight:700;color:#9ca3af;text-transform:uppercase;letter-spacing:.05em;margin-bottom:8px;">Autoria</div>
+          <div style="display:flex;flex-direction:column;gap:6px;">
+            <div style="display:flex;align-items:center;gap:10px;">
+              <span style="font-size:18px;">🏫</span>
+              <div>
+                <div style="font-weight:700;color:#1a1a2e;font-size:14px;">Institut Matadepera</div>
+                <div style="font-size:12px;color:#6b7280;">Propietari de l'aplicació</div>
+              </div>
+            </div>
+            <div style="display:flex;align-items:center;gap:10px;">
+              <span style="font-size:18px;">👨‍💻</span>
+              <div>
+                <div style="font-weight:700;color:#1a1a2e;font-size:14px;">Toni Muñoz</div>
+                <div style="font-size:12px;color:#6b7280;">Desenvolupador</div>
+              </div>
+            </div>
+            <div style="display:flex;align-items:center;gap:10px;">
+              <span style="font-size:18px;">💡</span>
+              <div>
+                <div style="font-weight:700;color:#1a1a2e;font-size:14px;">Paula</div>
+                <div style="font-size:12px;color:#6b7280;">Idea original</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Contacte -->
+        <div style="background:#f8fafc;border-radius:12px;padding:14px 16px;">
+          <div style="font-size:11px;font-weight:700;color:#9ca3af;text-transform:uppercase;letter-spacing:.05em;margin-bottom:6px;">Contacte i suport</div>
+          <a href="mailto:a8053169@xtec.cat" style="color:#4c1d95;font-weight:600;font-size:14px;text-decoration:none;">📧 a8053169@xtec.cat</a>
+        </div>
+
+        <!-- Avís legal -->
+        <div style="border:1.5px solid #e5e7eb;border-radius:12px;overflow:hidden;">
+          <div style="background:#f9fafb;padding:12px 16px;border-bottom:1px solid #e5e7eb;">
+            <div style="font-size:11px;font-weight:700;color:#9ca3af;text-transform:uppercase;letter-spacing:.05em;">⚖️ Avís legal i condicions d'ús</div>
+          </div>
+          <div style="padding:16px;font-size:12px;color:#374151;line-height:1.8;display:flex;flex-direction:column;gap:10px;">
+
+            <div>
+              <strong style="color:#1a1a2e;">Programari lliure i gratuït</strong><br>
+              Ultracomentator és una aplicació de programari lliure, distribuïda de manera gratuïta per a ús educatiu. Qualsevol professor o centre educatiu pot fer-la servir, copiar-la i adaptar-la sense restriccions comercials.
+            </div>
+
+            <div>
+              <strong style="color:#1a1a2e;">Responsabilitat sobre les dades introduïdes</strong><br>
+              Cada usuari és l'únic responsable de la informació que introdueix a l'aplicació, incloent noms d'alumnes, comentaris i qualsevol altra dada personal. El propietari i el desenvolupador d'aquesta aplicació <strong>no assumeixen cap responsabilitat</strong> pel contingut introduït pels usuaris ni per l'ús que en facin.
+            </div>
+
+            <div>
+              <strong style="color:#1a1a2e;">Dades de menors d'edat (RGPD)</strong><br>
+              Aquesta aplicació pot contenir dades personals de menors d'edat. D'acord amb el Reglament General de Protecció de Dades (RGPD / UE 2016/679), el tractament d'aquestes dades és responsabilitat exclusiva del docent o centre educatiu que les introdueixi. L'usuari declara disposar de les autoritzacions necessàries per al tractament d'aquestes dades i s'obliga a no emmagatzemar informació sensible innecessària.
+            </div>
+
+            <div>
+              <strong style="color:#1a1a2e;">Absència de garanties</strong><br>
+              L'aplicació es proporciona "tal com és" (<em>as is</em>), sense garanties de cap tipus. El desenvolupador no es fa responsable de pèrdues de dades, interrupcions del servei ni danys derivats de l'ús de l'aplicació.
+            </div>
+
+            <div>
+              <strong style="color:#1a1a2e;">Infraestructura de tercers</strong><br>
+              Les dades s'emmagatzemen a Google Firebase (Firestore). L'usuari accepta les condicions de servei de Google Cloud en usar aquesta aplicació.
+            </div>
+
+          </div>
+        </div>
+
+        <!-- Versió -->
+        <div style="text-align:center;font-size:11px;color:#d1d5db;">
+          Ultracomentator · Versió Beta · ${new Date().getFullYear()}
+        </div>
+
+      </div>
+    </div>
+  `;
+
+  document.body.appendChild(modal);
+  document.getElementById('btnAboutClose').addEventListener('click', () => modal.remove());
+  modal.addEventListener('click', e => { if (e.target === modal) modal.remove(); });
+});
