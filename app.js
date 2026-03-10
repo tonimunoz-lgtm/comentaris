@@ -736,43 +736,26 @@ function showStudentComment(studentId, nom, comentari) {
     openCommentsModal(studentId, nom, comentari);
   });
 
-  document.getElementById('btnGenCommentIA').addEventListener('click', () => {
-    // Obre el modal de Tutoria IA directament
-    if (typeof window.openTutoriaModal === 'function') {
-      window.openTutoriaModal();
+  document.getElementById('btnGenCommentIA').addEventListener('click', async () => {
+    // Context ja configurat: window._tcStudentId, _tcStudentName, _tcClassId
+    // Cridem openTCFormulari directament (igual que el botó IA del modal de comentaris original)
+    if (typeof window.openTCFormulari === 'function') {
+      await window.openTCFormulari();
     } else {
-      // Fallback: simular click al botó tutoria original
-      const btn = document.getElementById('btnTutoria_hidden') || document.getElementById('btnTutoriaMain');
-      if (btn) {
-        // Clicar l'opció IA del desplegable
-        btn.click();
-        setTimeout(() => {
-          const optIA = document.getElementById('ucOptIA');
-          if (optIA) optIA.click();
-        }, 100);
-      } else {
-        alert('El sistema de IA no ha carregat. Refresca la pàgina.');
-      }
+      // Fallback: obrir via desplegable
+      const optIA = document.getElementById('ucOptIA');
+      if (optIA) optIA.click();
+      else alert('El sistema de IA no ha carregat. Refresca la pàgina.');
     }
   });
 
   document.getElementById('btnOpenUltra').addEventListener('click', () => {
-    if (typeof window.openUltracomentatorModal === 'function') {
-      window.openUltracomentatorModal();
-    } else if (typeof window.openMevesPlantillesModal === 'function') {
+    // Context ja configurat: window._tcStudentId, _tcStudentName, _tcClassId
+    // Cridem openMevesPlantillesModal directament (NO openUltracomentatorModal que neteja el context)
+    if (typeof window.openMevesPlantillesModal === 'function') {
       window.openMevesPlantillesModal();
     } else {
-      // Fallback via botó tutoria
-      const btn = document.getElementById('btnTutoria_hidden') || document.getElementById('btnTutoriaMain');
-      if (btn) {
-        btn.click();
-        setTimeout(() => {
-          const optUltra = document.getElementById('ucOptUltra');
-          if (optUltra) optUltra.click();
-        }, 100);
-      } else {
-        alert('Ultracomentator no disponible. Refresca la pàgina.');
-      }
+      alert('Ultracomentator no disponible. Refresca la pàgina.');
     }
   });
 
