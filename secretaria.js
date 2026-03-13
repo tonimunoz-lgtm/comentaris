@@ -318,21 +318,20 @@ async function renderEstructura(body) {
     cont.querySelectorAll('.btn-del-grp').forEach(btn => {
       btn.addEventListener('click', e => {
         e.stopPropagation();
-        if (!confirm(`Eliminar "${btn.dataset.nom}"?`)) return;
-        window.db.collection('grups_centre').doc(btn.dataset.id).delete()
-          .then(async () => {
-            const idx = grups.findIndex(g=>g.id===btn.dataset.id);
-            if (idx>=0) grups.splice(idx,1);
-            delete grupsPer[nivellActiu];
-            grups.filter(g=>g.nivellId===nivellActiu).forEach(g=>{
-              if(!grupsPer[nivellActiu]) grupsPer[nivellActiu]=[];
-              grupsPer[nivellActiu].push(g);
-            });
-            grupActiu=null;
-            renderGrups();
-            renderAlumnes(null);
-            window.mostrarToast('🗑️ Grup eliminat');
+        if (!confirm(`Eliminar "${btn.dataset.nom}" i totes les classes associades?`)) return;
+        eliminarGrupComplet(btn.dataset.id, btn.dataset.nom).then(() => {
+          const idx = grups.findIndex(g=>g.id===btn.dataset.id);
+          if (idx>=0) grups.splice(idx,1);
+          Object.keys(grupsPer).forEach(k=>delete grupsPer[k]);
+          grups.forEach(g=>{
+            if(!grupsPer[g.nivellId]) grupsPer[g.nivellId]=[];
+            grupsPer[g.nivellId].push(g);
           });
+          if (grupActiu===btn.dataset.id) grupActiu=null;
+          renderNivells();
+          renderGrups();
+          renderAlumnes(null);
+        });
       });
     });
   }
@@ -372,9 +371,16 @@ async function renderEstructura(body) {
               </td>
               <td style="padding:6px 10px;color:#6b7280;">${esH(a.ralc||'—')}</td>
               <td style="padding:6px 10px;text-align:center;">
-                <button class="btn-del-alumne" data-nom="${esH(a.nom)}"
-                  data-idx="${grup.alumnes.indexOf(a)}"
-                  style="background:none;border:none;color:#ef4444;cursor:pointer;font-size:14px;">🗑️</button>
+                <div style="display:flex;gap:4px;justify-content:center;">
+                  <button class="btn-edit-alumne"
+                    data-idx="${grup.alumnes.indexOf(a)}"
+                    style="background:none;border:none;color:#2563eb;cursor:pointer;font-size:14px;"
+                    title="Editar">✏️</button>
+                  <button class="btn-del-alumne" data-nom="${esH(a.nom)}"
+                    data-idx="${grup.alumnes.indexOf(a)}"
+                    style="background:none;border:none;color:#ef4444;cursor:pointer;font-size:14px;"
+                    title="Eliminar">🗑️</button>
+                </div>
               </td>
             </tr>
           `).join('')}
@@ -385,6 +391,12 @@ async function renderEstructura(body) {
       </div>
     `;
 
+    cont.querySelectorAll('.btn-edit-alumne').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const idx = parseInt(btn.dataset.idx);
+        modalEditarAlumne(grup, idx, () => renderAlumnes(grup));
+      });
+    });
     cont.querySelectorAll('.btn-del-alumne').forEach(btn => {
       btn.addEventListener('click', async () => {
         if (!confirm(`Eliminar "${btn.dataset.nom}"?`)) return;
@@ -433,7 +445,8 @@ async function renderEstructura(body) {
       if (!grupsPer[g.nivellId]) grupsPer[g.nivellId] = [];
       grupsPer[g.nivellId].push(g);
     });
-    renderGrups();
+    renderNivells();   // ← actualitza comptadors de grups per nivell
+    renderGrups();     // ← actualitza la columna de grups
   };
 
   renderNivells();
@@ -558,6 +571,49 @@ function modalAlumne(grup, onRefresh) {
 /* ══════════════════════════════════════════════════════
    MODAL IMPORTAR ALUMNES EXCEL
 ══════════════════════════════════════════════════════ */
+/* ══════════════════════════════════════════════════════
+   MODAL EDITAR ALUMNE
+══════════════════════════════════════════════════════ */
+function modalEditarAlumne(grup, idx, onRefresh) {
+  const a = grup.alumnes[idx];
+  if (!a) return;
+
+  crearModal('✏️ Editar alumne/a', `
+    <div style="margin-bottom:12px;">
+      <label style="font-size:13px;font-weight:600;color:#374151;display:block;margin-bottom:6px;">Nom *</label>
+      <input id="inpEditNom" type="text" value="${esH(a.nom||'')}"
+        style="width:100%;box-sizing:border-box;padding:10px 12px;border:1.5px solid #e5e7eb;
+               border-radius:10px;font-size:14px;outline:none;font-family:inherit;">
+    </div>
+    <div style="margin-bottom:12px;">
+      <label style="font-size:13px;font-weight:600;color:#374151;display:block;margin-bottom:6px;">Cognoms</label>
+      <input id="inpEditCognoms" type="text" value="${esH(a.cognoms||'')}"
+        style="width:100%;box-sizing:border-box;padding:10px 12px;border:1.5px solid #e5e7eb;
+               border-radius:10px;font-size:14px;outline:none;font-family:inherit;">
+    </div>
+    <div>
+      <label style="font-size:13px;font-weight:600;color:#374151;display:block;margin-bottom:6px;">RALC</label>
+      <input id="inpEditRalc" type="text" value="${esH(a.ralc||'')}"
+        style="width:100%;box-sizing:border-box;padding:10px 12px;border:1.5px solid #e5e7eb;
+               border-radius:10px;font-size:14px;outline:none;font-family:inherit;">
+    </div>
+  `, async () => {
+    const nom     = document.getElementById('inpEditNom').value.trim();
+    const cognoms = document.getElementById('inpEditCognoms').value.trim();
+    const ralc    = document.getElementById('inpEditRalc').value.trim();
+    if (!nom) { window.mostrarToast('⚠️ El nom és obligatori'); return false; }
+    const alumnesNous = [...grup.alumnes];
+    alumnesNous[idx] = { nom, cognoms, ralc };
+    await window.db.collection('grups_centre').doc(grup.id).update({ alumnes: alumnesNous });
+    grup.alumnes = alumnesNous;
+    window.mostrarToast('✅ Alumne actualitzat');
+    onRefresh?.();
+    return true;
+  }, 'Guardar');
+
+  setTimeout(() => document.getElementById('inpEditNom')?.focus(), 100);
+}
+
 function modalImportExcel(grup, onRefresh) {
   // Config columnes guardada per sessió
   const cfgKey = '_excelColCfg';
@@ -753,6 +809,79 @@ async function parseExcelAlumnes(file, colCfg) {
     };
     reader.readAsBinaryString(file);
   });
+}
+
+/* ══════════════════════════════════════════════════════
+   ELIMINAR GRUP EN CASCADA
+   Esborra: grups_centre, avaluacio_centre, classes (ownerUid qualsevol)
+══════════════════════════════════════════════════════ */
+async function eliminarGrupComplet(grupId, nomGrup) {
+  const db = window.db;
+  window.mostrarToast(`⏳ Eliminant "${nomGrup}"...`, 2000);
+
+  try {
+    // 1. Eliminar el grup de grups_centre
+    await db.collection('grups_centre').doc(grupId).delete();
+
+    // 2. Eliminar classes que apunten a aquest grup
+    //    (les classes creades a partir del grup tenen grupCentreId)
+    try {
+      const classesSnap = await db.collection('classes')
+        .where('grupCentreId', '==', grupId).get();
+
+      if (!classesSnap.empty) {
+        const batch = db.batch();
+        const alumneIds = [];
+
+        classesSnap.docs.forEach(classeDoc => {
+          const alumnesClasse = classeDoc.data().alumnes || [];
+          alumneIds.push(...alumnesClasse);
+          batch.delete(classeDoc.ref);
+        });
+
+        // Eliminar els alumnes de la col·lecció alumnes
+        // (en blocs de 500 per límit de Firestore)
+        for (let i = 0; i < alumneIds.length; i += 400) {
+          const chunk = alumneIds.slice(i, i+400);
+          const batchAl = db.batch();
+          chunk.forEach(id => batchAl.delete(db.collection('alumnes').doc(id)));
+          await batchAl.commit();
+        }
+
+        await batch.commit();
+
+        // Eliminar referència de les classes dels professors
+        const profSnap = await db.collection('professors').get();
+        const batchProf = db.batch();
+        const classIds = classesSnap.docs.map(d => d.id);
+        profSnap.docs.forEach(pDoc => {
+          const classes = (pDoc.data().classes || []).filter(c => !classIds.includes(c));
+          if (classes.length !== (pDoc.data().classes||[]).length) {
+            batchProf.update(pDoc.ref, { classes });
+          }
+        });
+        await batchProf.commit();
+      }
+    } catch(e) {
+      console.warn('No shan pogut eliminar classes:', e.message);
+    }
+
+    // 3. Eliminar dades d'avaluació centre per aquest grup
+    try {
+      const avalSnap = await db.collectionGroup('avaluacio_centre_grup')
+        .where('grupCentreId', '==', grupId).get();
+      if (!avalSnap.empty) {
+        const batchAv = db.batch();
+        avalSnap.docs.forEach(d => batchAv.delete(d.ref));
+        await batchAv.commit();
+      }
+    } catch(e) { /* avaluació pot no tenir index, no és crític */ }
+
+    window.mostrarToast(`✅ "${nomGrup}" eliminat correctament`);
+  } catch(e) {
+    console.error('eliminarGrupComplet:', e);
+    window.mostrarToast(`❌ Error eliminant: ${e.message}`, 5000);
+  }
 }
 
 /* ══════════════════════════════════════════════════════
