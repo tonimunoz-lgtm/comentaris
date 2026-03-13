@@ -559,98 +559,195 @@ function modalAlumne(grup, onRefresh) {
    MODAL IMPORTAR ALUMNES EXCEL
 ══════════════════════════════════════════════════════ */
 function modalImportExcel(grup, onRefresh) {
-  crearModal('📥 Importar alumnes des d\'Excel', `
-    <div style="background:#eff6ff;border:1.5px solid #bfdbfe;border-radius:10px;
-                padding:12px 14px;margin-bottom:16px;font-size:12px;color:#1d4ed8;">
-      <strong>Format esperat (columnes):</strong><br>
-      A: Primer Cognom &nbsp;|&nbsp; B: Segon Cognom &nbsp;|&nbsp; C: Nom &nbsp;|&nbsp; D: RALC<br>
-      <em>La primera fila pot ser capçalera (s'ignorarà si no és numèrica).</em>
+  // Config columnes guardada per sessió
+  const cfgKey = '_excelColCfg';
+  const cfgDef = { primerFila: 2, colNom: 'C', colCog1: 'A', colCog2: 'B', colRalc: 'D' };
+  const cfg = Object.assign({}, cfgDef, JSON.parse(sessionStorage.getItem(cfgKey)||'{}'));
+
+  // Genera options <A-Z> amb selected
+  const optsCol = (sel, buit) => {
+    let html = buit ? '<option value="">— cap —</option>' : '';
+    for (let i=0;i<26;i++) {
+      const l = String.fromCharCode(65+i);
+      html += `<option value="${l}"${sel===l?' selected':''}>${l}</option>`;
+    }
+    return html;
+  };
+
+  const inputStyle = 'width:100%;box-sizing:border-box;padding:7px 10px;border:1.5px solid #e5e7eb;border-radius:8px;font-size:13px;outline:none;background:#f9fafb;';
+  const labelStyle = 'font-size:11px;font-weight:700;color:#6b7280;display:block;margin-bottom:4px;';
+
+  crearModal('📥 Importar alumnes des d\'Excel',
+    `<div style="margin-bottom:14px;">
+      <label style="font-size:13px;font-weight:700;color:#374151;display:block;margin-bottom:8px;">
+        1. Selecciona el fitxer
+      </label>
+      <input type="file" id="inpExcelAlumnes" accept=".xlsx,.xls,.csv"
+        style="width:100%;padding:10px;border:2px dashed #7c3aed;border-radius:10px;font-size:13px;cursor:pointer;background:#f9fafb;box-sizing:border-box;">
+      <div id="infoFitxer" style="font-size:11px;color:#9ca3af;margin-top:6px;"></div>
     </div>
-    <input type="file" id="inpExcelAlumnes" accept=".xlsx,.xls,.csv"
-      style="width:100%;padding:10px;border:2px dashed #7c3aed;border-radius:10px;
-             font-size:13px;cursor:pointer;background:#f9fafb;">
-    <div id="previewImport" style="margin-top:12px;max-height:200px;overflow-y:auto;"></div>
-  `, async () => {
-    const file = document.getElementById('inpExcelAlumnes').files[0];
-    if (!file) { window.mostrarToast('⚠️ Selecciona un fitxer'); return false; }
 
-    const alumnesNous = await parseExcelAlumnes(file);
-    if (alumnesNous.length === 0) { window.mostrarToast('⚠️ Cap alumne trobat al fitxer'); return false; }
+    <div id="seccioCols" style="display:none;background:#f9fafb;border:1.5px solid #e5e7eb;border-radius:12px;padding:14px;margin-bottom:12px;">
+      <div style="font-size:13px;font-weight:700;color:#374151;margin-bottom:12px;">
+        2. Indica quina columna conté cada camp
+      </div>
 
-    const alumnesActuals = grup.alumnes || [];
-    // Evitar duplicats per RALC o per nom+cognoms
-    const nous = alumnesNous.filter(a => !alumnesActuals.some(ex =>
-      (a.ralc && ex.ralc === a.ralc) ||
-      (ex.nom === a.nom && ex.cognoms === a.cognoms)
-    ));
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr 1fr;gap:10px;margin-bottom:10px;">
+        <div>
+          <label style="${labelStyle}">Fila inici *</label>
+          <input id="cfgFila" type="number" min="1" value="${cfg.primerFila}"
+            style="${inputStyle}text-align:center;width:60px;">
+        </div>
+        <div>
+          <label style="${labelStyle}">NOM *</label>
+          <select id="cfgNom" style="${inputStyle}">${optsCol(cfg.colNom, false)}</select>
+        </div>
+        <div>
+          <label style="${labelStyle}">COGNOM 1</label>
+          <select id="cfgCog1" style="${inputStyle}">${optsCol(cfg.colCog1, true)}</select>
+        </div>
+        <div>
+          <label style="${labelStyle}">COGNOM 2</label>
+          <select id="cfgCog2" style="${inputStyle}">${optsCol(cfg.colCog2, true)}</select>
+        </div>
+        <div>
+          <label style="${labelStyle}">RALC</label>
+          <select id="cfgRalc" style="${inputStyle}">${optsCol(cfg.colRalc, true)}</select>
+        </div>
+      </div>
 
-    const total = [...alumnesActuals, ...nous];
-    await window.db.collection('grups_centre').doc(grup.id).update({alumnes: total});
-    grup.alumnes = total;
-    window.mostrarToast(`✅ ${nous.length} alumnes importats (${alumnesNous.length-nous.length} duplicats ignorats)`);
-    onRefresh?.();
-    return true;
-  }, 'Importar');
+      <div style="background:#fffbeb;border:1px solid #fde68a;border-radius:8px;padding:8px 10px;font-size:11px;color:#92400e;margin-bottom:10px;">
+        💡 "Fila inici" = primera fila amb dades d'alumnes (si la fila 1 és capçalera, posa 2)
+      </div>
 
-  // Preview en temps real
+      <button id="btnPreview" style="padding:6px 14px;background:#7c3aed;color:#fff;border:none;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer;">
+        🔄 Vista prèvia
+      </button>
+    </div>
+
+    <div id="previewImport" style="max-height:200px;overflow-y:auto;"></div>`,
+    async () => {
+      const file = document.getElementById('inpExcelAlumnes')?.files[0];
+      if (!file) { window.mostrarToast('⚠️ Selecciona un fitxer'); return false; }
+      const colCfg = llegirCfgCols();
+      sessionStorage.setItem(cfgKey, JSON.stringify(colCfg));
+      const nous = await parseExcelAlumnes(file, colCfg);
+      if (!nous.length) { window.mostrarToast('⚠️ Cap alumne trobat. Revisa la configuració'); return false; }
+      const actuals = grup.alumnes || [];
+      const nodupl = nous.filter(a => !actuals.some(ex =>
+        (a.ralc && ex.ralc === a.ralc) || (ex.nom===a.nom && ex.cognoms===a.cognoms)
+      ));
+      await window.db.collection('grups_centre').doc(grup.id).update({ alumnes: [...actuals, ...nodupl] });
+      grup.alumnes = [...actuals, ...nodupl];
+      window.mostrarToast(`✅ ${nodupl.length} alumnes importats (${nous.length-nodupl.length} duplicats ignorats)`);
+      onRefresh?.();
+      return true;
+    }, 'Importar');
+
+  function llegirCfgCols() {
+    return {
+      primerFila: parseInt(document.getElementById('cfgFila')?.value||'2')||2,
+      colNom:  document.getElementById('cfgNom')?.value  || 'C',
+      colCog1: document.getElementById('cfgCog1')?.value || '',
+      colCog2: document.getElementById('cfgCog2')?.value || '',
+      colRalc: document.getElementById('cfgRalc')?.value || '',
+    };
+  }
+
+  async function mostrarPreview() {
+    const file = document.getElementById('inpExcelAlumnes')?.files[0];
+    if (!file) return;
+    const alumnes = await parseExcelAlumnes(file, llegirCfgCols());
+    const div = document.getElementById('previewImport');
+    if (!div) return;
+    if (!alumnes.length) {
+      div.innerHTML = '<div style="color:#ef4444;padding:8px;font-size:12px;">⚠️ Cap alumne amb aquesta config. Ajusta les columnes o la fila inici.</div>';
+      return;
+    }
+    div.innerHTML = `
+      <p style="font-size:12px;font-weight:700;color:#059669;margin:4px 0 8px;">✅ ${alumnes.length} alumnes detectats</p>
+      <table style="width:100%;border-collapse:collapse;font-size:11px;">
+        <tr style="background:#f3f4f6;">
+          <th style="padding:5px 8px;text-align:left;">#</th>
+          <th style="padding:5px 8px;text-align:left;">Cognoms</th>
+          <th style="padding:5px 8px;text-align:left;">Nom</th>
+          <th style="padding:5px 8px;text-align:left;">RALC</th>
+        </tr>
+        ${alumnes.slice(0,20).map((a,i)=>`
+          <tr style="border-bottom:1px solid #f3f4f6;">
+            <td style="padding:4px 8px;color:#9ca3af;">${i+1}</td>
+            <td style="padding:4px 8px;">${esH(a.cognoms||'—')}</td>
+            <td style="padding:4px 8px;font-weight:600;">${esH(a.nom)}</td>
+            <td style="padding:4px 8px;color:#6b7280;">${esH(a.ralc||'—')}</td>
+          </tr>`).join('')}
+        ${alumnes.length>20?`<tr><td colspan="4" style="padding:5px 8px;color:#9ca3af;font-style:italic;">... i ${alumnes.length-20} alumnes més</td></tr>`:''}
+      </table>`;
+  }
+
   setTimeout(() => {
-    document.getElementById('inpExcelAlumnes')?.addEventListener('change', async (e) => {
+    document.getElementById('btnPreview')?.addEventListener('click', mostrarPreview);
+    document.getElementById('inpExcelAlumnes')?.addEventListener('change', async e => {
       const file = e.target.files[0];
       if (!file) return;
-      const alumnes = await parseExcelAlumnes(file);
-      const prev = document.getElementById('previewImport');
-      if (!prev) return;
-      prev.innerHTML = `
-        <p style="font-size:12px;font-weight:600;color:#374151;margin-bottom:6px;">
-          Vista prèvia: ${alumnes.length} alumnes trobats
-        </p>
-        <table style="width:100%;border-collapse:collapse;font-size:11px;">
-          <tr style="background:#f3f4f6;">
-            <th style="padding:4px 8px;text-align:left;">Cognoms</th>
-            <th style="padding:4px 8px;text-align:left;">Nom</th>
-            <th style="padding:4px 8px;text-align:left;">RALC</th>
-          </tr>
-          ${alumnes.slice(0,20).map(a=>`
-            <tr style="border-bottom:1px solid #f3f4f6;">
-              <td style="padding:4px 8px;">${esH(a.cognoms)}</td>
-              <td style="padding:4px 8px;">${esH(a.nom)}</td>
-              <td style="padding:4px 8px;">${esH(a.ralc||'—')}</td>
-            </tr>
-          `).join('')}
-          ${alumnes.length>20?`<tr><td colspan="3" style="padding:4px 8px;color:#9ca3af;">... i ${alumnes.length-20} més</td></tr>`:''}
-        </table>
-      `;
+      // Mostrar info del fitxer i capçalera
+      try {
+        await new Promise(res => {
+          const r = new FileReader();
+          r.onload = ev => {
+            try {
+              const wb = XLSX.read(ev.target.result, {type:'binary'});
+              const ws = wb.Sheets[wb.SheetNames[0]];
+              const rang = XLSX.utils.decode_range(ws['!ref']||'A1:A1');
+              const nF = rang.e.r+1, nC = rang.e.c+1;
+              // Llegir fila 1 per mostrar capçalera
+              const cap = [];
+              for (let c=0; c<Math.min(nC,8); c++) {
+                const cell = ws[XLSX.utils.encode_cell({r:0,c})];
+                cap.push(cell ? `${String.fromCharCode(65+c)}:"${cell.v}"` : '');
+              }
+              const info = document.getElementById('infoFitxer');
+              if (info) info.innerHTML = `📊 ${nF} files × ${nC} columnes &nbsp;·&nbsp; Fila 1: ${cap.filter(Boolean).join(' &nbsp; ')}`;
+            } catch(e){}
+            res();
+          };
+          r.readAsBinaryString(file);
+        });
+      } catch(e){}
+      document.getElementById('seccioCols').style.display = 'block';
+      await mostrarPreview();
     });
   }, 200);
 }
 
-async function parseExcelAlumnes(file) {
-  return new Promise((resolve) => {
+async function parseExcelAlumnes(file, colCfg) {
+  const cfg = colCfg || { primerFila:2, colNom:'C', colCog1:'A', colCog2:'B', colRalc:'D' };
+  const ci = l => l ? l.toUpperCase().charCodeAt(0)-65 : -1;
+  const iNom  = ci(cfg.colNom);
+  const iCog1 = ci(cfg.colCog1 || cfg.colCognom1);
+  const iCog2 = ci(cfg.colCog2 || cfg.colCognom2);
+  const iRalc = ci(cfg.colRalc);
+  const inici = (cfg.primerFila||2) - 1; // 0-indexed
+
+  return new Promise(resolve => {
     const reader = new FileReader();
-    reader.onload = (e) => {
+    reader.onload = e => {
       try {
         const wb = XLSX.read(e.target.result, {type:'binary'});
         const ws = wb.Sheets[wb.SheetNames[0]];
         const rows = XLSX.utils.sheet_to_json(ws, {header:1, defval:''});
         const alumnes = [];
-        for (const row of rows) {
-          // Detectar capçalera: si la primera cel·la no és numèrica i conté lletres
-          const primerCamp = String(row[0]||'').trim();
-          if (!primerCamp || /^(cognom|primer|apellido|nom|name)/i.test(primerCamp)) continue;
-          const cognom1 = String(row[0]||'').trim();
-          const cognom2 = String(row[1]||'').trim();
-          const nom     = String(row[2]||'').trim();
-          const ralc    = String(row[3]||'').trim();
-          if (!nom && !cognom1) continue;
-          alumnes.push({
-            cognoms: [cognom1, cognom2].filter(Boolean).join(' '),
-            nom,
-            ralc
-          });
+        for (let i=inici; i<rows.length; i++) {
+          const row = rows[i];
+          const nom = iNom>=0 ? String(row[iNom]||'').trim() : '';
+          if (!nom) continue;
+          const cog1 = iCog1>=0 ? String(row[iCog1]||'').trim() : '';
+          const cog2 = iCog2>=0 ? String(row[iCog2]||'').trim() : '';
+          const ralc = iRalc>=0 ? String(row[iRalc]||'').trim() : '';
+          alumnes.push({ nom, cognoms:[cog1,cog2].filter(Boolean).join(' '), ralc });
         }
         resolve(alumnes);
-      } catch(e) {
-        console.error('Error parsejant Excel:', e);
+      } catch(err) {
+        console.error('parseExcelAlumnes:', err);
         resolve([]);
       }
     };
