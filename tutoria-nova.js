@@ -109,10 +109,9 @@ async function obrirPanellTutoria() {
           <select id="selGrupTutoria" style="
             padding:7px 12px;border-radius:8px;border:none;
             font-size:13px;background:rgba(255,255,255,0.2);color:#fff;
-            cursor:pointer;outline:none;
+            cursor:pointer;outline:none;min-width:180px;
           ">
-            <option value="">— Tria un grup —</option>
-            ${grups.map(g => `<option value="${g.id}" data-nom="${g.nom}">${g.nom}</option>`).join('')}
+            <option value="">— Primer tria un curs —</option>
           </select>
           <button id="btnConfigSemafor" style="
             padding:7px 14px;background:rgba(255,255,255,0.2);
@@ -184,6 +183,37 @@ async function obrirPanellTutoria() {
       Object.assign(config, nova);
     })
   );
+
+  // Quan canvia el curs, actualitzar el selector de grups
+  overlay.querySelector('#selCursTutoria').addEventListener('change', () => {
+    const curs = overlay.querySelector('#selCursTutoria').value;
+    const selGrup = overlay.querySelector('#selGrupTutoria');
+    if (!curs) {
+      selGrup.innerHTML = '<option value="">— Primer tria un curs —</option>';
+      return;
+    }
+    const grupsCurs = grups.filter(g => g.curs === curs || !g.curs);
+    if (grupsCurs.length === 0) {
+      selGrup.innerHTML = '<option value="">Cap grup per a aquest curs</option>';
+      return;
+    }
+    // Agrupar per nivell
+    const perNivell = {};
+    grupsCurs.forEach(g => {
+      const k = g.nivellNom || g.nivellId || 'Altres';
+      if (!perNivell[k]) perNivell[k] = [];
+      perNivell[k].push(g);
+    });
+    const TIPUS = {classe:'🏫',materia:'📚',projecte:'🔬',optativa:'🎨'};
+    selGrup.innerHTML = '<option value="">— Tria el grup —</option>' +
+      Object.entries(perNivell).map(([nivell, gs]) =>
+        `<optgroup label="${nivell}">` +
+        gs.sort((a,b)=>(a.ordre||99)-(b.ordre||99)).map(g =>
+          `<option value="${g.id}">${TIPUS[g.tipus]||'📁'} ${g.nom}</option>`
+        ).join('') +
+        `</optgroup>`
+      ).join('');
+  });
 
   overlay.querySelector('#btnCarregarTutoria').addEventListener('click', async () => {
     const curs  = overlay.querySelector('#selCursTutoria').value;
@@ -870,6 +900,28 @@ async function llegirAlumnesGrupCentre(curs, grupId, materies) {
   const db = window.db;
   const resultat = {};
 
+  // Primer: llegir alumnes directament de grups_centre (llista mestra)
+  try {
+    const grupDoc = await db.collection('grups_centre').doc(grupId).get();
+    if (grupDoc.exists) {
+      const alumnesCentre = grupDoc.data().alumnes || [];
+      alumnesCentre.forEach((a, idx) => {
+        const id = a.ralc || `alumne_${idx}`;
+        resultat[id] = {
+          id,
+          nom:     a.nom || '',
+          cognoms: a.cognoms || '',
+          ralc:    a.ralc || '',
+          grupId,
+          materies: {}
+        };
+      });
+    }
+  } catch(e) {
+    console.warn('llegirAlumnesGrupCentre grups_centre:', e.message);
+  }
+
+  // Segon: enriquir amb dades d'avaluació si n'hi ha
   for (const mat of materies) {
     try {
       const snap = await db
@@ -880,28 +932,22 @@ async function llegirAlumnesGrupCentre(curs, grupId, materies) {
         .get();
 
       snap.docs.forEach(d => {
-        const alumneId = d.id;
         const data = d.data();
-        if (!resultat[alumneId]) {
-          resultat[alumneId] = {
-            id: alumneId,
-            nom:    data.nom || '',
+        // Buscar l'alumne pel RALC o crear-lo si no existeix
+        const key = data.ralc || d.id;
+        if (!resultat[key]) {
+          resultat[key] = {
+            id: key,
+            nom:     data.nom || '',
             cognoms: data.cognoms || '',
-            grup:   data.grup || '',
-            grupId: data.grupId || grupId,
-            tutor:  data.tutor || '',
-            ralc:   data.ralc || '',
+            ralc:    data.ralc || '',
+            grupId:  data.grupId || grupId,
             materies: {}
           };
         }
-        resultat[alumneId].materies[mat.id] = {
-          nom:  mat.nom,
-          ...data
-        };
+        resultat[key].materies[mat.id] = { nom: mat.nom, ...data };
       });
-    } catch (e) {
-      // Matèria sense dades per aquest grup — continuar
-    }
+    } catch(e) { /* matèria sense dades */ }
   }
 
   return Object.values(resultat);
