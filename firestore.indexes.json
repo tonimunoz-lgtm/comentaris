@@ -1,0 +1,37 @@
+{
+  "indexes": [
+    {
+      "collectionGroup": "alumnes",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "classId", "order": "ASCENDING" },
+        { "fieldPath": "nom",     "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "alumnes",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "classId", "order": "ASCENDING" },
+        { "fieldPath": "cognoms", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "avaluacio_centre",
+      "queryScope": "COLLECTION_GROUP",
+      "fields": [
+        { "fieldPath": "grupId",  "order": "ASCENDING" },
+        { "fieldPath": "cognoms", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "avaluacio_centre",
+      "queryScope": "COLLECTION_GROUP",
+      "fields": [
+        { "fieldPath": "grupId",    "order": "ASCENDING" },
+        { "fieldPath": "materiaNom","order": "ASCENDING" }
+      ]
+    }
+  ],
+  "fieldOverrides": []
+}
