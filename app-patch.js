@@ -390,4 +390,64 @@ function esH(s) {
   return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 }
 
+
+/* ══════════════════════════════════════════════════════
+   PATCH: Mostrar Cognoms + Nom a la llista d'alumnes
+   app.js usa data.nom — patchegem perquè mostri nom complet
+══════════════════════════════════════════════════════ */
+function patchMostrarNomComplet() {
+  // Interceptar Firestore .get() per a la col·lecció alumnes
+  // Addicionalment, patchegem la funció nativa del DOM per
+  // substituir noms simples per nom complet quan l'alumne té cognoms
+
+  // Observem el DOM — quan es renderitzen student-name, corregim
+  const observer = new MutationObserver(mutations => {
+    mutations.forEach(m => {
+      m.addedNodes.forEach(node => {
+        if (node.nodeType !== 1) return;
+        // Buscar spans .student-name dins del node afegit
+        const noms = node.classList?.contains('student-name')
+          ? [node]
+          : [...(node.querySelectorAll?.('.student-name') || [])];
+        noms.forEach(span => {
+          // Si ja té el format "Cognoms, Nom", no fer res
+          if (span.dataset.nomPatchat) return;
+          span.dataset.nomPatchat = '1';
+          const li = span.closest('[data-id]');
+          if (!li?.dataset?.id) return;
+          // Llegir cognoms des de Firestore i actualitzar
+          window.db?.collection('alumnes').doc(li.dataset.id).get().then(doc => {
+            if (!doc?.exists) return;
+            const d = doc.data();
+            const cognoms = d.cognoms || '';
+            const nom     = d.nom || '';
+            if (cognoms) {
+              const nomComplet = `${cognoms}, ${nom}`;
+              span.textContent = nomComplet;
+              // Actualitzar dataset.nom per al filtre de cerca
+              if (li.dataset) li.dataset.nom = nomComplet.toLowerCase();
+            }
+          }).catch(()=>{});
+        });
+      });
+    });
+  });
+
+  // Observar el contenidor principal d'alumnes
+  const tryObserve = () => {
+    const list = document.getElementById('studentsList');
+    if (list) {
+      observer.observe(list, { childList: true, subtree: true });
+    } else {
+      setTimeout(tryObserve, 500);
+    }
+  };
+  tryObserve();
+}
+
+// Activar el patch
+document.addEventListener('DOMContentLoaded', patchMostrarNomComplet);
+// Per si ja ha carregat
+if (document.readyState !== 'loading') patchMostrarNomComplet();
+
 console.log('✅ app-patch.js v2: integració completada');
