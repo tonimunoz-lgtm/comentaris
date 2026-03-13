@@ -161,9 +161,9 @@ function patchModalCreateClass() {
     try {
       const snap = await window.db.collection('grups_centre')
         .where('nivellId','==',nivellId)
-        .orderBy('ordre')
         .get();
-      const grups = snap.docs.map(d=>({id:d.id,...d.data()}));
+      const grups = snap.docs.map(d=>({id:d.id,...d.data()}))
+        .sort((a,b)=>(a.ordre||99)-(b.ordre||99));
 
       if (grups.length === 0) {
         selGrup.innerHTML = `<option value="">Cap grup en aquest nivell</option>`;
