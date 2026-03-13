@@ -301,8 +301,8 @@ async function carregarDesDeClasseActual() {
     const periodeActiu = window.currentPeriodeId;
     const alumnesSnap = await window.db.collection('alumnes')
       .where('classId', '==', classId)
-      .orderBy('nom')
       .get();
+    // Ordenar en memòria per evitar índex compost
 
     if (alumnesSnap.empty) {
       window.mostrarToast('⚠️ No hi ha alumnes en aquesta classe', 3000);
@@ -364,9 +364,9 @@ async function actualitzarPreviewAlumnes(alumnesManuals) {
     try {
       const snap = await window.db.collection('alumnes')
         .where('classId', '==', window.currentClassId)
-        .orderBy('nom')
         .get();
-      alumnes = snap.docs.map(d => ({ id: d.id, nom: d.data().nom }));
+      alumnes = snap.docs.map(d => ({ id: d.id, nom: d.data().nom }))
+        .sort((a, b) => a.nom.localeCompare(b.nom, 'ca'));
     } catch (e) {}
   }
 
@@ -434,6 +434,7 @@ async function enviarAvaluacioCentre() {
     const alumnesSnap = await window.db.collection('alumnes')
       .where('classId', '==', classId)
       .get();
+    // Ordenar en memòria per evitar índex compost
 
     if (alumnesSnap.empty) {
       window.mostrarToast('⚠️ No hi ha alumnes per enviar', 3000);
