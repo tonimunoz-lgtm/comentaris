@@ -1376,3 +1376,6 @@ window.realitzarCopiaSeguretat = async function() {
 })();
 
 console.log('✅ secretaria.js: inicialitzat');
+
+// Exportar funcions principals
+window.obrirPanellSecretaria = obrirPanellSecretaria;
