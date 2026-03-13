@@ -943,3 +943,6 @@ function escapeHtml(str) {
 }
 
 console.log('✅ tutoria-nova.js: inicialitzat');
+
+// Exportar funcions principals
+window.obrirPanellTutoria = obrirPanellTutoria;
