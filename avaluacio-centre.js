@@ -1,4 +1,5 @@
 // avaluacio-centre.js
+
 // Sistema d'Avaluació Centre — UltraComentator / INS Matadepera
 // Permet als professors afegir comentaris i assoliments a Firebase
 // amb l'estructura que reflecteix l'Excel institucional.
