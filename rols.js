@@ -322,6 +322,22 @@ function actualitzarUIRols() {
     }
   }
 
+
+  // Botó Tutoria (per a tutors)
+  if (window.teRol('tutor') && !window.teRol('secretaria')) {
+    if (!document.getElementById('tutoriaNavBtn')) {
+      const tutBtn = document.createElement('button');
+      tutBtn.id = 'tutoriaNavBtn';
+      tutBtn.className = 'nav-item nav-item-rol';
+      tutBtn.innerHTML = '<span class="nav-icon">🧑‍🏫</span><span>Tutoria</span>';
+      tutBtn.addEventListener('click', () => {
+        if (typeof window.obrirPanellTutoria === 'function') window.obrirPanellTutoria();
+        else mostrarToast('Mòdul Tutoria no carregat');
+      });
+      nav.appendChild(tutBtn);
+    }
+  }
+
   // Botó Revisor
   if (window.esRevisor() && !window.teRol('secretaria')) {
     if (!document.getElementById('revisorNavBtn')) {
@@ -477,7 +493,8 @@ function mostrarModalCambioPassword() {
 /* ══════════════════════════════════════════════════════
    EXPORTAR
 ══════════════════════════════════════════════════════ */
-window.carregarPerfilUsuari = carregarPerfilUsuari;
-window.actualitzarUIRols    = actualitzarUIRols;
+window.carregarPerfilUsuari       = carregarPerfilUsuari;
+window.actualitzarUIRols           = actualitzarUIRols;
+window.mostrarModalCambioPassword  = mostrarModalCambioPassword;
 
 console.log('✅ rols.js: sistema de rols inicialitzat');
