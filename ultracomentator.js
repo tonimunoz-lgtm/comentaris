@@ -7,7 +7,7 @@ console.log('⚡ ultracomentator.js carregat');
 // ESPERAR QUE tutoria.js HAGI INJECTAT EL BOTÓ
 // ============================================================
 function initUltracomentator() {
-  const btn = document.getElementById('btnTutoria');
+  const btn = document.getElementById('btnProfessor');
   if (!btn) { setTimeout(initUltracomentator, 600); return; }
   transformarBotoTutoria(btn);
 }
@@ -17,15 +17,15 @@ function initUltracomentator() {
 // Igual que el botó ⋮ verd de l'app
 // ============================================================
 function transformarBotoTutoria(originalBtn) {
-  if (document.getElementById('btnTutoriaWrapper')) return;
+  if (document.getElementById('btnProfessorWrapper')) return;
 
   // Un sol botó — un clic obre el menú (com el ⋮ verd)
   const btnMain = document.createElement('button');
-  btnMain.id = 'btnTutoriaMain';
+  btnMain.id = 'btnProfessorMain';
   // Copiar classe exacta del botó original + position:relative per al menú
   btnMain.className = originalBtn.className;
   btnMain.style.cssText = 'position:relative;';
-  btnMain.innerHTML = '📋 Tutoria ▾';
+  btnMain.innerHTML = '👨‍🏫 Professor ▾';
   btnMain.title = 'Opcions de tutoria';
 
   // Menú desplegable — posicionat relatiu al btnMain
@@ -58,7 +58,7 @@ function transformarBotoTutoria(originalBtn) {
   `;
 
   // Amagar el botó original i inserir el nou al seu lloc
-  originalBtn.id = 'btnTutoria_hidden';
+  originalBtn.id = 'btnProfessor_hidden';
   originalBtn.style.display = 'none';
   originalBtn.parentNode.insertBefore(btnMain, originalBtn);
   btnMain.appendChild(menu);
@@ -102,7 +102,7 @@ function transformarBotoTutoria(originalBtn) {
       window.openTutoriaModal();
     } else {
       // Fallback: clicar el botó hidden original
-      const btnH = document.getElementById('btnTutoria_hidden');
+      const btnH = document.getElementById('btnProfessor_hidden');
       if (btnH) btnH.click();
     }
   });
