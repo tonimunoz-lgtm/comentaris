@@ -1,30 +1,53 @@
-// secretaria.js
-// Panell de Secretaria — UltraComentator / INS Matadepera
-// Funcions: crear grups, matèries, gestionar usuaris, generar butlletins PDF
-// Visible únicament per als rols: secretaria, admin, superadmin
+// secretaria.js — v2
+// Panell de Secretaria complet: Nivells > Grups/Matèries/Projectes > Alumnes
+// Gestió d'usuaris i rols
+// Import d'alumnes via Excel
 
 console.log('📁 secretaria.js carregat');
 
 /* ══════════════════════════════════════════════════════
-   INJECTAR BOTÓ SECRETARIA AL SIDEBAR
+   ESTRUCTURA FIREBASE (nova)
+   
+   nivells_centre/{nivellId}
+     nom: "3r ESO"
+     ordre: 3
+     curs: "2024-25"
+   
+   grups_centre/{grupId}
+     nom: "3A"
+     tipus: "classe" | "materia" | "projecte" | "optativa"
+     nivellId: "..."
+     nivellNom: "3r ESO"
+     ordre: 1
+     curs: "2024-25"
+     alumnes: [{nom, cognoms, ralc}]   ← llista mestra
 ══════════════════════════════════════════════════════ */
+
+const TIPUS_GRUP = {
+  classe:   { label: 'Grup classe', icon: '🏫' },
+  materia:  { label: 'Matèria',     icon: '📚' },
+  projecte: { label: 'Projecte',    icon: '🔬' },
+  optativa: { label: 'Optativa',    icon: '🎨' },
+};
+
+/* ══════════════════════════════════════════════════════
+   EXPORTAR FUNCIÓ PRINCIPAL
+══════════════════════════════════════════════════════ */
+window.obrirPanellSecretaria = obrirPanellSecretaria;
 window.injectarBotoSecretaria = function() {
   if (document.getElementById('btnSecretariaSidebar')) return;
-
-  const nav = document.querySelector('.sidebar-nav') || document.querySelector('#sidebar nav');
+  const nav = document.querySelector('.sidebar-nav');
   if (!nav) return;
-
   const btn = document.createElement('button');
   btn.id = 'btnSecretariaSidebar';
-  btn.className = 'nav-item';
-  btn.dataset.screen = 'secretaria';
+  btn.className = 'nav-item nav-item-rol';
   btn.innerHTML = `<span class="nav-icon">📋</span><span>Secretaria</span>`;
   btn.addEventListener('click', obrirPanellSecretaria);
   nav.appendChild(btn);
 };
 
 /* ══════════════════════════════════════════════════════
-   PANELL PRINCIPAL DE SECRETARIA
+   PANELL PRINCIPAL
 ══════════════════════════════════════════════════════ */
 async function obrirPanellSecretaria() {
   document.getElementById('panellSecretaria')?.remove();
@@ -37,68 +60,54 @@ async function obrirPanellSecretaria() {
   `;
 
   overlay.innerHTML = `
-    <div style="
-      width:min(900px,100%);background:#fff;
-      display:flex;flex-direction:column;overflow:hidden;
-      box-shadow:-20px 0 60px rgba(0,0,0,0.3);
-    ">
-      <!-- Header -->
-      <div style="
-        background:linear-gradient(135deg,#1e1b4b,#4c1d95);
-        color:#fff;padding:24px 28px;flex-shrink:0;
-      ">
-        <div style="display:flex;justify-content:space-between;align-items:center;">
-          <div>
-            <h2 style="font-size:22px;font-weight:800;margin:0;">📋 Secretaria</h2>
-            <p style="font-size:13px;opacity:0.75;margin:4px 0 0;">Gestió institucional del centre</p>
-          </div>
-          <button id="btnTancarSecretaria" style="
-            background:rgba(255,255,255,0.2);border:none;color:#fff;
-            width:36px;height:36px;border-radius:50%;font-size:20px;cursor:pointer;
-          ">✕</button>
-        </div>
+    <div style="width:min(960px,100%);background:#fff;display:flex;flex-direction:column;
+                overflow:hidden;box-shadow:-20px 0 60px rgba(0,0,0,0.3);">
 
+      <!-- HEADER -->
+      <div style="background:linear-gradient(135deg,#1e1b4b,#4c1d95);color:#fff;
+                  padding:20px 24px;flex-shrink:0;">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
+          <div>
+            <h2 style="font-size:20px;font-weight:800;margin:0;">📋 Secretaria</h2>
+            <p style="font-size:12px;opacity:0.7;margin:4px 0 0;">Gestió institucional del centre</p>
+          </div>
+          <button id="btnTancarSec" style="background:rgba(255,255,255,0.2);border:none;
+            color:#fff;width:36px;height:36px;border-radius:50%;font-size:18px;cursor:pointer;">✕</button>
+        </div>
         <!-- Tabs -->
-        <div style="display:flex;gap:4px;margin-top:20px;">
+        <div style="display:flex;gap:3px;flex-wrap:wrap;">
           ${[
-            { id: 'tab-grups',    icon: '🏫', label: 'Grups' },
-            { id: 'tab-materies', icon: '📚', label: 'Matèries' },
-            { id: 'tab-usuaris',  icon: '👥', label: 'Usuaris' },
-            { id: 'tab-butlleti', icon: '📄', label: 'Butlletins' },
-            { id: 'tab-quadre',   icon: '📊', label: 'Quadre dades' },
+            {id:'estructura', icon:'🏗️', label:'Estructura'},
+            {id:'usuaris',    icon:'👥', label:'Usuaris'},
+            {id:'butlletins', icon:'📄', label:'Butlletins'},
+            {id:'quadre',     icon:'📊', label:'Quadre dades'},
           ].map(t => `
             <button class="sec-tab" data-tab="${t.id}" style="
-              padding:8px 16px;border-radius:8px 8px 0 0;border:none;cursor:pointer;
+              padding:7px 14px;border-radius:8px 8px 0 0;border:none;cursor:pointer;
               font-size:13px;font-weight:600;
-              background:rgba(255,255,255,0.15);color:#fff;transition:background 0.2s;
-            ">
+              background:rgba(255,255,255,0.15);color:#fff;white-space:nowrap;">
               ${t.icon} ${t.label}
             </button>
           `).join('')}
         </div>
       </div>
 
-      <!-- Cos del panell -->
-      <div id="secContent" style="flex:1;overflow-y:auto;padding:28px;"></div>
+      <!-- CONTINGUT -->
+      <div id="secBody" style="flex:1;overflow-y:auto;padding:24px;"></div>
     </div>
   `;
 
   document.body.appendChild(overlay);
-
-  // Events
-  overlay.querySelector('#btnTancarSecretaria').addEventListener('click', () => overlay.remove());
+  overlay.querySelector('#btnTancarSec').addEventListener('click', () => overlay.remove());
   overlay.addEventListener('click', e => { if (e.target === overlay) overlay.remove(); });
 
-  // Tabs
   overlay.querySelectorAll('.sec-tab').forEach(tab => {
     tab.addEventListener('click', () => {
       overlay.querySelectorAll('.sec-tab').forEach(t => {
-        t.style.background = 'rgba(255,255,255,0.15)';
-        t.style.color = '#fff';
+        t.style.background = 'rgba(255,255,255,0.15)'; t.style.color = '#fff';
       });
-      tab.style.background = '#fff';
-      tab.style.color = '#4c1d95';
-      carregarTabSecretaria(tab.dataset.tab);
+      tab.style.background = '#fff'; tab.style.color = '#4c1d95';
+      carregarTab(tab.dataset.tab);
     });
   });
 
@@ -107,1275 +116,1020 @@ async function obrirPanellSecretaria() {
 }
 
 /* ══════════════════════════════════════════════════════
-   ROUTER DE TABS
+   ROUTER TABS
 ══════════════════════════════════════════════════════ */
-async function carregarTabSecretaria(tab) {
-  const content = document.getElementById('secContent');
-  if (!content) return;
-
-  content.innerHTML = `<div style="text-align:center;padding:40px;color:#9ca3af;">⏳ Carregant...</div>`;
-
-  switch (tab) {
-    case 'tab-grups':    await renderGrups(content);    break;
-    case 'tab-materies': await renderMateries(content); break;
-    case 'tab-usuaris':  await renderUsuaris(content);  break;
-    case 'tab-butlleti': await renderButlletins(content);break;
-    case 'tab-quadre':   await renderQuadreDades(content);break;
+async function carregarTab(tab) {
+  const body = document.getElementById('secBody');
+  if (!body) return;
+  body.innerHTML = `<div style="padding:40px;text-align:center;color:#9ca3af;">⏳ Carregant...</div>`;
+  switch(tab) {
+    case 'estructura': await renderEstructura(body); break;
+    case 'usuaris':    await renderUsuaris(body);    break;
+    case 'butlletins': await renderButlletins(body); break;
+    case 'quadre':     await renderQuadreDades(body);break;
   }
 }
 
 /* ══════════════════════════════════════════════════════
-   TAB: GRUPS
+   TAB ESTRUCTURA: Nivells → Grups/Matèries/Projectes → Alumnes
 ══════════════════════════════════════════════════════ */
-async function renderGrups(content) {
-  const grups = await carregarGrupsCentre();
+async function renderEstructura(body) {
+  const [nivells, grups] = await Promise.all([
+    carregarNivells(),
+    carregarGrupsCentre()
+  ]);
 
-  content.innerHTML = `
-    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;">
-      <h3 style="font-size:16px;font-weight:700;color:#1e1b4b;margin:0;">🏫 Grups del centre</h3>
-      <button id="btnNouGrup" style="
-        padding:8px 16px;background:#7c3aed;color:#fff;border:none;
-        border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;">
-        + Nou grup
-      </button>
-    </div>
-    <div id="llistaGrups"></div>
-  `;
-
-  renderLlistaGrups(grups);
-
-  document.getElementById('btnNouGrup').addEventListener('click', () => modalGrup());
-}
-
-function renderLlistaGrups(grups) {
-  const container = document.getElementById('llistaGrups');
-  if (!container) return;
-
-  if (grups.length === 0) {
-    container.innerHTML = `
-      <div style="text-align:center;padding:40px;color:#9ca3af;background:#f9fafb;border-radius:12px;">
-        <div style="font-size:32px;margin-bottom:8px;">🏫</div>
-        No hi ha grups creats. Crea el primer grup!
-      </div>
-    `;
-    return;
-  }
-
-  // Agrupar per curs
-  const perCurs = {};
+  // Agrupar grups per nivell
+  const grupsPer = {};
   grups.forEach(g => {
-    const c = g.curs || 'sense curs';
-    if (!perCurs[c]) perCurs[c] = [];
-    perCurs[c].push(g);
+    if (!grupsPer[g.nivellId]) grupsPer[g.nivellId] = [];
+    grupsPer[g.nivellId].push(g);
   });
 
-  container.innerHTML = Object.entries(perCurs).map(([curs, gs]) => `
-    <div style="margin-bottom:20px;">
-      <h4 style="font-size:13px;font-weight:700;color:#6b7280;text-transform:uppercase;
-                 letter-spacing:0.05em;margin-bottom:8px;">Curs ${curs}</h4>
-      <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:10px;">
-        ${gs.map(g => `
-          <div style="
-            background:#f9fafb;border:1.5px solid #e5e7eb;border-radius:12px;
-            padding:14px;display:flex;justify-content:space-between;align-items:center;
-          ">
-            <div>
-              <div style="font-weight:700;color:#1e1b4b;">${escapeHtml(g.nom)}</div>
-              <div style="font-size:12px;color:#9ca3af;">${escapeHtml(g.curs || '')}</div>
-            </div>
-            <div style="display:flex;gap:6px;">
-              <button class="btn-editar-grup" data-id="${g.id}" style="
-                background:none;border:none;font-size:18px;cursor:pointer;" title="Editar">✏️</button>
-              <button class="btn-eliminar-grup" data-id="${g.id}" data-nom="${escapeHtml(g.nom)}" style="
-                background:none;border:none;font-size:18px;cursor:pointer;" title="Eliminar">🗑️</button>
-            </div>
-          </div>
-        `).join('')}
+  body.innerHTML = `
+    <div style="display:flex;gap:20px;height:100%;min-height:500px;">
+
+      <!-- COLUMNA 1: NIVELLS -->
+      <div style="width:200px;flex-shrink:0;display:flex;flex-direction:column;gap:10px;">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;">
+          <h3 style="font-size:13px;font-weight:700;color:#1e1b4b;margin:0;">Nivells</h3>
+          <button id="btnNouNivell" style="background:#7c3aed;color:#fff;border:none;
+            border-radius:6px;padding:4px 10px;font-size:12px;font-weight:600;cursor:pointer;">+ Nou</button>
+        </div>
+        <div id="llista-nivells" style="display:flex;flex-direction:column;gap:6px;"></div>
       </div>
-    </div>
-  `).join('');
 
-  container.querySelectorAll('.btn-editar-grup').forEach(btn => {
-    btn.addEventListener('click', async () => {
-      const grup = grups.find(g => g.id === btn.dataset.id);
-      if (grup) modalGrup(grup);
-    });
-  });
+      <!-- SEPARADOR -->
+      <div style="width:1px;background:#e5e7eb;flex-shrink:0;"></div>
 
-  container.querySelectorAll('.btn-eliminar-grup').forEach(btn => {
-    btn.addEventListener('click', async () => {
-      if (!confirm(`Eliminar el grup "${btn.dataset.nom}"?`)) return;
-      try {
-        await window.db.collection('grups_centre').doc(btn.dataset.id).delete();
-        window.mostrarToast('🗑️ Grup eliminat');
-        const grups = await carregarGrupsCentre();
-        renderLlistaGrups(grups);
-      } catch (e) {
-        window.mostrarToast('❌ Error eliminant: ' + e.message);
-      }
-    });
-  });
-}
-
-function modalGrup(grupExistent) {
-  document.getElementById('modalGrup')?.remove();
-  const modal = document.createElement('div');
-  modal.id = 'modalGrup';
-  modal.style.cssText = `
-    position:fixed;inset:0;z-index:99999;background:rgba(0,0,0,0.5);
-    display:flex;align-items:center;justify-content:center;padding:16px;
-  `;
-
-  modal.innerHTML = `
-    <div style="background:#fff;border-radius:16px;padding:28px;width:100%;max-width:440px;">
-      <h3 style="font-size:16px;font-weight:700;color:#1e1b4b;margin-bottom:20px;">
-        ${grupExistent ? '✏️ Editar grup' : '+ Nou grup'}
-      </h3>
-      <div style="margin-bottom:14px;">
-        <label style="font-size:13px;font-weight:600;color:#374151;display:block;margin-bottom:6px;">
-          Nom del grup *</label>
-        <input id="inpGrupNom" type="text" value="${escapeHtml(grupExistent?.nom || '')}"
-          placeholder="Ex: 3A, 2B, 4C..."
-          style="width:100%;box-sizing:border-box;padding:10px 12px;border:1.5px solid #e5e7eb;
-                 border-radius:10px;font-size:14px;outline:none;font-family:inherit;">
+      <!-- COLUMNA 2: GRUPS DEL NIVELL SELECCIONAT -->
+      <div style="width:260px;flex-shrink:0;display:flex;flex-direction:column;gap:10px;">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;">
+          <h3 style="font-size:13px;font-weight:700;color:#1e1b4b;margin:0;" id="titol-grups-col">
+            Grups
+          </h3>
+          <button id="btnNouGrup" style="background:#7c3aed;color:#fff;border:none;
+            border-radius:6px;padding:4px 10px;font-size:12px;font-weight:600;cursor:pointer;"
+            disabled>+ Nou</button>
+        </div>
+        <div id="llista-grups-col" style="display:flex;flex-direction:column;gap:6px;">
+          <p style="font-size:12px;color:#9ca3af;text-align:center;padding:20px 0;">
+            Selecciona un nivell
+          </p>
+        </div>
       </div>
-      <div style="margin-bottom:14px;">
-        <label style="font-size:13px;font-weight:600;color:#374151;display:block;margin-bottom:6px;">
-          Curs *</label>
-        <input id="inpGrupCurs" type="text" value="${escapeHtml(grupExistent?.curs || '')}"
-          placeholder="Ex: 2024-25"
-          style="width:100%;box-sizing:border-box;padding:10px 12px;border:1.5px solid #e5e7eb;
-                 border-radius:10px;font-size:14px;outline:none;font-family:inherit;">
-      </div>
-      <div style="margin-bottom:20px;">
-        <label style="font-size:13px;font-weight:600;color:#374151;display:block;margin-bottom:6px;">
-          Ordre (per ordenar)</label>
-        <input id="inpGrupOrdre" type="number" value="${grupExistent?.ordre ?? 99}"
-          style="width:100%;box-sizing:border-box;padding:10px 12px;border:1.5px solid #e5e7eb;
-                 border-radius:10px;font-size:14px;outline:none;font-family:inherit;">
-      </div>
-      <div style="display:flex;gap:10px;justify-content:flex-end;">
-        <button id="btnCancelGrup" style="
-          padding:10px 20px;background:#f3f4f6;border:none;border-radius:10px;
-          font-weight:600;cursor:pointer;">Cancel·lar</button>
-        <button id="btnGuardarGrup" style="
-          padding:10px 20px;background:#7c3aed;color:#fff;border:none;
-          border-radius:10px;font-weight:700;cursor:pointer;">
-          ${grupExistent ? 'Actualitzar' : 'Crear grup'}</button>
-      </div>
-    </div>
-  `;
 
-  document.body.appendChild(modal);
+      <!-- SEPARADOR -->
+      <div style="width:1px;background:#e5e7eb;flex-shrink:0;"></div>
 
-  modal.querySelector('#btnCancelGrup').addEventListener('click', () => modal.remove());
-
-  modal.querySelector('#btnGuardarGrup').addEventListener('click', async () => {
-    const nom   = modal.querySelector('#inpGrupNom').value.trim();
-    const curs  = modal.querySelector('#inpGrupCurs').value.trim();
-    const ordre = parseInt(modal.querySelector('#inpGrupOrdre').value) || 99;
-
-    if (!nom || !curs) {
-      window.mostrarToast('⚠️ Omple el nom i el curs');
-      return;
-    }
-
-    try {
-      const data = { nom, curs, ordre };
-      if (grupExistent) {
-        await window.db.collection('grups_centre').doc(grupExistent.id).update(data);
-        window.mostrarToast('✅ Grup actualitzat');
-      } else {
-        await window.db.collection('grups_centre').add(data);
-        window.mostrarToast('✅ Grup creat');
-      }
-      modal.remove();
-      const grups = await carregarGrupsCentre();
-      renderLlistaGrups(grups);
-    } catch (e) {
-      window.mostrarToast('❌ Error: ' + e.message);
-    }
-  });
-}
-
-/* ══════════════════════════════════════════════════════
-   TAB: MATÈRIES
-══════════════════════════════════════════════════════ */
-async function renderMateries(content) {
-  const materies = await carregarMateriesCentre();
-
-  content.innerHTML = `
-    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;">
-      <h3 style="font-size:16px;font-weight:700;color:#1e1b4b;margin:0;">📚 Matèries del centre</h3>
-      <button id="btnNovaMateria" style="
-        padding:8px 16px;background:#7c3aed;color:#fff;border:none;
-        border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;">
-        + Nova matèria
-      </button>
-    </div>
-    <div id="llistaMateries"></div>
-  `;
-
-  renderLlistaMateries(materies);
-
-  document.getElementById('btnNovaMateria').addEventListener('click', () => modalMateria());
-}
-
-function renderLlistaMateries(materies) {
-  const container = document.getElementById('llistaMateries');
-  if (!container) return;
-
-  if (materies.length === 0) {
-    container.innerHTML = `
-      <div style="text-align:center;padding:40px;color:#9ca3af;background:#f9fafb;border-radius:12px;">
-        <div style="font-size:32px;margin-bottom:8px;">📚</div>
-        No hi ha matèries creades. Crea la primera!
-      </div>
-    `;
-    return;
-  }
-
-  container.innerHTML = `
-    <div style="display:flex;flex-direction:column;gap:8px;">
-      ${materies.map((m, i) => `
-        <div style="
-          background:#f9fafb;border:1.5px solid #e5e7eb;border-radius:12px;
-          padding:14px 18px;display:flex;justify-content:space-between;align-items:center;
-        ">
-          <div style="display:flex;align-items:center;gap:12px;">
-            <span style="
-              background:#e0e7ff;color:#4338ca;font-weight:700;font-size:12px;
-              padding:4px 10px;border-radius:999px;">
-              ${String(i + 1).padStart(2, '0')}
-            </span>
-            <div>
-              <div style="font-weight:700;color:#1e1b4b;">${escapeHtml(m.nom)}</div>
-              ${m.descripcioComuna ? `
-                <div style="font-size:12px;color:#9ca3af;max-width:400px;
-                     white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">
-                  ${escapeHtml(m.descripcioComuna.substring(0, 80))}...
-                </div>
-              ` : ''}
-            </div>
-          </div>
+      <!-- COLUMNA 3: ALUMNES DEL GRUP SELECCIONAT -->
+      <div style="flex:1;display:flex;flex-direction:column;gap:10px;min-width:0;">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;flex-wrap:wrap;gap:8px;">
+          <h3 style="font-size:13px;font-weight:700;color:#1e1b4b;margin:0;" id="titol-alumnes-col">
+            Alumnes
+          </h3>
           <div style="display:flex;gap:6px;">
-            <button class="btn-editar-mat" data-id="${m.id}" style="
-              background:none;border:none;font-size:18px;cursor:pointer;">✏️</button>
-            <button class="btn-eliminar-mat" data-id="${m.id}" data-nom="${escapeHtml(m.nom)}" style="
-              background:none;border:none;font-size:18px;cursor:pointer;">🗑️</button>
+            <button id="btnNouAlumne" style="background:#7c3aed;color:#fff;border:none;
+              border-radius:6px;padding:4px 10px;font-size:12px;font-weight:600;cursor:pointer;"
+              disabled>+ Alumne</button>
+            <button id="btnImportarAlumnes" style="background:#059669;color:#fff;border:none;
+              border-radius:6px;padding:4px 10px;font-size:12px;font-weight:600;cursor:pointer;"
+              disabled>📥 Excel</button>
           </div>
         </div>
-      `).join('')}
-    </div>
-  `;
-
-  container.querySelectorAll('.btn-editar-mat').forEach(btn => {
-    btn.addEventListener('click', async () => {
-      const mat = materies.find(m => m.id === btn.dataset.id);
-      if (mat) modalMateria(mat);
-    });
-  });
-
-  container.querySelectorAll('.btn-eliminar-mat').forEach(btn => {
-    btn.addEventListener('click', async () => {
-      if (!confirm(`Eliminar la matèria "${btn.dataset.nom}"?`)) return;
-      try {
-        await window.db.collection('materies_centre').doc(btn.dataset.id).delete();
-        window.mostrarToast('🗑️ Matèria eliminada');
-        const mat = await carregarMateriesCentre();
-        renderLlistaMateries(mat);
-      } catch (e) {
-        window.mostrarToast('❌ Error: ' + e.message);
-      }
-    });
-  });
-}
-
-function modalMateria(materiaExistent) {
-  document.getElementById('modalMateria')?.remove();
-  const modal = document.createElement('div');
-  modal.id = 'modalMateria';
-  modal.style.cssText = `
-    position:fixed;inset:0;z-index:99999;background:rgba(0,0,0,0.5);
-    display:flex;align-items:center;justify-content:center;padding:16px;
-  `;
-
-  modal.innerHTML = `
-    <div style="background:#fff;border-radius:16px;padding:28px;width:100%;max-width:500px;">
-      <h3 style="font-size:16px;font-weight:700;color:#1e1b4b;margin-bottom:20px;">
-        ${materiaExistent ? '✏️ Editar matèria' : '+ Nova matèria'}
-      </h3>
-      <div style="margin-bottom:14px;">
-        <label style="font-size:13px;font-weight:600;color:#374151;display:block;margin-bottom:6px;">
-          Nom de la matèria *</label>
-        <input id="inpMatNom" type="text" value="${escapeHtml(materiaExistent?.nom || '')}"
-          placeholder="Ex: Matemàtiques, Llengua Catalana, STEM..."
-          style="width:100%;box-sizing:border-box;padding:10px 12px;border:1.5px solid #e5e7eb;
-                 border-radius:10px;font-size:14px;outline:none;font-family:inherit;">
-      </div>
-      <div style="margin-bottom:14px;">
-        <label style="font-size:13px;font-weight:600;color:#374151;display:block;margin-bottom:6px;">
-          Descripció comuna per defecte
-          <span style="font-weight:400;color:#9ca3af;">(texto predefault del butlletí)</span>
-        </label>
-        <textarea id="inpMatDesc" rows="4"
-          placeholder="Text introductori que apareixerà al butlletí per a aquesta matèria..."
-          style="width:100%;box-sizing:border-box;padding:10px 12px;border:1.5px solid #e5e7eb;
-                 border-radius:10px;font-size:13px;outline:none;resize:vertical;font-family:inherit;"
-        >${escapeHtml(materiaExistent?.descripcioComuna || '')}</textarea>
-      </div>
-      <div style="margin-bottom:20px;">
-        <label style="font-size:13px;font-weight:600;color:#374151;display:block;margin-bottom:6px;">
-          Ordre</label>
-        <input id="inpMatOrdre" type="number" value="${materiaExistent?.ordre ?? 99}"
-          style="width:100%;box-sizing:border-box;padding:10px 12px;border:1.5px solid #e5e7eb;
-                 border-radius:10px;font-size:14px;outline:none;font-family:inherit;">
-      </div>
-      <div style="display:flex;gap:10px;justify-content:flex-end;">
-        <button id="btnCancelMat" style="
-          padding:10px 20px;background:#f3f4f6;border:none;border-radius:10px;
-          font-weight:600;cursor:pointer;">Cancel·lar</button>
-        <button id="btnGuardarMat" style="
-          padding:10px 20px;background:#7c3aed;color:#fff;border:none;
-          border-radius:10px;font-weight:700;cursor:pointer;">
-          ${materiaExistent ? 'Actualitzar' : 'Crear matèria'}</button>
+        <div id="llista-alumnes-col" style="flex:1;overflow-y:auto;">
+          <p style="font-size:12px;color:#9ca3af;text-align:center;padding:20px 0;">
+            Selecciona un grup
+          </p>
+        </div>
       </div>
     </div>
   `;
 
-  document.body.appendChild(modal);
-  modal.querySelector('#btnCancelMat').addEventListener('click', () => modal.remove());
+  // Estat selecció
+  let nivellActiu = null;
+  let grupActiu = null;
 
-  modal.querySelector('#btnGuardarMat').addEventListener('click', async () => {
-    const nom   = modal.querySelector('#inpMatNom').value.trim();
-    const desc  = modal.querySelector('#inpMatDesc').value.trim();
-    const ordre = parseInt(modal.querySelector('#inpMatOrdre').value) || 99;
-
-    if (!nom) { window.mostrarToast('⚠️ El nom és obligatori'); return; }
-
-    try {
-      const data = { nom, descripcioComuna: desc, ordre };
-      if (materiaExistent) {
-        await window.db.collection('materies_centre').doc(materiaExistent.id).update(data);
-        window.mostrarToast('✅ Matèria actualitzada');
-      } else {
-        await window.db.collection('materies_centre').add(data);
-        window.mostrarToast('✅ Matèria creada');
-      }
-      modal.remove();
-      const mat = await carregarMateriesCentre();
-      renderLlistaMateries(mat);
-    } catch (e) {
-      window.mostrarToast('❌ Error: ' + e.message);
+  // Renderitzar nivells
+  function renderNivells() {
+    const cont = document.getElementById('llista-nivells');
+    if (!cont) return;
+    if (nivells.length === 0) {
+      cont.innerHTML = `<p style="font-size:12px;color:#9ca3af;text-align:center;">Cap nivell</p>`;
+      return;
     }
-  });
-}
+    cont.innerHTML = nivells.map(n => `
+      <div class="nivell-item" data-id="${n.id}" style="
+        padding:10px 12px;border-radius:10px;cursor:pointer;
+        border:2px solid ${nivellActiu === n.id ? '#7c3aed' : '#e5e7eb'};
+        background:${nivellActiu === n.id ? '#f5f3ff' : '#fff'};
+        display:flex;justify-content:space-between;align-items:center;
+        transition:all 0.15s;
+      ">
+        <div>
+          <div style="font-weight:700;font-size:13px;color:#1e1b4b;">${esH(n.nom)}</div>
+          <div style="font-size:11px;color:#9ca3af;">${esH(n.curs||'')} · ${(grupsPer[n.id]||[]).length} grups</div>
+        </div>
+        <div style="display:flex;gap:4px;">
+          <button class="btn-edit-niv" data-id="${n.id}"
+            style="background:none;border:none;font-size:14px;cursor:pointer;padding:2px;">✏️</button>
+          <button class="btn-del-niv" data-id="${n.id}" data-nom="${esH(n.nom)}"
+            style="background:none;border:none;font-size:14px;cursor:pointer;padding:2px;">🗑️</button>
+        </div>
+      </div>
+    `).join('');
 
-/* ══════════════════════════════════════════════════════
-   TAB: USUARIS
-══════════════════════════════════════════════════════ */
-async function renderUsuaris(content) {
-  let usuaris = [];
-  try {
-    const snap = await window.db.collection('professors').orderBy('email').get();
-    usuaris = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-  } catch (e) {}
+    cont.querySelectorAll('.nivell-item').forEach(el => {
+      el.addEventListener('click', e => {
+        if (e.target.closest('button')) return;
+        nivellActiu = el.dataset.id;
+        grupActiu = null;
+        renderNivells();
+        renderGrups();
+        renderAlumnes(null);
+        document.getElementById('btnNouGrup').disabled = false;
+        document.getElementById('titol-grups-col').textContent =
+          nivells.find(n=>n.id===nivellActiu)?.nom || 'Grups';
+      });
+    });
 
-  content.innerHTML = `
-    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;">
-      <h3 style="font-size:16px;font-weight:700;color:#1e1b4b;margin:0;">👥 Gestió d'usuaris</h3>
-      <button id="btnNouUsuari" style="
-        padding:8px 16px;background:#7c3aed;color:#fff;border:none;
-        border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;">
-        + Nou usuari
-      </button>
-    </div>
+    cont.querySelectorAll('.btn-edit-niv').forEach(btn => {
+      btn.addEventListener('click', e => { e.stopPropagation(); modalNivell(nivells.find(n=>n.id===btn.dataset.id)); });
+    });
+    cont.querySelectorAll('.btn-del-niv').forEach(btn => {
+      btn.addEventListener('click', e => {
+        e.stopPropagation();
+        if (!confirm(`Eliminar el nivell "${btn.dataset.nom}" i tots els seus grups?`)) return;
+        eliminarNivell(btn.dataset.id);
+      });
+    });
+  }
 
-    <div style="overflow-x:auto;">
-      <table style="width:100%;border-collapse:collapse;font-size:13px;">
+  function renderGrups() {
+    const cont = document.getElementById('llista-grups-col');
+    if (!cont) return;
+    if (!nivellActiu) {
+      cont.innerHTML = `<p style="font-size:12px;color:#9ca3af;text-align:center;padding:20px 0;">Selecciona un nivell</p>`;
+      return;
+    }
+    const grupsNivell = (grupsPer[nivellActiu] || []).sort((a,b)=>(a.ordre||99)-(b.ordre||99));
+    if (grupsNivell.length === 0) {
+      cont.innerHTML = `<p style="font-size:12px;color:#9ca3af;text-align:center;padding:20px 0;">Cap grup. Crea'n un!</p>`;
+      return;
+    }
+    cont.innerHTML = grupsNivell.map(g => `
+      <div class="grup-item" data-id="${g.id}" style="
+        padding:10px 12px;border-radius:10px;cursor:pointer;
+        border:2px solid ${grupActiu === g.id ? '#7c3aed' : '#e5e7eb'};
+        background:${grupActiu === g.id ? '#f5f3ff' : '#fff'};
+        display:flex;justify-content:space-between;align-items:center;
+      ">
+        <div>
+          <div style="font-size:12px;color:#9ca3af;margin-bottom:2px;">
+            ${TIPUS_GRUP[g.tipus]?.icon || '📁'} ${TIPUS_GRUP[g.tipus]?.label || g.tipus}
+          </div>
+          <div style="font-weight:700;font-size:13px;color:#1e1b4b;">${esH(g.nom)}</div>
+          <div style="font-size:11px;color:#9ca3af;">${(g.alumnes||[]).length} alumnes</div>
+        </div>
+        <div style="display:flex;gap:4px;">
+          <button class="btn-edit-grp" data-id="${g.id}"
+            style="background:none;border:none;font-size:14px;cursor:pointer;padding:2px;">✏️</button>
+          <button class="btn-del-grp" data-id="${g.id}" data-nom="${esH(g.nom)}"
+            style="background:none;border:none;font-size:14px;cursor:pointer;padding:2px;">🗑️</button>
+        </div>
+      </div>
+    `).join('');
+
+    cont.querySelectorAll('.grup-item').forEach(el => {
+      el.addEventListener('click', e => {
+        if (e.target.closest('button')) return;
+        grupActiu = el.dataset.id;
+        renderGrups();
+        const g = grups.find(g=>g.id===grupActiu);
+        document.getElementById('titol-alumnes-col').textContent = g?.nom || 'Alumnes';
+        renderAlumnes(g);
+        document.getElementById('btnNouAlumne').disabled = false;
+        document.getElementById('btnImportarAlumnes').disabled = false;
+      });
+    });
+    cont.querySelectorAll('.btn-edit-grp').forEach(btn => {
+      btn.addEventListener('click', e => { e.stopPropagation(); modalGrup(grups.find(g=>g.id===btn.dataset.id)); });
+    });
+    cont.querySelectorAll('.btn-del-grp').forEach(btn => {
+      btn.addEventListener('click', e => {
+        e.stopPropagation();
+        if (!confirm(`Eliminar "${btn.dataset.nom}"?`)) return;
+        window.db.collection('grups_centre').doc(btn.dataset.id).delete()
+          .then(async () => {
+            const idx = grups.findIndex(g=>g.id===btn.dataset.id);
+            if (idx>=0) grups.splice(idx,1);
+            delete grupsPer[nivellActiu];
+            grups.filter(g=>g.nivellId===nivellActiu).forEach(g=>{
+              if(!grupsPer[nivellActiu]) grupsPer[nivellActiu]=[];
+              grupsPer[nivellActiu].push(g);
+            });
+            grupActiu=null;
+            renderGrups();
+            renderAlumnes(null);
+            window.mostrarToast('🗑️ Grup eliminat');
+          });
+      });
+    });
+  }
+
+  function renderAlumnes(grup) {
+    const cont = document.getElementById('llista-alumnes-col');
+    if (!cont) return;
+    if (!grup) {
+      cont.innerHTML = `<p style="font-size:12px;color:#9ca3af;text-align:center;padding:20px 0;">Selecciona un grup</p>`;
+      return;
+    }
+    const alumnes = (grup.alumnes || []).sort((a,b)=>(a.cognoms||'').localeCompare(b.cognoms||''));
+    if (alumnes.length === 0) {
+      cont.innerHTML = `
+        <div style="text-align:center;padding:30px;color:#9ca3af;">
+          <div style="font-size:32px;margin-bottom:8px;">👤</div>
+          Cap alumne. Afegeix-ne o importa des d'Excel.
+        </div>`;
+      return;
+    }
+    cont.innerHTML = `
+      <table style="width:100%;border-collapse:collapse;font-size:12px;">
         <thead>
-          <tr style="background:#f3f4f6;text-align:left;">
-            <th style="padding:10px 14px;font-weight:600;color:#374151;border-radius:8px 0 0 8px;">Usuari</th>
-            <th style="padding:10px 14px;font-weight:600;color:#374151;">Rols</th>
-            <th style="padding:10px 14px;font-weight:600;color:#374151;">Estat</th>
-            <th style="padding:10px 14px;font-weight:600;color:#374151;border-radius:0 8px 8px 0;">Accions</th>
+          <tr style="background:#f3f4f6;">
+            <th style="padding:6px 10px;text-align:left;font-weight:600;color:#374151;">#</th>
+            <th style="padding:6px 10px;text-align:left;font-weight:600;color:#374151;">Cognoms, Nom</th>
+            <th style="padding:6px 10px;text-align:left;font-weight:600;color:#374151;">RALC</th>
+            <th style="padding:6px 10px;text-align:center;font-weight:600;color:#374151;">🗑️</th>
           </tr>
         </thead>
-        <tbody id="taulaUsuaris">
-          ${usuaris.map(u => `
-            <tr style="border-bottom:1px solid #f3f4f6;">
-              <td style="padding:12px 14px;">
-                <div style="font-weight:600;color:#1e1b4b;">${escapeHtml(u.nom || u.email)}</div>
-                <div style="font-size:12px;color:#9ca3af;">${escapeHtml(u.email || '')}</div>
+        <tbody>
+          ${alumnes.map((a, i) => `
+            <tr style="border-bottom:1px solid #f3f4f6;" data-alumne-idx="${grup.alumnes.indexOf(a)}">
+              <td style="padding:6px 10px;color:#9ca3af;">${i+1}</td>
+              <td style="padding:6px 10px;font-weight:600;color:#1e1b4b;">
+                ${esH(a.cognoms ? a.cognoms+', '+a.nom : a.nom)}
               </td>
-              <td style="padding:12px 14px;">
-                <div style="display:flex;gap:4px;flex-wrap:wrap;">
-                  ${(u.rols || (u.isAdmin ? ['admin'] : ['professor'])).map(r => `
-                    <span style="
-                      padding:3px 8px;border-radius:999px;font-size:11px;font-weight:700;
-                      background:${rolColor(r)};color:#fff;
-                    ">${r}</span>
-                  `).join('')}
-                </div>
-              </td>
-              <td style="padding:12px 14px;">
-                ${u.forcePasswordChange
-                  ? '<span style="color:#f59e0b;font-size:12px;">🔑 Pendent canvi pw</span>'
-                  : '<span style="color:#22c55e;font-size:12px;">✅ Actiu</span>'
-                }
-              </td>
-              <td style="padding:12px 14px;">
-                <div style="display:flex;gap:6px;">
-                  <button class="btn-editar-user" data-id="${u.id}" style="
-                    padding:5px 10px;background:#e0e7ff;color:#4338ca;border:none;
-                    border-radius:6px;font-size:12px;font-weight:600;cursor:pointer;">
-                    Editar rols
-                  </button>
-                </div>
+              <td style="padding:6px 10px;color:#6b7280;">${esH(a.ralc||'—')}</td>
+              <td style="padding:6px 10px;text-align:center;">
+                <button class="btn-del-alumne" data-nom="${esH(a.nom)}"
+                  data-idx="${grup.alumnes.indexOf(a)}"
+                  style="background:none;border:none;color:#ef4444;cursor:pointer;font-size:14px;">🗑️</button>
               </td>
             </tr>
           `).join('')}
         </tbody>
       </table>
-    </div>
-  `;
-
-  document.getElementById('btnNouUsuari').addEventListener('click', () => modalNouUsuari());
-
-  content.querySelectorAll('.btn-editar-user').forEach(btn => {
-    btn.addEventListener('click', () => {
-      const u = usuaris.find(u => u.id === btn.dataset.id);
-      if (u) modalEditarRols(u);
-    });
-  });
-}
-
-function rolColor(rol) {
-  const colors = {
-    superadmin: '#7c3aed',
-    admin:      '#dc2626',
-    secretaria: '#0891b2',
-    tutor:      '#059669',
-    professor:  '#2563eb',
-    revisor:    '#d97706',
-  };
-  return colors[rol] || '#6b7280';
-}
-
-function modalNouUsuari() {
-  document.getElementById('modalNouUsuari')?.remove();
-  const modal = document.createElement('div');
-  modal.id = 'modalNouUsuari';
-  modal.style.cssText = `
-    position:fixed;inset:0;z-index:99999;background:rgba(0,0,0,0.5);
-    display:flex;align-items:center;justify-content:center;padding:16px;
-  `;
-
-  modal.innerHTML = `
-    <div style="background:#fff;border-radius:16px;padding:28px;width:100%;max-width:480px;">
-      <h3 style="font-size:16px;font-weight:700;color:#1e1b4b;margin-bottom:20px;">+ Nou usuari</h3>
-
-      <div style="margin-bottom:14px;">
-        <label style="font-size:13px;font-weight:600;color:#374151;display:block;margin-bottom:6px;">
-          Nom complet *</label>
-        <input id="inpNouNom" type="text" placeholder="Pere Garcia"
-          style="width:100%;box-sizing:border-box;padding:10px 12px;border:1.5px solid #e5e7eb;
-                 border-radius:10px;font-size:14px;outline:none;font-family:inherit;">
-      </div>
-      <div style="margin-bottom:14px;">
-        <label style="font-size:13px;font-weight:600;color:#374151;display:block;margin-bottom:6px;">
-          Email *</label>
-        <input id="inpNouEmail" type="email" placeholder="professor@insmatadepera.cat"
-          style="width:100%;box-sizing:border-box;padding:10px 12px;border:1.5px solid #e5e7eb;
-                 border-radius:10px;font-size:14px;outline:none;font-family:inherit;">
-      </div>
-      <div style="margin-bottom:14px;">
-        <label style="font-size:13px;font-weight:600;color:#374151;display:block;margin-bottom:6px;">
-          Contrasenya inicial *</label>
-        <div style="display:flex;gap:8px;">
-          <input id="inpNouPw" type="text" placeholder="Contrasenya temporal"
-            style="flex:1;padding:10px 12px;border:1.5px solid #e5e7eb;
-                   border-radius:10px;font-size:14px;outline:none;font-family:inherit;">
-          <button id="btnGenPw" style="
-            padding:10px 14px;background:#f3f4f6;border:none;border-radius:10px;
-            font-size:12px;font-weight:600;cursor:pointer;white-space:nowrap;">
-            🎲 Generar
-          </button>
-        </div>
-      </div>
-      <div style="margin-bottom:14px;">
-        <label style="font-size:13px;font-weight:600;color:#374151;display:block;margin-bottom:8px;">
-          Rol</label>
-        <div style="display:flex;gap:8px;flex-wrap:wrap;">
-          ${['professor','tutor','secretaria','revisor','admin'].map(r => `
-            <label style="display:flex;align-items:center;gap:6px;cursor:pointer;">
-              <input type="checkbox" class="chk-rol-nou" value="${r}"
-                ${r === 'professor' ? 'checked' : ''}
-                style="width:16px;height:16px;">
-              <span style="font-size:13px;font-weight:600;color:${rolColor(r)};">${r}</span>
-            </label>
-          `).join('')}
-        </div>
-      </div>
-      <div style="margin-bottom:20px;">
-        <label style="display:flex;align-items:center;gap:8px;cursor:pointer;">
-          <input type="checkbox" id="chkEnviarMail" checked style="width:16px;height:16px;">
-          <span style="font-size:13px;color:#374151;">Enviar mail de benvinguda amb les credencials</span>
-        </label>
-      </div>
-
-      <div id="errNouUsuari" style="color:#ef4444;font-size:12px;margin-bottom:12px;min-height:16px;"></div>
-
-      <div style="display:flex;gap:10px;justify-content:flex-end;">
-        <button id="btnCancelNouUser" style="
-          padding:10px 20px;background:#f3f4f6;border:none;border-radius:10px;
-          font-weight:600;cursor:pointer;">Cancel·lar</button>
-        <button id="btnCrearUsuari" style="
-          padding:10px 20px;background:#7c3aed;color:#fff;border:none;
-          border-radius:10px;font-weight:700;cursor:pointer;">
-          Crear usuari</button>
-      </div>
-    </div>
-  `;
-
-  document.body.appendChild(modal);
-
-  modal.querySelector('#btnCancelNouUser').addEventListener('click', () => modal.remove());
-  modal.querySelector('#btnGenPw').addEventListener('click', () => {
-    modal.querySelector('#inpNouPw').value = generarPasswordAleatori();
-  });
-
-  modal.querySelector('#btnCrearUsuari').addEventListener('click', async () => {
-    const nom   = modal.querySelector('#inpNouNom').value.trim();
-    const email = modal.querySelector('#inpNouEmail').value.trim();
-    const pw    = modal.querySelector('#inpNouPw').value.trim();
-    const rols  = [...modal.querySelectorAll('.chk-rol-nou:checked')].map(c => c.value);
-    const enviarMail = modal.querySelector('#chkEnviarMail').checked;
-    const errEl = modal.querySelector('#errNouUsuari');
-
-    if (!nom || !email || !pw) { errEl.textContent = 'Omple tots els camps obligatoris'; return; }
-    if (pw.length < 6) { errEl.textContent = 'La contrasenya ha de tenir mínim 6 caràcters'; return; }
-
-    const btnCrear = modal.querySelector('#btnCrearUsuari');
-    btnCrear.disabled = true;
-    btnCrear.textContent = '⏳ Creant...';
-
-    try {
-      // Cridar la Cloud Function o l'API per crear l'usuari
-      // Com que Firebase no permet crear usuaris directament des del client
-      // sense desconnectar la sessió actual, usem un workaround:
-      // Guardem la "petició de creació" a Firestore i la processem amb una Cloud Function
-      // Per ara, guardem a una col·lecció pendent
-      await window.db.collection('_peticions_usuari').add({
-        tipus: 'crear',
-        nom,
-        email,
-        password: pw,  // En producció: xifrat o via Cloud Function
-        rols: rols.length > 0 ? rols : ['professor'],
-        enviarMail,
-        creatPer: firebase.auth().currentUser?.uid || '',
-        creatAt: firebase.firestore.FieldValue.serverTimestamp(),
-        processat: false
-      });
-
-      window.mostrarToast(`✅ Sol·licitud de creació enviada per a ${email}`);
-      if (enviarMail) {
-        window.mostrarToast('📧 S\'enviarà un mail de benvinguda en breu', 3000);
-      }
-      modal.remove();
-    } catch (e) {
-      errEl.textContent = 'Error: ' + e.message;
-      btnCrear.disabled = false;
-      btnCrear.textContent = 'Crear usuari';
-    }
-  });
-}
-
-function modalEditarRols(usuari) {
-  document.getElementById('modalEditarRols')?.remove();
-  const rolsActuals = usuari.rols || (usuari.isAdmin ? ['admin'] : ['professor']);
-
-  const modal = document.createElement('div');
-  modal.id = 'modalEditarRols';
-  modal.style.cssText = `
-    position:fixed;inset:0;z-index:99999;background:rgba(0,0,0,0.5);
-    display:flex;align-items:center;justify-content:center;padding:16px;
-  `;
-
-  modal.innerHTML = `
-    <div style="background:#fff;border-radius:16px;padding:28px;width:100%;max-width:420px;">
-      <h3 style="font-size:16px;font-weight:700;color:#1e1b4b;margin-bottom:6px;">✏️ Editar rols</h3>
-      <p style="font-size:13px;color:#9ca3af;margin-bottom:20px;">${escapeHtml(usuari.email)}</p>
-
-      <div style="display:flex;flex-direction:column;gap:10px;margin-bottom:20px;">
-        ${['professor','tutor','secretaria','revisor','admin'].map(r => `
-          <label style="display:flex;align-items:center;gap:10px;cursor:pointer;
-                        padding:10px 14px;border-radius:10px;background:#f9fafb;
-                        border:1.5px solid ${rolsActuals.includes(r) ? rolColor(r) : '#e5e7eb'};">
-            <input type="checkbox" class="chk-rol-edit" value="${r}"
-              ${rolsActuals.includes(r) ? 'checked' : ''}
-              style="width:18px;height:18px;accent-color:${rolColor(r)};">
-            <div>
-              <div style="font-weight:700;color:${rolColor(r)};">${r}</div>
-              <div style="font-size:12px;color:#9ca3af;">${descripcioRol(r)}</div>
-            </div>
-          </label>
-        `).join('')}
-      </div>
-
-      <div style="display:flex;gap:10px;justify-content:flex-end;">
-        <button id="btnCancelRols" style="
-          padding:10px 20px;background:#f3f4f6;border:none;border-radius:10px;
-          font-weight:600;cursor:pointer;">Cancel·lar</button>
-        <button id="btnGuardarRols" style="
-          padding:10px 20px;background:#7c3aed;color:#fff;border:none;
-          border-radius:10px;font-weight:700;cursor:pointer;">
-          Guardar rols</button>
-      </div>
-    </div>
-  `;
-
-  document.body.appendChild(modal);
-  modal.querySelector('#btnCancelRols').addEventListener('click', () => modal.remove());
-
-  modal.querySelector('#btnGuardarRols').addEventListener('click', async () => {
-    const rols = [...modal.querySelectorAll('.chk-rol-edit:checked')].map(c => c.value);
-    try {
-      await window.db.collection('professors').doc(usuari.id).update({
-        rols: rols.length > 0 ? rols : ['professor'],
-        isAdmin: rols.includes('admin')
-      });
-      window.mostrarToast('✅ Rols actualitzats');
-      modal.remove();
-    } catch (e) {
-      window.mostrarToast('❌ Error: ' + e.message);
-    }
-  });
-}
-
-function descripcioRol(rol) {
-  const desc = {
-    professor:  'Genera comentaris i els afegeix a l\'avaluació',
-    tutor:      'Vista tutoria amb semàfor i resum d\'alumnes',
-    secretaria: 'Gestió de grups, matèries, usuaris i butlletins',
-    revisor:    'Lectura i edició de dades dels cursos assignats',
-    admin:      'Accés total a tota la plataforma',
-  };
-  return desc[rol] || '';
-}
-
-/* ══════════════════════════════════════════════════════
-   TAB: BUTLLETINS PDF
-══════════════════════════════════════════════════════ */
-async function renderButlletins(content) {
-  const [grups, materies] = await Promise.all([
-    carregarGrupsCentre(),
-    carregarMateriesCentre()
-  ]);
-
-  // Agrupa grups per curs
-  const cursos = [...new Set(grups.map(g => g.curs))].sort();
-
-  content.innerHTML = `
-    <h3 style="font-size:16px;font-weight:700;color:#1e1b4b;margin-bottom:20px;">
-      📄 Generació de butlletins de notes</h3>
-
-    <div style="background:#fffbeb;border:1.5px solid #fde68a;border-radius:12px;
-                padding:14px 18px;margin-bottom:20px;font-size:13px;color:#92400e;">
-      ⚠️ Els butlletins es generen a partir de les dades introduïdes pels professors a l'Avaluació Centre.
-      Assegura't que tots els professors hagin completat les seves aportacions.
-    </div>
-
-    <!-- Selector de curs i grup -->
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:20px;">
-      <div>
-        <label style="font-size:13px;font-weight:600;color:#374151;display:block;margin-bottom:6px;">
-          Curs acadèmic</label>
-        <select id="selCursButlleti" style="width:100%;padding:10px 12px;border:1.5px solid #e5e7eb;
-                border-radius:10px;font-size:14px;outline:none;background:#f9fafb;">
-          ${cursos.map(c => `<option value="${c}">${c}</option>`).join('')}
-        </select>
-      </div>
-      <div>
-        <label style="font-size:13px;font-weight:600;color:#374151;display:block;margin-bottom:6px;">
-          Grup</label>
-        <select id="selGrupButlleti" style="width:100%;padding:10px 12px;border:1.5px solid #e5e7eb;
-                border-radius:10px;font-size:14px;outline:none;background:#f9fafb;">
-          <option value="">— Tots els grups —</option>
-          ${grups.map(g => `<option value="${g.id}" data-nom="${g.nom}">${g.nom}</option>`).join('')}
-        </select>
-      </div>
-    </div>
-
-    <!-- Llista d'alumnes per generar -->
-    <div id="llistaAlumnesButlleti" style="margin-bottom:20px;"></div>
-
-    <!-- Botons -->
-    <div style="display:flex;gap:12px;">
-      <button id="btnCarregarAlumnesButl" style="
-        padding:10px 20px;background:#e0e7ff;color:#4338ca;border:none;
-        border-radius:10px;font-weight:600;cursor:pointer;">
-        🔍 Cercar alumnes
-      </button>
-      <button id="btnGenerarTots" style="
-        padding:10px 20px;background:#7c3aed;color:#fff;border:none;
-        border-radius:10px;font-weight:700;cursor:pointer;" disabled>
-        📥 Generar tots els butlletins (ZIP)
-      </button>
-    </div>
-  `;
-
-  document.getElementById('btnCarregarAlumnesButl').addEventListener('click', async () => {
-    const curs  = document.getElementById('selCursButlleti').value;
-    const grupId= document.getElementById('selGrupButlleti').value;
-    await carregarAlumnesPerButlleti(curs, grupId, grups, materies);
-  });
-}
-
-async function carregarAlumnesPerButlleti(curs, grupId, grups, materies) {
-  const container = document.getElementById('llistaAlumnesButlleti');
-  if (!container) return;
-
-  container.innerHTML = `<p style="color:#9ca3af;font-size:13px;">⏳ Cercant alumnes...</p>`;
-
-  try {
-    // Obtenir alumnes de la primera matèria (com a referència de la llista)
-    const alumnes = await window.llegirTotsAlumnesCurs?.(curs) || [];
-    const alumnesFiltrats = grupId
-      ? alumnes.filter(a => a.grupId === grupId || a.grup === grups.find(g => g.id === grupId)?.nom)
-      : alumnes;
-
-    if (alumnesFiltrats.length === 0) {
-      container.innerHTML = `
-        <div style="text-align:center;padding:30px;color:#9ca3af;background:#f9fafb;border-radius:12px;">
-          No s\'han trobat alumnes per a aquest curs/grup
-        </div>
-      `;
-      document.getElementById('btnGenerarTots').disabled = true;
-      return;
-    }
-
-    container.innerHTML = `
-      <p style="font-size:13px;font-weight:600;color:#374151;margin-bottom:10px;">
-        ${alumnesFiltrats.length} alumnes trobats:
-      </p>
-      <div style="display:flex;flex-direction:column;gap:6px;">
-        ${alumnesFiltrats.map(a => `
-          <div style="
-            background:#f9fafb;border:1.5px solid #e5e7eb;border-radius:10px;
-            padding:12px 16px;display:flex;justify-content:space-between;align-items:center;
-          ">
-            <div>
-              <div style="font-weight:600;color:#1e1b4b;">
-                ${escapeHtml(a.cognoms ? `${a.cognoms}, ${a.nom}` : a.nom)}
-              </div>
-              <div style="font-size:12px;color:#9ca3af;">Grup: ${escapeHtml(a.grup || '-')}</div>
-            </div>
-            <button class="btn-gen-butlleti" data-id="${a.id}"
-              data-curs="${curs}"
-              style="
-              padding:6px 14px;background:#7c3aed;color:#fff;border:none;
-              border-radius:8px;font-size:12px;font-weight:600;cursor:pointer;">
-              📄 PDF
-            </button>
-          </div>
-        `).join('')}
+      <div style="padding:10px;font-size:12px;color:#9ca3af;text-align:right;">
+        Total: ${alumnes.length} alumnes
       </div>
     `;
 
-    document.getElementById('btnGenerarTots').disabled = false;
-
-    container.querySelectorAll('.btn-gen-butlleti').forEach(btn => {
+    cont.querySelectorAll('.btn-del-alumne').forEach(btn => {
       btn.addEventListener('click', async () => {
-        const alumne = alumnesFiltrats.find(a => a.id === btn.dataset.id);
-        if (alumne) await generarButlletiPDF(alumne, curs, materies);
+        if (!confirm(`Eliminar "${btn.dataset.nom}"?`)) return;
+        const idx = parseInt(btn.dataset.idx);
+        const nous = [...grup.alumnes];
+        nous.splice(idx, 1);
+        await window.db.collection('grups_centre').doc(grup.id).update({ alumnes: nous });
+        grup.alumnes = nous;
+        renderAlumnes(grup);
+        window.mostrarToast('🗑️ Alumne eliminat');
       });
     });
-
-  } catch (e) {
-    container.innerHTML = `<p style="color:#ef4444;">Error: ${e.message}</p>`;
   }
-}
 
-/* ══════════════════════════════════════════════════════
-   GENERADOR PDF BUTLLETÍ
-   Segueix el model del PDF de referència
-══════════════════════════════════════════════════════ */
-async function generarButlletiPDF(alumne, curs, materies) {
-  window.mostrarToast('⏳ Generant butlletí...', 2000);
+  // Botó nou nivell
+  document.getElementById('btnNouNivell').addEventListener('click', () => modalNivell());
+  document.getElementById('btnNouGrup').addEventListener('click', () => {
+    if (!nivellActiu) return;
+    modalGrup(null, nivellActiu, nivells.find(n=>n.id===nivellActiu));
+  });
+  document.getElementById('btnNouAlumne').addEventListener('click', () => {
+    if (!grupActiu) return;
+    const g = grups.find(g=>g.id===grupActiu);
+    if (g) modalAlumne(g, renderAlumnes);
+  });
+  document.getElementById('btnImportarAlumnes').addEventListener('click', () => {
+    if (!grupActiu) return;
+    const g = grups.find(g=>g.id===grupActiu);
+    if (g) modalImportExcel(g, () => {
+      renderGrups();
+      renderAlumnes(grups.find(g2=>g2.id===grupActiu));
+    });
+  });
 
-  try {
-    // Usem l'API de Claude per generar el HTML del butlletí
-    // i després l'obrim en una finestra per imprimir
-    const materiesAlumne = alumne.materies || {};
-    const dataHui = new Date().toLocaleDateString('ca-ES');
-
-    const html = generarHTMLButlleti(alumne, curs, materies, materiesAlumne, dataHui);
-
-    const finestra = window.open('', '_blank');
-    finestra.document.write(html);
-    finestra.document.close();
-    finestra.focus();
-    setTimeout(() => finestra.print(), 500);
-
-    window.mostrarToast(`✅ Butlletí generat per ${alumne.nom}`, 3000);
-
-  } catch (e) {
-    window.mostrarToast('❌ Error generant butlletí: ' + e.message, 4000);
-  }
-}
-
-function generarHTMLButlleti(alumne, curs, totesMat, materiesAlumne, data) {
-  const materiesTotals = totesMat.filter(m => materiesAlumne[m.id]);
-
-  const COLORS_ASSOLIMENT = {
-    'Assoliment Excel·lent':   '#22c55e',
-    'Assoliment Notable':      '#84cc16',
-    'Assoliment Satisfactori': '#f59e0b',
-    'No Assoliment':           '#ef4444',
-    'No avaluat':              '#9ca3af'
+  // Callbacks de modals (actualitzen l'estat local)
+  window._secOnNivellCreat = async () => {
+    const nous = await carregarNivells();
+    nivells.length = 0; nous.forEach(n => nivells.push(n));
+    renderNivells();
+  };
+  window._secOnGrupCreat = async () => {
+    const nousg = await carregarGrupsCentre();
+    grups.length = 0; nousg.forEach(g => grups.push(g));
+    Object.keys(grupsPer).forEach(k => delete grupsPer[k]);
+    grups.forEach(g => {
+      if (!grupsPer[g.nivellId]) grupsPer[g.nivellId] = [];
+      grupsPer[g.nivellId].push(g);
+    });
+    renderGrups();
   };
 
-  return `<!DOCTYPE html>
-<html lang="ca">
-<head>
-<meta charset="UTF-8">
-<title>Butlletí - ${alumne.cognoms || ''} ${alumne.nom || ''}</title>
-<style>
-  @import url('https://fonts.googleapis.com/css2?family=Source+Sans+Pro:wght@400;600;700&display=swap');
-  * { box-sizing: border-box; margin: 0; padding: 0; }
-  body { font-family: 'Source Sans Pro', Arial, sans-serif; font-size: 10pt; color: #111; background: #fff; }
-  @page { size: A4; margin: 15mm 15mm 15mm 15mm; }
-
-  .header-institucional {
-    display: flex; justify-content: space-between; align-items: center;
-    border-bottom: 2px solid #1e1b4b; padding-bottom: 10px; margin-bottom: 16px;
-  }
-  .header-logo-text { display: flex; flex-direction: column; }
-  .header-logo-text .dpt { font-size: 9pt; color: #555; }
-  .header-logo-text .centre { font-size: 11pt; font-weight: 700; }
-  .header-titol { font-size: 11pt; font-weight: 700; }
-
-  .seccio-taula { margin-bottom: 4px; }
-  .seccio-taula table { width: 100%; border-collapse: collapse; font-size: 9pt; }
-  .seccio-taula th { background: #f3f4f6; padding: 5px 8px; text-align: left; font-weight: 600; }
-  .seccio-taula td { padding: 5px 8px; border-bottom: 1px solid #e5e7eb; }
-
-  h2.seccio { font-size: 10pt; font-weight: 700; margin: 14px 0 6px;
-              color: #1e1b4b; border-bottom: 1px solid #e5e7eb; padding-bottom: 4px; }
-  .desc-comuna { background: #f9fafb; border: 1px solid #e5e7eb; border-radius: 4px;
-                  padding: 8px 10px; font-size: 9pt; margin-bottom: 8px; }
-  .taula-items { width: 100%; border-collapse: collapse; font-size: 9pt; margin-bottom: 10px; }
-  .taula-items th { background: #1e1b4b; color: #fff; padding: 5px 8px; text-align: left; }
-  .taula-items td { padding: 6px 8px; border: 1px solid #e5e7eb; vertical-align: top; }
-  .badge-assoliment {
-    display: inline-block; padding: 3px 8px; border-radius: 4px;
-    font-size: 8pt; font-weight: 700; color: #fff; white-space: nowrap;
-  }
-  .comentari-tutor {
-    background: #f0f9ff; border: 1.5px solid #bfdbfe; border-radius: 6px;
-    padding: 10px 12px; font-size: 9pt; margin: 10px 0;
-  }
-  .peu {
-    margin-top: 20px; padding-top: 10px; border-top: 1px solid #e5e7eb;
-    display: flex; justify-content: space-between; font-size: 9pt;
-  }
-  .peu .signatura { text-align: center; }
-  .peu .signatura strong { display: block; margin-top: 30px; }
-
-  .aspectes { margin-top: 12px; }
-  .aspectes table { width: 100%; border-collapse: collapse; font-size: 9pt; }
-  .aspectes td { padding: 5px 8px; border: 1px solid #e5e7eb; }
-  .aspectes td:first-child { font-weight: 600; background: #f3f4f6; width: 180px; }
-</style>
-</head>
-<body>
-
-<!-- CAPÇALERA INSTITUCIONAL -->
-<div class="header-institucional">
-  <div class="header-logo-text">
-    <span class="dpt">Generalitat de Catalunya · Departament d'Educació</span>
-    <span class="centre">INS Matadepera</span>
-  </div>
-  <div style="text-align:right;">
-    <div class="header-titol">Butlletí informatiu · Curs ${escapeHtml(curs)}</div>
-    <div style="font-size:9pt;color:#555;">Data: ${data}</div>
-  </div>
-</div>
-
-<!-- DADES CENTRE -->
-<div class="seccio-taula">
-  <table>
-    <tr>
-      <th>Codi del centre</th><th>Nom del centre</th><th>Municipi</th>
-    </tr>
-    <tr>
-      <td>08053169</td><td>Institut Matadepera</td><td>Matadepera</td>
-    </tr>
-  </table>
-</div>
-
-<!-- DADES ENSENYAMENT -->
-<div class="seccio-taula" style="margin-top:8px;">
-  <table>
-    <tr><th>Ensenyament</th><th>Nivell</th><th>Grup</th></tr>
-    <tr>
-      <td>ESO LOEM — Educació Secundària Obligatòria</td>
-      <td>—</td>
-      <td>${escapeHtml(alumne.grup || '-')}</td>
-    </tr>
-  </table>
-</div>
-
-<!-- DADES ALUMNE -->
-<div class="seccio-taula" style="margin-top:8px;">
-  <table>
-    <tr><th colspan="2">Dades de l'alumne/a</th></tr>
-    <tr>
-      <td><strong>Cognoms:</strong> ${escapeHtml(alumne.cognoms || '')}</td>
-      <td><strong>Nom:</strong> ${escapeHtml(alumne.nom || '')}</td>
-    </tr>
-  </table>
-</div>
-
-<!-- INTRO RESULTATS -->
-<div style="margin:14px 0;font-size:9pt;color:#333;border-top:1px solid #e5e7eb;padding-top:10px;">
-  <strong>Resultats de l'avaluació</strong><br>
-  Aquest butlletí informa dels aprenentatges del vostre fill/a des del principi de curs fins a la data indicada.
-  Es detalla i s'explica amb un comentari els nivells d'assoliment dels aprenentatges més importants
-  de cada matèria, àmbit o projecte.
-</div>
-
-<!-- MATÈRIES -->
-${materiesTotals.map(mat => {
-  const dadesMat = materiesAlumne[mat.id] || {};
-  const items = dadesMat.items || [];
-  return `
-    <h2 class="seccio">${escapeHtml(mat.nom).toUpperCase()}</h2>
-
-    ${dadesMat.descripcioComuna ? `
-      <div class="desc-comuna">${escapeHtml(dadesMat.descripcioComuna)}</div>
-    ` : ''}
-
-    ${items.length > 0 ? `
-      <table class="taula-items">
-        <tr>
-          <th style="width:25%;">APRENENTATGE</th>
-          <th>COMENTARI</th>
-          <th style="width:18%;">NIVELL ASSOLIMENT</th>
-        </tr>
-        ${items.map(item => `
-          <tr>
-            <td style="font-weight:600;">${escapeHtml(item.titol || '')}</td>
-            <td>${escapeHtml(item.comentari || '')}</td>
-            <td>
-              <span class="badge-assoliment"
-                style="background:${COLORS_ASSOLIMENT[item.assoliment] || '#9ca3af'};">
-                ${escapeHtml(item.assoliment || 'No avaluat')}
-              </span>
-            </td>
-          </tr>
-        `).join('')}
-      </table>
-    ` : '<p style="font-size:9pt;color:#9ca3af;margin-bottom:10px;">Sense ítems introduïts</p>'}
-  `;
-}).join('')}
-
-<!-- COMENTARI TUTOR -->
-${alumne.comentariTutor ? `
-  <h2 class="seccio">Comentari Tutor/a</h2>
-  <div class="comentari-tutor">${escapeHtml(alumne.comentariTutor)}</div>
-` : ''}
-
-<!-- ASPECTES A TENIR EN COMPTE -->
-<div class="aspectes">
-  <h2 class="seccio">Aspectes a tenir en compte</h2>
-  <table>
-    <tr>
-      <td>ORIENTACIONS (si escau):</td>
-      <td>${escapeHtml(alumne.orientacions || '')}</td>
-    </tr>
-    <tr>
-      <td>SUPORT EDUCATIU:</td>
-      <td>${escapeHtml(alumne.suportEducatiu || '')}</td>
-    </tr>
-  </table>
-  <p style="font-size:9pt;margin-top:10px;">
-    <strong>Faltes d'assistència:</strong> podeu consultar-les a l'aplicació Acàcia.
-  </p>
-</div>
-
-<!-- PEU DE PÀGINA / SIGNATURES -->
-<div class="peu">
-  <div class="signatura">
-    Nom i cognom del tutor/a<br>
-    <strong>${escapeHtml(alumne.tutor || '—')}</strong>
-  </div>
-  <div class="signatura">
-    Vist-i-plau del director del centre<br>
-    <strong>Xavi Ros Calsina</strong>
-  </div>
-</div>
-
-</body>
-</html>`;
+  renderNivells();
 }
 
 /* ══════════════════════════════════════════════════════
-   TAB: QUADRE DE DADES
+   MODAL NIVELL
 ══════════════════════════════════════════════════════ */
-async function renderQuadreDades(content) {
-  const [grups, materies] = await Promise.all([
-    carregarGrupsCentre(),
-    carregarMateriesCentre()
-  ]);
+function modalNivell(existent) {
+  const m = crearModal(`${existent ? '✏️ Editar' : '+ Nou'} nivell`, `
+    <div style="margin-bottom:14px;">
+      <label style="font-size:13px;font-weight:600;color:#374151;display:block;margin-bottom:6px;">Nom *</label>
+      <input id="inpNivNom" type="text" value="${esH(existent?.nom||'')}" placeholder="Ex: 1r ESO, 2n Batxillerat..."
+        style="width:100%;box-sizing:border-box;padding:10px 12px;border:1.5px solid #e5e7eb;border-radius:10px;font-size:14px;outline:none;font-family:inherit;">
+    </div>
+    <div style="margin-bottom:14px;">
+      <label style="font-size:13px;font-weight:600;color:#374151;display:block;margin-bottom:6px;">Curs acadèmic *</label>
+      <input id="inpNivCurs" type="text" value="${esH(existent?.curs||'2024-25')}" placeholder="2024-25"
+        style="width:100%;box-sizing:border-box;padding:10px 12px;border:1.5px solid #e5e7eb;border-radius:10px;font-size:14px;outline:none;font-family:inherit;">
+    </div>
+    <div>
+      <label style="font-size:13px;font-weight:600;color:#374151;display:block;margin-bottom:6px;">Ordre</label>
+      <input id="inpNivOrdre" type="number" value="${existent?.ordre??99}"
+        style="width:100%;box-sizing:border-box;padding:10px 12px;border:1.5px solid #e5e7eb;border-radius:10px;font-size:14px;outline:none;font-family:inherit;">
+    </div>
+  `, async () => {
+    const nom   = document.getElementById('inpNivNom').value.trim();
+    const curs  = document.getElementById('inpNivCurs').value.trim();
+    const ordre = parseInt(document.getElementById('inpNivOrdre').value)||99;
+    if (!nom||!curs) { window.mostrarToast('⚠️ Omple els camps obligatoris'); return false; }
+    const data = {nom, curs, ordre};
+    if (existent) await window.db.collection('nivells_centre').doc(existent.id).update(data);
+    else await window.db.collection('nivells_centre').add(data);
+    window.mostrarToast(existent ? '✅ Nivell actualitzat' : '✅ Nivell creat');
+    await window._secOnNivellCreat?.();
+    return true;
+  });
+  setTimeout(()=>document.getElementById('inpNivNom')?.focus(), 100);
+}
 
-  const cursos = [...new Set(grups.map(g => g.curs))].sort();
+/* ══════════════════════════════════════════════════════
+   MODAL GRUP
+══════════════════════════════════════════════════════ */
+function modalGrup(existent, nivellIdFix, nivellFix) {
+  const m = crearModal(`${existent ? '✏️ Editar' : '+ Nou'} grup`, `
+    <div style="margin-bottom:14px;">
+      <label style="font-size:13px;font-weight:600;color:#374151;display:block;margin-bottom:6px;">Nom *</label>
+      <input id="inpGrpNom" type="text" value="${esH(existent?.nom||'')}" placeholder="Ex: 3A, Matemàtiques, STEM..."
+        style="width:100%;box-sizing:border-box;padding:10px 12px;border:1.5px solid #e5e7eb;border-radius:10px;font-size:14px;outline:none;font-family:inherit;">
+    </div>
+    <div style="margin-bottom:14px;">
+      <label style="font-size:13px;font-weight:600;color:#374151;display:block;margin-bottom:6px;">Tipus *</label>
+      <select id="inpGrpTipus" style="width:100%;padding:10px 12px;border:1.5px solid #e5e7eb;border-radius:10px;font-size:14px;outline:none;background:#f9fafb;">
+        ${Object.entries(TIPUS_GRUP).map(([k,v])=>`
+          <option value="${k}" ${(existent?.tipus||'classe')===k?'selected':''}>${v.icon} ${v.label}</option>
+        `).join('')}
+      </select>
+    </div>
+    <div style="margin-bottom:14px;">
+      <label style="font-size:13px;font-weight:600;color:#374151;display:block;margin-bottom:6px;">Nivell</label>
+      <input type="text" value="${esH(nivellFix?.nom || existent?.nivellNom || '')}"
+        disabled style="width:100%;box-sizing:border-box;padding:10px 12px;border:1.5px solid #e5e7eb;border-radius:10px;font-size:14px;background:#f3f4f6;font-family:inherit;">
+    </div>
+    <div>
+      <label style="font-size:13px;font-weight:600;color:#374151;display:block;margin-bottom:6px;">Ordre</label>
+      <input id="inpGrpOrdre" type="number" value="${existent?.ordre??99}"
+        style="width:100%;box-sizing:border-box;padding:10px 12px;border:1.5px solid #e5e7eb;border-radius:10px;font-size:14px;outline:none;font-family:inherit;">
+    </div>
+  `, async () => {
+    const nom   = document.getElementById('inpGrpNom').value.trim();
+    const tipus = document.getElementById('inpGrpTipus').value;
+    const ordre = parseInt(document.getElementById('inpGrpOrdre').value)||99;
+    const nId   = nivellIdFix || existent?.nivellId;
+    const nNom  = nivellFix?.nom || existent?.nivellNom || '';
+    const curs  = nivellFix?.curs || existent?.curs || '';
+    if (!nom) { window.mostrarToast('⚠️ El nom és obligatori'); return false; }
+    const data = {nom, tipus, nivellId:nId, nivellNom:nNom, curs, ordre, alumnes: existent?.alumnes||[]};
+    if (existent) await window.db.collection('grups_centre').doc(existent.id).update({nom,tipus,ordre});
+    else await window.db.collection('grups_centre').add(data);
+    window.mostrarToast(existent ? '✅ Grup actualitzat' : '✅ Grup creat');
+    await window._secOnGrupCreat?.();
+    return true;
+  });
+  setTimeout(()=>document.getElementById('inpGrpNom')?.focus(), 100);
+}
 
-  content.innerHTML = `
-    <h3 style="font-size:16px;font-weight:700;color:#1e1b4b;margin-bottom:20px;">
-      📊 Quadre de dades institucional</h3>
+/* ══════════════════════════════════════════════════════
+   MODAL AFEGIR ALUMNE
+══════════════════════════════════════════════════════ */
+function modalAlumne(grup, onRefresh) {
+  crearModal('+ Nou alumne/a', `
+    <div style="margin-bottom:12px;">
+      <label style="font-size:13px;font-weight:600;color:#374151;display:block;margin-bottom:6px;">Nom *</label>
+      <input id="inpAlNom" type="text" placeholder="Pere"
+        style="width:100%;box-sizing:border-box;padding:10px 12px;border:1.5px solid #e5e7eb;border-radius:10px;font-size:14px;outline:none;font-family:inherit;">
+    </div>
+    <div style="margin-bottom:12px;">
+      <label style="font-size:13px;font-weight:600;color:#374151;display:block;margin-bottom:6px;">Cognoms</label>
+      <input id="inpAlCognoms" type="text" placeholder="Garcia Puig"
+        style="width:100%;box-sizing:border-box;padding:10px 12px;border:1.5px solid #e5e7eb;border-radius:10px;font-size:14px;outline:none;font-family:inherit;">
+    </div>
+    <div>
+      <label style="font-size:13px;font-weight:600;color:#374151;display:block;margin-bottom:6px;">RALC</label>
+      <input id="inpAlRalc" type="text" placeholder="1234567890"
+        style="width:100%;box-sizing:border-box;padding:10px 12px;border:1.5px solid #e5e7eb;border-radius:10px;font-size:14px;outline:none;font-family:inherit;">
+    </div>
+  `, async () => {
+    const nom     = document.getElementById('inpAlNom').value.trim();
+    const cognoms = document.getElementById('inpAlCognoms').value.trim();
+    const ralc    = document.getElementById('inpAlRalc').value.trim();
+    if (!nom) { window.mostrarToast('⚠️ El nom és obligatori'); return false; }
+    const alumnes = [...(grup.alumnes||[]), {nom, cognoms, ralc}];
+    await window.db.collection('grups_centre').doc(grup.id).update({alumnes});
+    grup.alumnes = alumnes;
+    window.mostrarToast('✅ Alumne afegit');
+    onRefresh?.(grup);
+    return true;
+  });
+  setTimeout(()=>document.getElementById('inpAlNom')?.focus(), 100);
+}
 
-    <div style="display:flex;gap:12px;margin-bottom:20px;flex-wrap:wrap;">
-      <select id="selCursQD" style="padding:10px 12px;border:1.5px solid #e5e7eb;
-              border-radius:10px;font-size:14px;outline:none;background:#f9fafb;">
-        ${cursos.map(c => `<option value="${c}">${c}</option>`).join('')}
-      </select>
-      <select id="selMateriaQD" style="padding:10px 12px;border:1.5px solid #e5e7eb;
-              border-radius:10px;font-size:14px;outline:none;background:#f9fafb;">
-        <option value="">— Totes les matèries —</option>
-        ${materies.map(m => `<option value="${m.id}">${m.nom}</option>`).join('')}
-      </select>
-      <select id="selGrupQD" style="padding:10px 12px;border:1.5px solid #e5e7eb;
-              border-radius:10px;font-size:14px;outline:none;background:#f9fafb;">
-        <option value="">— Tots els grups —</option>
-        ${grups.map(g => `<option value="${g.id}" data-nom="${g.nom}">${g.nom}</option>`).join('')}
-      </select>
-      <button id="btnCarregarQD" style="
-        padding:10px 20px;background:#7c3aed;color:#fff;border:none;
-        border-radius:10px;font-weight:700;cursor:pointer;">
-        🔍 Carregar dades
-      </button>
-      <button id="btnExportarQD" style="
-        padding:10px 20px;background:#059669;color:#fff;border:none;
-        border-radius:10px;font-weight:700;cursor:pointer;" disabled>
-        📊 Exportar Excel
-      </button>
+/* ══════════════════════════════════════════════════════
+   MODAL IMPORTAR ALUMNES EXCEL
+══════════════════════════════════════════════════════ */
+function modalImportExcel(grup, onRefresh) {
+  crearModal('📥 Importar alumnes des d\'Excel', `
+    <div style="background:#eff6ff;border:1.5px solid #bfdbfe;border-radius:10px;
+                padding:12px 14px;margin-bottom:16px;font-size:12px;color:#1d4ed8;">
+      <strong>Format esperat (columnes):</strong><br>
+      A: Primer Cognom &nbsp;|&nbsp; B: Segon Cognom &nbsp;|&nbsp; C: Nom &nbsp;|&nbsp; D: RALC<br>
+      <em>La primera fila pot ser capçalera (s'ignorarà si no és numèrica).</em>
+    </div>
+    <input type="file" id="inpExcelAlumnes" accept=".xlsx,.xls,.csv"
+      style="width:100%;padding:10px;border:2px dashed #7c3aed;border-radius:10px;
+             font-size:13px;cursor:pointer;background:#f9fafb;">
+    <div id="previewImport" style="margin-top:12px;max-height:200px;overflow-y:auto;"></div>
+  `, async () => {
+    const file = document.getElementById('inpExcelAlumnes').files[0];
+    if (!file) { window.mostrarToast('⚠️ Selecciona un fitxer'); return false; }
+
+    const alumnesNous = await parseExcelAlumnes(file);
+    if (alumnesNous.length === 0) { window.mostrarToast('⚠️ Cap alumne trobat al fitxer'); return false; }
+
+    const alumnesActuals = grup.alumnes || [];
+    // Evitar duplicats per RALC o per nom+cognoms
+    const nous = alumnesNous.filter(a => !alumnesActuals.some(ex =>
+      (a.ralc && ex.ralc === a.ralc) ||
+      (ex.nom === a.nom && ex.cognoms === a.cognoms)
+    ));
+
+    const total = [...alumnesActuals, ...nous];
+    await window.db.collection('grups_centre').doc(grup.id).update({alumnes: total});
+    grup.alumnes = total;
+    window.mostrarToast(`✅ ${nous.length} alumnes importats (${alumnesNous.length-nous.length} duplicats ignorats)`);
+    onRefresh?.();
+    return true;
+  }, 'Importar');
+
+  // Preview en temps real
+  setTimeout(() => {
+    document.getElementById('inpExcelAlumnes')?.addEventListener('change', async (e) => {
+      const file = e.target.files[0];
+      if (!file) return;
+      const alumnes = await parseExcelAlumnes(file);
+      const prev = document.getElementById('previewImport');
+      if (!prev) return;
+      prev.innerHTML = `
+        <p style="font-size:12px;font-weight:600;color:#374151;margin-bottom:6px;">
+          Vista prèvia: ${alumnes.length} alumnes trobats
+        </p>
+        <table style="width:100%;border-collapse:collapse;font-size:11px;">
+          <tr style="background:#f3f4f6;">
+            <th style="padding:4px 8px;text-align:left;">Cognoms</th>
+            <th style="padding:4px 8px;text-align:left;">Nom</th>
+            <th style="padding:4px 8px;text-align:left;">RALC</th>
+          </tr>
+          ${alumnes.slice(0,20).map(a=>`
+            <tr style="border-bottom:1px solid #f3f4f6;">
+              <td style="padding:4px 8px;">${esH(a.cognoms)}</td>
+              <td style="padding:4px 8px;">${esH(a.nom)}</td>
+              <td style="padding:4px 8px;">${esH(a.ralc||'—')}</td>
+            </tr>
+          `).join('')}
+          ${alumnes.length>20?`<tr><td colspan="3" style="padding:4px 8px;color:#9ca3af;">... i ${alumnes.length-20} més</td></tr>`:''}
+        </table>
+      `;
+    });
+  }, 200);
+}
+
+async function parseExcelAlumnes(file) {
+  return new Promise((resolve) => {
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      try {
+        const wb = XLSX.read(e.target.result, {type:'binary'});
+        const ws = wb.Sheets[wb.SheetNames[0]];
+        const rows = XLSX.utils.sheet_to_json(ws, {header:1, defval:''});
+        const alumnes = [];
+        for (const row of rows) {
+          // Detectar capçalera: si la primera cel·la no és numèrica i conté lletres
+          const primerCamp = String(row[0]||'').trim();
+          if (!primerCamp || /^(cognom|primer|apellido|nom|name)/i.test(primerCamp)) continue;
+          const cognom1 = String(row[0]||'').trim();
+          const cognom2 = String(row[1]||'').trim();
+          const nom     = String(row[2]||'').trim();
+          const ralc    = String(row[3]||'').trim();
+          if (!nom && !cognom1) continue;
+          alumnes.push({
+            cognoms: [cognom1, cognom2].filter(Boolean).join(' '),
+            nom,
+            ralc
+          });
+        }
+        resolve(alumnes);
+      } catch(e) {
+        console.error('Error parsejant Excel:', e);
+        resolve([]);
+      }
+    };
+    reader.readAsBinaryString(file);
+  });
+}
+
+/* ══════════════════════════════════════════════════════
+   MODAL ELIMINAR NIVELL
+══════════════════════════════════════════════════════ */
+async function eliminarNivell(nivellId) {
+  const db = window.db;
+  // Eliminar tots els grups del nivell
+  const snap = await db.collection('grups_centre').where('nivellId','==',nivellId).get();
+  const batch = db.batch();
+  snap.docs.forEach(d => batch.delete(d.ref));
+  batch.delete(db.collection('nivells_centre').doc(nivellId));
+  await batch.commit();
+  window.mostrarToast('🗑️ Nivell i grups eliminats');
+  await window._secOnNivellCreat?.();
+}
+
+/* ══════════════════════════════════════════════════════
+   TAB USUARIS — gestió completa
+══════════════════════════════════════════════════════ */
+async function renderUsuaris(body) {
+  let usuaris = [];
+  try {
+    const snap = await window.db.collection('professors').orderBy('email').get();
+    usuaris = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+  } catch (e) {
+    body.innerHTML = `<div style="color:#ef4444;">Error: ${e.message}</div>`;
+    return;
+  }
+
+  body.innerHTML = `
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;flex-wrap:wrap;gap:10px;">
+      <h3 style="font-size:16px;font-weight:700;color:#1e1b4b;margin:0;">👥 Usuaris (${usuaris.length})</h3>
+      <div style="display:flex;gap:8px;">
+        <input id="buscaUser" type="text" placeholder="🔍 Cercar..."
+          style="padding:7px 12px;border:1.5px solid #e5e7eb;border-radius:8px;font-size:13px;outline:none;width:180px;">
+        <button id="btnNouUsuari" style="padding:8px 16px;background:#7c3aed;color:#fff;
+          border:none;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;">
+          + Nou usuari
+        </button>
+      </div>
     </div>
 
-    <div id="taulesDades"></div>
+    <div style="overflow-x:auto;">
+      <table style="width:100%;border-collapse:collapse;font-size:13px;" id="taulaUsuaris">
+        <thead>
+          <tr style="background:#f3f4f6;">
+            <th style="padding:10px 14px;text-align:left;font-weight:600;color:#374151;">Nom / Email</th>
+            <th style="padding:10px 14px;text-align:left;font-weight:600;color:#374151;">Rols</th>
+            <th style="padding:10px 14px;text-align:center;font-weight:600;color:#374151;">Estat</th>
+            <th style="padding:10px 14px;text-align:center;font-weight:600;color:#374151;">Accions</th>
+          </tr>
+        </thead>
+        <tbody id="tbody-usuaris">
+          ${renderFilesUsuaris(usuaris)}
+        </tbody>
+      </table>
+    </div>
+  `;
+
+  // Cerca en temps real
+  document.getElementById('buscaUser').addEventListener('input', (e) => {
+    const q = e.target.value.toLowerCase();
+    const filtrats = usuaris.filter(u =>
+      (u.nom||'').toLowerCase().includes(q) || (u.email||'').toLowerCase().includes(q)
+    );
+    document.getElementById('tbody-usuaris').innerHTML = renderFilesUsuaris(filtrats);
+    assignarEventsUsuaris(filtrats, usuaris);
+  });
+
+  document.getElementById('btnNouUsuari').addEventListener('click', () =>
+    modalNouUsuari(() => renderUsuaris(body))
+  );
+
+  assignarEventsUsuaris(usuaris, usuaris);
+}
+
+function renderFilesUsuaris(usuaris) {
+  return usuaris.map(u => {
+    // Assegurar que rols és sempre array
+    const rols = Array.isArray(u.rols) ? u.rols :
+                 (u.isAdmin ? ['admin'] : ['professor']);
+    return `
+      <tr style="border-bottom:1px solid #f3f4f6;" data-uid="${u.id}">
+        <td style="padding:12px 14px;">
+          <div style="font-weight:600;color:#1e1b4b;">${esH(u.nom || '—')}</div>
+          <div style="font-size:12px;color:#9ca3af;">${esH(u.email || '')}</div>
+        </td>
+        <td style="padding:12px 14px;">
+          <div style="display:flex;gap:4px;flex-wrap:wrap;">
+            ${rols.map(r => `
+              <span style="padding:3px 8px;border-radius:999px;font-size:11px;font-weight:700;
+                           background:${rolColor(r)};color:#fff;">${r}</span>
+            `).join('')}
+          </div>
+        </td>
+        <td style="padding:12px 14px;text-align:center;">
+          ${u.forcePasswordChange
+            ? '<span style="color:#f59e0b;font-size:12px;">🔑 Pendent</span>'
+            : '<span style="color:#22c55e;font-size:12px;">✅ Actiu</span>'
+          }
+        </td>
+        <td style="padding:12px 14px;text-align:center;">
+          <div style="display:flex;gap:6px;justify-content:center;">
+            <button class="btn-rols-user" data-id="${u.id}" style="
+              padding:5px 10px;background:#e0e7ff;color:#4338ca;border:none;
+              border-radius:6px;font-size:12px;font-weight:600;cursor:pointer;">
+              🎭 Rols
+            </button>
+            <button class="btn-reset-pw" data-id="${u.id}" data-email="${esH(u.email)}" style="
+              padding:5px 10px;background:#fef3c7;color:#92400e;border:none;
+              border-radius:6px;font-size:12px;font-weight:600;cursor:pointer;">
+              🔑 Reset pw
+            </button>
+          </div>
+        </td>
+      </tr>
+    `;
+  }).join('');
+}
+
+function assignarEventsUsuaris(usuarisFiltrats, usuarisTotal) {
+  document.querySelectorAll('.btn-rols-user').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const u = usuarisTotal.find(u => u.id === btn.dataset.id);
+      if (u) modalEditarRols(u, () => {
+        const body = document.getElementById('secBody');
+        if (body) renderUsuaris(body);
+      });
+    });
+  });
+  document.querySelectorAll('.btn-reset-pw').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      if (!confirm(`Marcar "${btn.dataset.email}" per canviar contrasenya en el proper accés?`)) return;
+      await window.db.collection('professors').doc(btn.dataset.id).update({forcePasswordChange: true});
+      window.mostrarToast('✅ L\'usuari haurà de canviar la contrasenya');
+    });
+  });
+}
+
+/* ══════════════════════════════════════════════════════
+   MODAL NOU USUARI
+══════════════════════════════════════════════════════ */
+function modalNouUsuari(onCreat) {
+  const pwGen = generarPassword();
+  crearModal('+ Nou usuari', `
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px;">
+      <div>
+        <label style="font-size:12px;font-weight:600;color:#374151;display:block;margin-bottom:5px;">Nom complet *</label>
+        <input id="inpNomUser" type="text" placeholder="Maria Garcia"
+          style="width:100%;box-sizing:border-box;padding:9px 11px;border:1.5px solid #e5e7eb;border-radius:9px;font-size:13px;outline:none;font-family:inherit;">
+      </div>
+      <div>
+        <label style="font-size:12px;font-weight:600;color:#374151;display:block;margin-bottom:5px;">Email *</label>
+        <input id="inpEmailUser" type="email" placeholder="professor@insmatadepera.cat"
+          style="width:100%;box-sizing:border-box;padding:9px 11px;border:1.5px solid #e5e7eb;border-radius:9px;font-size:13px;outline:none;font-family:inherit;">
+      </div>
+    </div>
+    <div style="margin-bottom:12px;">
+      <label style="font-size:12px;font-weight:600;color:#374151;display:block;margin-bottom:5px;">Contrasenya inicial *</label>
+      <div style="display:flex;gap:8px;">
+        <input id="inpPwUser" type="text" value="${pwGen}"
+          style="flex:1;padding:9px 11px;border:1.5px solid #e5e7eb;border-radius:9px;font-size:13px;outline:none;font-family:inherit;">
+        <button id="btnGenPw2" style="padding:9px 14px;background:#f3f4f6;border:none;
+          border-radius:9px;font-size:12px;font-weight:600;cursor:pointer;white-space:nowrap;">🎲 Nova</button>
+      </div>
+    </div>
+    <div style="margin-bottom:14px;">
+      <label style="font-size:12px;font-weight:600;color:#374151;display:block;margin-bottom:8px;">Rols</label>
+      <div style="display:flex;gap:10px;flex-wrap:wrap;">
+        ${['professor','tutor','secretaria','revisor','admin'].map(r => `
+          <label style="display:flex;align-items:center;gap:6px;cursor:pointer;">
+            <input type="checkbox" class="chk-rol-nou" value="${r}" ${r==='professor'?'checked':''}
+              style="width:16px;height:16px;accent-color:${rolColor(r)};">
+            <span style="font-size:13px;font-weight:600;color:${rolColor(r)};">${r}</span>
+          </label>
+        `).join('')}
+      </div>
+    </div>
+    <div>
+      <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:13px;color:#374151;">
+        <input type="checkbox" id="chkForcePw" checked style="width:16px;height:16px;">
+        Forçar canvi de contrasenya en el primer accés
+      </label>
+    </div>
+    <div id="errUser" style="color:#ef4444;font-size:12px;min-height:16px;margin-top:10px;"></div>
+  `, async () => {
+    const nom   = document.getElementById('inpNomUser').value.trim();
+    const email = document.getElementById('inpEmailUser').value.trim();
+    const pw    = document.getElementById('inpPwUser').value.trim();
+    const rols  = [...document.querySelectorAll('.chk-rol-nou:checked')].map(c=>c.value);
+    const force = document.getElementById('chkForcePw').checked;
+    const errEl = document.getElementById('errUser');
+
+    if (!nom||!email||!pw) { errEl.textContent='⚠️ Omple els camps obligatoris'; return false; }
+    if (pw.length<6) { errEl.textContent='⚠️ Mínim 6 caràcters'; return false; }
+
+    // Guardem petició — una Cloud Function o l'admin ho processa
+    // Mentre no tenim CF, guardem a _peticions_usuari
+    try {
+      await window.db.collection('_peticions_usuari').add({
+        tipus: 'crear',
+        nom, email,
+        passwordClar: pw,   // en prod: xifrar o eliminar
+        rols: rols.length>0?rols:['professor'],
+        forcePasswordChange: force,
+        creatPer: firebase.auth().currentUser?.uid||'',
+        creatAt: firebase.firestore.FieldValue.serverTimestamp(),
+        processat: false
+      });
+      window.mostrarToast(`✅ Petició creada per a ${email}`);
+      window.mostrarToast('ℹ️ Executa la funció de creació des de Firebase Console o Cloud Functions', 5000);
+      onCreat?.();
+      return true;
+    } catch(e) {
+      errEl.textContent = 'Error: '+e.message;
+      return false;
+    }
+  }, 'Crear usuari');
+
+  setTimeout(()=>{
+    document.getElementById('btnGenPw2')?.addEventListener('click',()=>{
+      document.getElementById('inpPwUser').value = generarPassword();
+    });
+    document.getElementById('inpNomUser')?.focus();
+  }, 100);
+}
+
+/* ══════════════════════════════════════════════════════
+   MODAL EDITAR ROLS
+══════════════════════════════════════════════════════ */
+function modalEditarRols(usuari, onGuardat) {
+  const rolsActuals = Array.isArray(usuari.rols) ? usuari.rols :
+                      (usuari.isAdmin ? ['admin'] : ['professor']);
+  const descrip = {
+    professor:  'Genera comentaris i avaluació',
+    tutor:      'Panell tutoria + semàfor alumnes',
+    secretaria: 'Gestió estructura i butlletins',
+    revisor:    'Lectura/edició cursos assignats',
+    admin:      'Accés total a la plataforma',
+  };
+
+  crearModal(`🎭 Rols — ${usuari.nom||usuari.email}`, `
+    <div style="display:flex;flex-direction:column;gap:10px;">
+      ${['professor','tutor','secretaria','revisor','admin'].map(r=>`
+        <label style="display:flex;align-items:center;gap:12px;cursor:pointer;
+                      padding:12px 14px;border-radius:10px;background:#f9fafb;
+                      border:2px solid ${rolsActuals.includes(r)?rolColor(r):'#e5e7eb'};
+                      transition:border-color 0.2s;"
+               id="row-rol-${r}">
+          <input type="checkbox" class="chk-rol-edit" value="${r}"
+            ${rolsActuals.includes(r)?'checked':''}
+            style="width:18px;height:18px;accent-color:${rolColor(r)};">
+          <div>
+            <div style="font-weight:700;color:${rolColor(r)};">${r}</div>
+            <div style="font-size:12px;color:#9ca3af;">${descrip[r]||''}</div>
+          </div>
+        </label>
+      `).join('')}
+    </div>
+  `, async () => {
+    const rols = [...document.querySelectorAll('.chk-rol-edit:checked')].map(c=>c.value);
+    await window.db.collection('professors').doc(usuari.id).update({
+      rols: rols.length>0?rols:['professor'],
+      isAdmin: rols.includes('admin')
+    });
+    window.mostrarToast('✅ Rols actualitzats');
+    onGuardat?.();
+    return true;
+  }, 'Guardar rols');
+
+  // Actualitzar bord checkbox visualment
+  setTimeout(()=>{
+    document.querySelectorAll('.chk-rol-edit').forEach(chk=>{
+      chk.addEventListener('change', ()=>{
+        const row = document.getElementById(`row-rol-${chk.value}`);
+        if (row) row.style.borderColor = chk.checked ? rolColor(chk.value) : '#e5e7eb';
+      });
+    });
+  }, 100);
+}
+
+/* ══════════════════════════════════════════════════════
+   TAB BUTLLETINS i QUADRE DADES (simplificats)
+══════════════════════════════════════════════════════ */
+async function renderButlletins(body) {
+  body.innerHTML = `
+    <div style="text-align:center;padding:60px;color:#9ca3af;">
+      <div style="font-size:48px;margin-bottom:12px;">📄</div>
+      <h3 style="margin-bottom:8px;color:#374151;">Butlletins</h3>
+      <p style="font-size:13px;">Per generar butlletins, primer els professors han d'afegir les avaluacions.<br>
+      Disponible quan hi hagi dades a l'Avaluació Centre.</p>
+    </div>
+  `;
+}
+
+async function renderQuadreDades(body) {
+  const [nivells, grups] = await Promise.all([carregarNivells(), carregarGrupsCentre()]);
+  const cursos = [...new Set(grups.map(g=>g.curs).filter(Boolean))].sort().reverse();
+
+  body.innerHTML = `
+    <h3 style="font-size:16px;font-weight:700;color:#1e1b4b;margin-bottom:16px;">📊 Quadre de dades</h3>
+    <div style="display:flex;gap:12px;margin-bottom:20px;flex-wrap:wrap;">
+      <select id="selCursQD" style="padding:9px 12px;border:1.5px solid #e5e7eb;border-radius:9px;font-size:13px;outline:none;">
+        ${cursos.map(c=>`<option value="${c}">${c}</option>`).join('')}
+      </select>
+      <select id="selNivellQD" style="padding:9px 12px;border:1.5px solid #e5e7eb;border-radius:9px;font-size:13px;outline:none;">
+        <option value="">— Tots els nivells —</option>
+        ${nivells.map(n=>`<option value="${n.id}">${n.nom}</option>`).join('')}
+      </select>
+      <button id="btnCarregarQD" style="padding:9px 18px;background:#7c3aed;color:#fff;
+        border:none;border-radius:9px;font-weight:600;cursor:pointer;">🔍 Carregar</button>
+    </div>
+    <div id="resultatsQD"></div>
   `;
 
   document.getElementById('btnCarregarQD').addEventListener('click', async () => {
     const curs    = document.getElementById('selCursQD').value;
-    const matId   = document.getElementById('selMateriaQD').value;
-    const grupId  = document.getElementById('selGrupQD').value;
-    await carregarQuadreDades(curs, matId, grupId, materies, grups);
-  });
-}
+    const nivellId= document.getElementById('selNivellQD').value;
+    const res = document.getElementById('resultatsQD');
+    res.innerHTML = `<p style="color:#9ca3af;">⏳ Carregant...</p>`;
 
-async function carregarQuadreDades(curs, matId, grupId, materies, grups) {
-  const container = document.getElementById('taulesDades');
-  if (!container) return;
-  container.innerHTML = `<p style="color:#9ca3af;">⏳ Carregant dades...</p>`;
+    const grupsFilt = grups.filter(g =>
+      (!curs || g.curs === curs) &&
+      (!nivellId || g.nivellId === nivellId)
+    );
 
-  try {
-    const materiesAMostrar = matId
-      ? materies.filter(m => m.id === matId)
-      : materies;
+    if (grupsFilt.length === 0) {
+      res.innerHTML = `<p style="color:#9ca3af;text-align:center;padding:30px;">Cap dada trobada</p>`;
+      return;
+    }
 
-    let html = '';
+    // Agrupar per nivell
+    const perNivell = {};
+    grupsFilt.forEach(g => {
+      if (!perNivell[g.nivellNom||g.nivellId]) perNivell[g.nivellNom||g.nivellId] = [];
+      perNivell[g.nivellNom||g.nivellId].push(g);
+    });
 
-    for (const mat of materiesAMostrar) {
-      let dades = await window.llegirAvaluacioCentre(curs, mat.id, grupId || null);
-
-      if (dades.length === 0) continue;
-
-      // Agrupar per grup
-      const perGrup = {};
-      dades.forEach(a => {
-        const g = a.grup || 'sense grup';
-        if (!perGrup[g]) perGrup[g] = [];
-        perGrup[g].push(a);
-      });
-
-      // Columnes d'ítems (màxim)
-      const maxItems = Math.max(...dades.map(a => (a.items || []).length), 0);
-
-      html += `
-        <div style="margin-bottom:30px;">
-          <h4 style="font-size:13px;font-weight:700;color:#1e1b4b;padding:8px 12px;
-                     background:#e0e7ff;border-radius:8px;margin-bottom:12px;">
-            📚 ${escapeHtml(mat.nom)}
-          </h4>
-
-          ${Object.entries(perGrup).sort(([a],[b]) => a.localeCompare(b)).map(([grup, alumnes]) => `
-            <div style="margin-bottom:16px;">
-              <h5 style="font-size:12px;font-weight:700;color:#6b7280;margin-bottom:8px;">
-                🏫 ${escapeHtml(grup)}
-              </h5>
-              <div style="overflow-x:auto;">
-                <table style="width:100%;border-collapse:collapse;font-size:11px;">
-                  <thead>
-                    <tr style="background:#f3f4f6;">
-                      <th style="padding:6px 10px;text-align:left;font-weight:600;">Alumne/a</th>
-                      ${Array.from({length:maxItems}, (_,i) => `
-                        <th style="padding:6px 10px;text-align:center;font-weight:600;">
-                          Ítem ${i+1}
-                        </th>
-                      `).join('')}
-                      <th style="padding:6px 10px;text-align:left;font-weight:600;">Professor</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    ${alumnes.sort((a,b) => (a.cognoms||'').localeCompare(b.cognoms||'')).map(a => `
-                      <tr style="border-bottom:1px solid #f3f4f6;">
-                        <td style="padding:6px 10px;font-weight:600;">
-                          ${escapeHtml(a.cognoms ? `${a.cognoms}, ${a.nom}` : a.nom)}
-                        </td>
-                        ${Array.from({length:maxItems}, (_,i) => {
-                          const item = (a.items||[])[i];
-                          return `<td style="padding:6px 10px;text-align:center;">
-                            ${item ? `
-                              <span title="${escapeHtml(item.titol||'')} — ${escapeHtml(item.comentari||'')}"
-                                style="
-                                  display:inline-block;padding:2px 6px;border-radius:4px;
-                                  font-size:10px;font-weight:700;color:#fff;cursor:help;
-                                  background:${window.avaluacioCentre?.ASSOLIMENT_COLORS?.[item.assoliment]?.bg || '#9ca3af'};
-                                ">
-                                ${window.avaluacioCentre?.ASSOLIMENT_COLORS?.[item.assoliment]?.short || '--'}
-                              </span>
-                            ` : '<span style="color:#e5e7eb;">—</span>'}
-                          </td>`;
-                        }).join('')}
-                        <td style="padding:6px 10px;font-size:10px;color:#9ca3af;">
-                          ${escapeHtml(a.professoremail||'—')}
-                        </td>
-                      </tr>
-                    `).join('')}
-                  </tbody>
-                </table>
-              </div>
+    res.innerHTML = Object.entries(perNivell).map(([nom, gs]) => `
+      <div style="margin-bottom:20px;">
+        <h4 style="font-size:13px;font-weight:700;color:#1e1b4b;padding:8px 12px;
+                   background:#e0e7ff;border-radius:8px;margin-bottom:10px;">${esH(nom)}</h4>
+        <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:10px;">
+          ${gs.map(g => `
+            <div style="background:#f9fafb;border:1.5px solid #e5e7eb;border-radius:10px;padding:14px;">
+              <div style="font-size:11px;color:#9ca3af;">${TIPUS_GRUP[g.tipus]?.icon||'📁'} ${TIPUS_GRUP[g.tipus]?.label||g.tipus}</div>
+              <div style="font-weight:700;color:#1e1b4b;margin:4px 0;">${esH(g.nom)}</div>
+              <div style="font-size:12px;color:#6b7280;">${(g.alumnes||[]).length} alumnes</div>
             </div>
           `).join('')}
         </div>
-      `;
-    }
-
-    container.innerHTML = html || `
-      <div style="text-align:center;padding:30px;color:#9ca3af;background:#f9fafb;border-radius:12px;">
-        No hi ha dades per a la selecció feta
       </div>
-    `;
+    `).join('');
+  });
+}
 
-    const btnExp = document.getElementById('btnExportarQD');
-    if (btnExp) btnExp.disabled = false;
+/* ══════════════════════════════════════════════════════
+   HELPER: MODAL GENÈRIC
+══════════════════════════════════════════════════════ */
+function crearModal(titol, contingut, onOk, labelOk = 'Guardar') {
+  document.getElementById('_modalSec')?.remove();
+  const modal = document.createElement('div');
+  modal.id = '_modalSec';
+  modal.style.cssText = `
+    position:fixed;inset:0;z-index:99999;background:rgba(0,0,0,0.55);
+    display:flex;align-items:center;justify-content:center;padding:16px;
+  `;
+  modal.innerHTML = `
+    <div style="background:#fff;border-radius:18px;padding:28px;width:100%;max-width:520px;
+                max-height:90vh;overflow-y:auto;box-shadow:0 25px 60px rgba(0,0,0,0.3);">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;">
+        <h3 style="font-size:16px;font-weight:800;color:#1e1b4b;margin:0;">${titol}</h3>
+        <button id="_btnTancarModal" style="background:none;border:none;font-size:22px;
+          cursor:pointer;color:#9ca3af;line-height:1;">✕</button>
+      </div>
+      ${contingut}
+      <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:20px;">
+        <button id="_btnCancelModal" style="padding:10px 20px;background:#f3f4f6;border:none;
+          border-radius:10px;font-weight:600;cursor:pointer;font-size:14px;">Cancel·lar</button>
+        <button id="_btnOkModal" style="padding:10px 22px;background:#7c3aed;color:#fff;border:none;
+          border-radius:10px;font-weight:700;cursor:pointer;font-size:14px;">${labelOk}</button>
+      </div>
+    </div>
+  `;
+  document.body.appendChild(modal);
 
-  } catch (e) {
-    container.innerHTML = `<p style="color:#ef4444;">Error: ${e.message}</p>`;
-  }
+  const tancar = () => modal.remove();
+  modal.querySelector('#_btnTancarModal').addEventListener('click', tancar);
+  modal.querySelector('#_btnCancelModal').addEventListener('click', tancar);
+  modal.addEventListener('click', e => { if (e.target === modal) tancar(); });
+  modal.querySelector('#_btnOkModal').addEventListener('click', async () => {
+    const ok = await onOk();
+    if (ok !== false) tancar();
+  });
+  return modal;
 }
 
 /* ══════════════════════════════════════════════════════
    UTILITATS
 ══════════════════════════════════════════════════════ */
-async function carregarMateriesCentre() {
+async function carregarNivells() {
   try {
-    const snap = await window.db.collection('materies_centre').orderBy('ordre').get();
-    return snap.docs.map(d => ({ id: d.id, ...d.data() }));
-  } catch (e) { return []; }
+    const snap = await window.db.collection('nivells_centre').orderBy('ordre').get();
+    return snap.docs.map(d => ({id:d.id,...d.data()}));
+  } catch(e) { return []; }
 }
 
 async function carregarGrupsCentre() {
   try {
     const snap = await window.db.collection('grups_centre').orderBy('ordre').get();
-    return snap.docs.map(d => ({ id: d.id, ...d.data() }));
-  } catch (e) { return []; }
+    return snap.docs.map(d => ({id:d.id,...d.data()}));
+  } catch(e) { return []; }
 }
 
-function generarPasswordAleatori() {
-  const chars = 'ABCDEFGHJKMNPQRSTWXYZabcdefghjkmnpqrstwxyz23456789!@#$';
-  return Array.from({length: 10}, () => chars[Math.floor(Math.random() * chars.length)]).join('');
+function rolColor(rol) {
+  const c = {superadmin:'#7c3aed',admin:'#dc2626',secretaria:'#0891b2',
+              tutor:'#059669',professor:'#2563eb',revisor:'#d97706'};
+  return c[rol]||'#6b7280';
 }
 
-function escapeHtml(str) {
-  if (!str) return '';
-  return String(str)
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;');
+function generarPassword() {
+  const c = 'ABCDEFGHJKMNPQRSTWXYZabcdefghjkmnpqrstwxyz23456789';
+  return Array.from({length:10},()=>c[Math.floor(Math.random()*c.length)]).join('');
+}
+
+function esH(s) {
+  if (!s) return '';
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 }
 
 /* ══════════════════════════════════════════════════════
-   CÒPIA DE SEGURETAT AUTOMÀTICA
+   CÒPIA DE SEGURETAT
 ══════════════════════════════════════════════════════ */
 window.realitzarCopiaSeguretat = async function() {
-  const db = window.db;
+  const rols = window._userRols || [];
+  if (!rols.some(r=>['admin','superadmin'].includes(r))) return; // Només admin
   try {
-    window.mostrarToast('💾 Realitzant còpia de seguretat...', 2000);
-
-    // Recollir totes les col·leccions principals
-    const cols = ['professors', 'classes', 'alumnes', 'grups_centre', 'materies_centre'];
+    window.mostrarToast('💾 Còpia de seguretat...', 2000);
+    const db = window.db;
+    const cols = ['professors','classes','alumnes','grups_centre','materies_centre','nivells_centre'];
     const snapshot = {};
-
     for (const col of cols) {
       const snap = await db.collection(col).get();
       snapshot[col] = {};
-      snap.docs.forEach(d => {
-        snapshot[col][d.id] = d.data();
+      snap.docs.forEach(d => { snapshot[col][d.id] = d.data(); });
+    }
+    const dataStr = JSON.stringify(snapshot);
+    // Dividir en chunks si > 1MB
+    if (dataStr.length < 900000) {
+      await db.collection('_backups').add({
+        timestamp: firebase.firestore.FieldValue.serverTimestamp(),
+        data: dataStr, versio: '1.0',
+        creador: firebase.auth().currentUser?.email||'sistema'
       });
     }
-
-    // Avaluació centre (estructura anidada)
-    const cursosSnap = await db.collection('avaluacio_centre').get();
-    snapshot['avaluacio_centre'] = {};
-    for (const cursDoc of cursosSnap.docs) {
-      snapshot['avaluacio_centre'][cursDoc.id] = {};
-      const mats = await cursDoc.ref.listCollections();
-      for (const matCol of mats) {
-        const matSnap = await matCol.get();
-        snapshot['avaluacio_centre'][cursDoc.id][matCol.id] = {};
-        matSnap.docs.forEach(d => {
-          snapshot['avaluacio_centre'][cursDoc.id][matCol.id][d.id] = d.data();
-        });
-      }
-    }
-
-    // Guardar la còpia
-    await db.collection('_backups').add({
-      timestamp: firebase.firestore.FieldValue.serverTimestamp(),
-      data: JSON.stringify(snapshot),
-      versio: '1.0',
-      creador: firebase.auth().currentUser?.email || 'sistema'
-    });
-
-    window.mostrarToast('✅ Còpia de seguretat realitzada', 3000);
-  } catch (e) {
-    console.error('Error còpia seguretat:', e);
-    window.mostrarToast('❌ Error en la còpia: ' + e.message, 5000);
+    window.mostrarToast('✅ Còpia realitzada', 3000);
+  } catch(e) {
+    console.warn('Còpia seguretat:', e.message);
   }
 };
 
-// Programar còpia setmanal
-(function programarCopiaSetmanal() {
-  const INTERVAL = 7 * 24 * 60 * 60 * 1000; // 1 setmana
-  const CLAU = '_ultima_copia_seguretat';
-
-  firebase.auth().onAuthStateChanged(user => {
-    if (!user) return;
-    const ultima = localStorage.getItem(CLAU);
+// Còpia setmanal (només admin)
+firebase.auth().onAuthStateChanged(user => {
+  if (!user) return;
+  setTimeout(() => {
+    if (!window._userRols?.some(r=>['admin','superadmin'].includes(r))) return;
+    const KEY = '_ultima_copia';
     const ara = Date.now();
-    if (!ultima || (ara - parseInt(ultima)) > INTERVAL) {
-      // Si han passat 7 dies, fer còpia
-      window.realitzarCopiaSeguretat?.().then(() => {
-        localStorage.setItem(CLAU, String(ara));
-      });
+    const ultima = parseInt(localStorage.getItem(KEY)||'0');
+    if (ara - ultima > 7*24*60*60*1000) {
+      window.realitzarCopiaSeguretat?.().then(()=>localStorage.setItem(KEY,String(ara)));
     }
-  });
-})();
+  }, 5000);
+});
 
-console.log('✅ secretaria.js: inicialitzat');
-
-// Exportar funcions principals
-window.obrirPanellSecretaria = obrirPanellSecretaria;
+console.log('✅ secretaria.js v2: inicialitzat');
