@@ -84,328 +84,340 @@ function injectarBotoAvaluacioCentre() {
 }
 
 /* ══════════════════════════════════════════════════════
-   MODAL PRINCIPAL
+   MODAL PRINCIPAL — nou flux
+   
+   FLUX:
+   1. Professor li dona al botó
+   2. Selecciona matèria centre + grup + descripció comuna
+   3. Clica "⚡ Carregar comentaris de la classe"
+   4. El sistema llegeix TOTS els alumnes de la classe,
+      agafa els seus comentarisItems de l'UC del periode actiu,
+      i mostra un resum per alumne amb estat
+   5. Professor revisa i envia amb "🏫 Enviar al centre"
 ══════════════════════════════════════════════════════ */
 async function obrirModalAvaluacioCentre() {
   document.getElementById('modalAvaluacioCentre')?.remove();
 
-  // Verificar rol
-  if (!window.teRol || (!window.teRol('professor') && !window.teRol('admin'))) {
-    window.mostrarToast?.('❌ No tens permisos per a aquesta acció', 3000);
-    return;
-  }
-
-  // Carregar matèries i grups del centre
   const [materies, grups] = await Promise.all([
     carregarMateriesCentre(),
     carregarGrupsCentre()
   ]);
 
-  // Intentar preseleccionar a partir del nom de la classe actual
+  // Preseleccionar a partir del nom de la classe actual
   const classTitle = document.getElementById('classTitle')?.textContent || '';
-  const classSub   = document.getElementById('classSub')?.textContent || '';
 
   const modal = document.createElement('div');
   modal.id = 'modalAvaluacioCentre';
   modal.style.cssText = `
     position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,0.6);
-    display:flex;align-items:center;justify-content:center;padding:16px;
+    display:flex;align-items:flex-start;justify-content:center;
+    padding:16px;overflow-y:auto;
   `;
 
-  modal.innerHTML = `
-    <div style="background:#fff;border-radius:20px;padding:32px;width:100%;max-width:680px;
-                max-height:90vh;overflow-y:auto;box-shadow:0 25px 60px rgba(0,0,0,0.3);">
+  // Grups agrupats per curs
+  const cursos = [...new Set(grups.map(g=>g.curs).filter(Boolean))].sort().reverse();
+  const grupsOpts = cursos.map(c =>
+    `<optgroup label="${c}">` +
+    grups.filter(g=>g.curs===c).map(g =>
+      `<option value="${g.id}" data-nom="${escapeHtml(g.nom)}" data-curs="${c}">
+        ${escapeHtml(g.nom)}
+       </option>`
+    ).join('') +
+    `</optgroup>`
+  ).join('');
 
-      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:24px;">
+  modal.innerHTML = `
+    <div style="background:#fff;border-radius:20px;padding:28px;width:100%;max-width:800px;
+                box-shadow:0 25px 60px rgba(0,0,0,0.3);margin:auto;">
+
+      <!-- HEADER -->
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:20px;">
         <div>
-          <h2 style="font-size:20px;font-weight:800;color:#1e1b4b;margin:0;">
-            🏫 Afegir a Avaluació Centre
+          <h2 style="font-size:19px;font-weight:800;color:#1e1b4b;margin:0;">
+            🏫 Avaluació Centre
           </h2>
-          <p style="font-size:13px;color:#6b7280;margin:4px 0 0;">
-            Envia els comentaris i assoliments al quadre institucional
+          <p style="font-size:12px;color:#6b7280;margin:4px 0 0;">
+            Envia els comentaris i assoliments generats amb l'UltraComentator
           </p>
         </div>
-        <button id="btnTancarAvCentre" style="background:none;border:none;font-size:24px;cursor:pointer;color:#9ca3af;">✕</button>
+        <button id="btnTancarAvCentre" style="background:none;border:none;font-size:24px;cursor:pointer;color:#9ca3af;line-height:1;">✕</button>
       </div>
 
-      <!-- SELECTOR MATÈRIA -->
-      <div style="margin-bottom:16px;">
-        <label style="display:block;font-size:13px;font-weight:600;color:#374151;margin-bottom:6px;">
-          Matèria del centre *
-        </label>
-        <select id="selMateriaAC" style="width:100%;padding:10px 12px;border:1.5px solid #e5e7eb;
-                border-radius:10px;font-size:14px;outline:none;background:#f9fafb;">
-          <option value="">— Tria la matèria —</option>
-          ${materies.map(m => `<option value="${m.id}" data-nom="${m.nom}">${m.nom}</option>`).join('')}
-        </select>
-      </div>
-
-      <!-- SELECTOR GRUP -->
-      <div style="margin-bottom:16px;">
-        <label style="display:block;font-size:13px;font-weight:600;color:#374151;margin-bottom:6px;">
-          Grup *
-        </label>
-        <select id="selGrupAC" style="width:100%;padding:10px 12px;border:1.5px solid #e5e7eb;
-                border-radius:10px;font-size:14px;outline:none;background:#f9fafb;">
-          <option value="">— Tria el grup —</option>
-          ${grups.map(g => `<option value="${g.id}" data-nom="${g.nom}" data-curs="${g.curs}">${g.nom} (${g.curs})</option>`).join('')}
-        </select>
-      </div>
-
-      <!-- DESCRIPCIÓ COMUNA (text lliure de la matèria) -->
-      <div style="margin-bottom:16px;">
-        <label style="display:block;font-size:13px;font-weight:600;color:#374151;margin-bottom:6px;">
-          Descripció comuna de la matèria
-          <span style="font-weight:400;color:#9ca3af;"> (text introductori que apareix al butlletí)</span>
-        </label>
-        <textarea id="descComunaAC" rows="4" placeholder="Descripció del projecte, context de la matèria, etc."
-          style="width:100%;box-sizing:border-box;padding:10px 12px;border:1.5px solid #e5e7eb;
-                 border-radius:10px;font-size:13px;outline:none;resize:vertical;font-family:inherit;">
-        </textarea>
-      </div>
-
-      <!-- ÍTEMS -->
-      <div id="itemsContainerAC" style="margin-bottom:20px;">
-        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
-          <label style="font-size:13px;font-weight:600;color:#374151;">Ítems d'avaluació</label>
-          <button id="btnAfegirItemAC" style="
-            padding:6px 14px;background:#7c3aed;color:#fff;border:none;
-            border-radius:8px;font-size:12px;font-weight:600;cursor:pointer;">
-            + Afegir ítem
-          </button>
+      <!-- PAS 1: CONFIGURACIÓ -->
+      <div style="background:#f9fafb;border:1.5px solid #e5e7eb;border-radius:14px;padding:18px;margin-bottom:16px;">
+        <div style="font-size:12px;font-weight:700;color:#7c3aed;letter-spacing:0.05em;margin-bottom:14px;">
+          PAS 1 — CONFIGURACIÓ
         </div>
-        <div id="llistaItemsAC"></div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:14px;">
+          <div>
+            <label style="font-size:12px;font-weight:600;color:#374151;display:block;margin-bottom:5px;">Matèria del centre *</label>
+            <select id="selMateriaAC" style="width:100%;padding:9px 12px;border:1.5px solid #e5e7eb;
+                    border-radius:9px;font-size:13px;outline:none;background:#fff;">
+              <option value="">— Tria la matèria —</option>
+              ${materies.map(m => `<option value="${m.id}" data-nom="${escapeHtml(m.nom)}">${escapeHtml(m.nom)}</option>`).join('')}
+            </select>
+          </div>
+          <div>
+            <label style="font-size:12px;font-weight:600;color:#374151;display:block;margin-bottom:5px;">Grup del centre *</label>
+            <select id="selGrupAC" style="width:100%;padding:9px 12px;border:1.5px solid #e5e7eb;
+                    border-radius:9px;font-size:13px;outline:none;background:#fff;">
+              <option value="">— Tria el grup —</option>
+              ${grupsOpts}
+            </select>
+          </div>
+        </div>
+        <div>
+          <label style="font-size:12px;font-weight:600;color:#374151;display:block;margin-bottom:5px;">
+            Descripció comuna
+            <span style="font-weight:400;color:#9ca3af;">(context de la matèria per al butlletí)</span>
+          </label>
+          <textarea id="descComunaAC" rows="2"
+            placeholder="Ex: Durant aquest trimestre hem treballat les competències bàsiques de..."
+            style="width:100%;box-sizing:border-box;padding:9px 12px;border:1.5px solid #e5e7eb;
+                   border-radius:9px;font-size:13px;outline:none;resize:vertical;font-family:inherit;"></textarea>
+        </div>
       </div>
 
-      <!-- PREVISUALITZACIÓ D'ALUMNES -->
-      <div id="previewAlumnesAC" style="margin-bottom:20px;display:none;">
-        <p style="font-size:13px;font-weight:600;color:#374151;margin-bottom:8px;">
-          Alumnes que s'enviaran (<span id="numAlumnesAC">0</span>):
+      <!-- PAS 2: CARREGAR COMENTARIS -->
+      <div style="margin-bottom:16px;">
+        <button id="btnCarregarComentarisAC" style="
+          width:100%;padding:12px;background:linear-gradient(135deg,#4f46e5,#7c3aed);
+          color:#fff;border:none;border-radius:10px;font-size:14px;font-weight:700;
+          cursor:pointer;display:flex;align-items:center;justify-content:center;gap:8px;">
+          ⚡ Carregar comentaris de la classe actual
+        </button>
+        <p style="font-size:11px;color:#9ca3af;text-align:center;margin:6px 0 0;">
+          Llegeix els comentaris i assoliments guardats per l'UltraComentator del període actiu
         </p>
-        <div id="llista-preview-alumnes" style="
-          max-height:120px;overflow-y:auto;background:#f9fafb;
-          border:1px solid #e5e7eb;border-radius:10px;padding:10px;
-          font-size:12px;color:#374151;
-        "></div>
       </div>
 
-      <!-- BOTONS -->
-      <div style="display:flex;gap:12px;justify-content:flex-end;">
+      <!-- PAS 3: RESUM PER ALUMNE (s'omple dinàmicament) -->
+      <div id="resümAlumnesAC" style="display:none;">
+        <div style="font-size:12px;font-weight:700;color:#7c3aed;letter-spacing:0.05em;margin-bottom:12px;">
+          PAS 2 — REVISIÓ
+        </div>
+        <div id="statsAC" style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:12px;"></div>
+        <div id="taulaAlumnesAC" style="max-height:350px;overflow-y:auto;border:1.5px solid #e5e7eb;border-radius:10px;"></div>
+      </div>
+
+      <!-- BOTONS FINALS -->
+      <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:16px;">
         <button id="btnCancelAvCentre" style="
           padding:10px 20px;background:#f3f4f6;border:none;border-radius:10px;
-          font-weight:600;cursor:pointer;font-size:14px;">
-          Cancel·lar
-        </button>
-        <button id="btnCarregarComentarisAC" style="
-          padding:10px 20px;background:#e0e7ff;color:#4338ca;border:none;border-radius:10px;
-          font-weight:600;cursor:pointer;font-size:14px;">
-          ⚡ Carregar des de la classe actual
-        </button>
+          font-weight:600;cursor:pointer;font-size:13px;">Cancel·lar</button>
         <button id="btnEnviarAC" style="
           padding:10px 24px;background:linear-gradient(135deg,#7c3aed,#4f46e5);
-          color:#fff;border:none;border-radius:10px;font-weight:700;cursor:pointer;font-size:14px;">
-          🏫 Enviar al centre
+          color:#fff;border:none;border-radius:10px;font-weight:700;
+          cursor:pointer;font-size:13px;display:none;">
+          🏫 Enviar al centre (<span id="cntEnviarAC">0</span> alumnes)
         </button>
       </div>
-
     </div>
   `;
 
   document.body.appendChild(modal);
 
-  // Intentar preseleccionar
-  preseleccionarValors(modal, classTitle, classSub, materies, grups);
-
-  // Afegir primer ítem buit
-  afegirItemUI();
+  // Preseleccionar si el nom de la classe coincideix amb algun grup
+  if (classTitle) {
+    const opt = [...modal.querySelectorAll('#selGrupAC option')].find(o =>
+      o.textContent.trim().toLowerCase().includes(classTitle.toLowerCase().split('—')[0].trim().toLowerCase())
+    );
+    if (opt) opt.selected = true;
+  }
 
   // Events
-  document.getElementById('btnTancarAvCentre').addEventListener('click', () => modal.remove());
-  document.getElementById('btnCancelAvCentre').addEventListener('click', () => modal.remove());
+  modal.querySelector('#btnTancarAvCentre').addEventListener('click', () => modal.remove());
+  modal.querySelector('#btnCancelAvCentre').addEventListener('click', () => modal.remove());
   modal.addEventListener('click', e => { if (e.target === modal) modal.remove(); });
 
-  document.getElementById('btnAfegirItemAC').addEventListener('click', afegirItemUI);
-
-  document.getElementById('btnCarregarComentarisAC').addEventListener('click', carregarDesDeClasseActual);
-
-  document.getElementById('btnEnviarAC').addEventListener('click', enviarAvaluacioCentre);
-
-  // Preview alumnes quan canvia el grup
-  document.getElementById('selGrupAC').addEventListener('change', actualitzarPreviewAlumnes);
+  modal.querySelector('#btnCarregarComentarisAC').addEventListener('click', carregarComentarisClasse);
+  modal.querySelector('#btnEnviarAC').addEventListener('click', enviarAvaluacioCentre);
 }
 
 /* ══════════════════════════════════════════════════════
-   ÍTEMS UI
+   LLEGIR TOTS ELS COMENTARIS DE LA CLASSE ACTUAL
+   Agafa comentarisItems de l'UC per a cada alumne
 ══════════════════════════════════════════════════════ */
-let _itemCounter = 0;
+async function carregarComentarisClasse() {
+  const classId   = window.currentClassId;
+  const periodeId = window.currentPeriodeId;
 
-function afegirItemUI(titol = '', comentari = '', assoliment = '') {
-  const container = document.getElementById('llistaItemsAC');
-  if (!container) return;
-
-  const id = ++_itemCounter;
-  const div = document.createElement('div');
-  div.id = `item-ac-${id}`;
-  div.style.cssText = `
-    background:#f9fafb;border:1.5px solid #e5e7eb;border-radius:12px;
-    padding:16px;margin-bottom:12px;position:relative;
-  `;
-
-  div.innerHTML = `
-    <button class="btn-eliminar-item" data-id="${id}" style="
-      position:absolute;top:10px;right:10px;background:none;border:none;
-      color:#ef4444;font-size:18px;cursor:pointer;line-height:1;" title="Eliminar ítem">✕
-    </button>
-    <div style="margin-bottom:10px;">
-      <label style="font-size:12px;font-weight:600;color:#6b7280;display:block;margin-bottom:4px;">
-        Títol de l'aprenentatge
-      </label>
-      <input type="text" class="item-titol" data-id="${id}"
-        value="${escapeHtml(titol)}"
-        placeholder="Ex: CE1: Diversitat lingüística"
-        style="width:100%;box-sizing:border-box;padding:8px 12px;border:1px solid #d1d5db;
-               border-radius:8px;font-size:13px;outline:none;font-family:inherit;">
-    </div>
-    <div style="margin-bottom:10px;">
-      <label style="font-size:12px;font-weight:600;color:#6b7280;display:block;margin-bottom:4px;">
-        Comentari
-      </label>
-      <textarea class="item-comentari" data-id="${id}" rows="3"
-        placeholder="Comentari d'avaluació d'aquest aprenentatge..."
-        style="width:100%;box-sizing:border-box;padding:8px 12px;border:1px solid #d1d5db;
-               border-radius:8px;font-size:13px;outline:none;resize:vertical;font-family:inherit;"
-      >${escapeHtml(comentari)}</textarea>
-    </div>
-    <div>
-      <label style="font-size:12px;font-weight:600;color:#6b7280;display:block;margin-bottom:4px;">
-        Nivell d'assoliment
-      </label>
-      <select class="item-assoliment" data-id="${id}" style="
-        width:100%;padding:8px 12px;border:1px solid #d1d5db;border-radius:8px;
-        font-size:13px;outline:none;background:#fff;">
-        ${ASSOLIMENTS.map(a => `
-          <option value="${a}" ${a === assoliment ? 'selected' : ''}>${a}</option>
-        `).join('')}
-      </select>
-    </div>
-  `;
-
-  container.appendChild(div);
-
-  div.querySelector('.btn-eliminar-item').addEventListener('click', () => div.remove());
-}
-
-/* ══════════════════════════════════════════════════════
-   CARREGAR DES DE LA CLASSE ACTUAL
-══════════════════════════════════════════════════════ */
-async function carregarDesDeClasseActual() {
-  // Obtenir alumnes de la classe actual via DOM/variables globals
-  const classId = window.currentClassId;
   if (!classId) {
-    window.mostrarToast('⚠️ Cap classe seleccionada', 3000);
+    window.mostrarToast('⚠️ Primer obre una classe', 3000);
     return;
   }
 
-  try {
-    // Llegir els comentaris de l'alumne seleccionat o de tots
-    // Buscar el periode actual
-    const periodeActiu = window.currentPeriodeId;
-    const alumnesSnap = await window.db.collection('alumnes')
-      .where('classId', '==', classId)
-      .get();
-    // Ordenar en memòria per evitar índex compost
+  const btn = document.getElementById('btnCarregarComentarisAC');
+  btn.innerHTML = '⏳ Carregant...';
+  btn.disabled = true;
 
-    if (alumnesSnap.empty) {
-      window.mostrarToast('⚠️ No hi ha alumnes en aquesta classe', 3000);
+  try {
+    // Llegir tots els alumnes via IDs de la classe (com fa app.js)
+    const classeDoc = await window.db.collection('classes').doc(classId).get();
+    if (!classeDoc.exists) throw new Error('Classe no trobada');
+
+    const alumneIds = classeDoc.data().alumnes || [];
+    if (alumneIds.length === 0) {
+      window.mostrarToast('⚠️ La classe no té alumnes', 3000);
+      btn.innerHTML = '⚡ Carregar comentaris de la classe actual';
+      btn.disabled = false;
       return;
     }
 
-    // Netejar ítems existents
-    document.getElementById('llistaItemsAC').innerHTML = '';
-    _itemCounter = 0;
-
-    // Per a cada alumne, mirar els seus comentaris del periode actiu
-    // i extreure els ítems (competències) si existeixen
-    const primerAlumne = alumnesSnap.docs[0];
-    const data = primerAlumne.data();
-    const comentariData = periodeActiu
-      ? data.comentarisPerPeriode?.[periodeActiu]
-      : data.comentari;
-
-    // UltraComentator guarda: comentarisPerPeriode[periodeId].comentarisItems = [{titol, assoliment}]
-    // i el comentari text a: comentarisPerPeriode[periodeId].comentari
-    // Hem de reconstruir: per cada ítem, el comentari és el text general (o buit per ítem)
-    const comentarisItems = comentariData?.comentarisItems || comentariData?.items || null;
-    const comentariText   = typeof comentariData === 'string' ? comentariData : (comentariData?.comentari || '');
-
-    if (comentarisItems && Array.isArray(comentarisItems) && comentarisItems.length > 0) {
-      comentarisItems.forEach(item => {
-        // El comentari per ítem pot ser el text general o buit (UC no guarda per ítem)
-        afegirItemUI(item.titol || '', item.comentari || comentariText || '', item.assoliment || '');
-      });
-      window.mostrarToast(`✅ ${comentarisItems.length} ítems carregats de l'UltraComentator`, 2000);
-    } else if (comentariText) {
-      // Hi ha comentari però sense estructura d'ítems — crear un ítem amb el text
-      afegirItemUI('Comentari general', comentariText, '');
-      window.mostrarToast('ℹ️ Comentari carregat sense estructura d\'ítems', 3000);
-    } else {
-      afegirItemUI();
-      window.mostrarToast('ℹ️ Cap comentari guardat per a aquest alumne en el període actiu', 3500);
+    // Llegir tots els alumnes en parallel (en blocs de 10)
+    const alumnesDocs = [];
+    for (let i = 0; i < alumneIds.length; i += 10) {
+      const chunk = alumneIds.slice(i, i + 10);
+      const docs = await Promise.all(
+        chunk.map(id => window.db.collection('alumnes').doc(id).get())
+      );
+      alumnesDocs.push(...docs);
     }
 
-    // Actualitzar preview alumnes
-    actualitzarPreviewAlumnes(alumnesSnap.docs.map(d => ({
-      id: d.id,
-      nom: d.data().nom
-    })));
+    // Processar cada alumne
+    const alumnes = alumnesDocs
+      .filter(d => d.exists)
+      .map(d => {
+        const data = d.data();
+        const periodeData = periodeId
+          ? data.comentarisPerPeriode?.[periodeId]
+          : null;
+
+        // Buscar en tots els períodes si el període actiu no té dades
+        let comentarisItems = periodeData?.comentarisItems || periodeData?.items || null;
+        let comentariText   = periodeData?.comentari || '';
+        let periodeUsatNom  = periodeId ? 'actiu' : '—';
+
+        // Si no hi ha dades al periode actiu, buscar en altres períodes
+        if (!comentarisItems && !comentariText) {
+          const tots = data.comentarisPerPeriode || {};
+          for (const [pId, pData] of Object.entries(tots)) {
+            if (pData?.comentarisItems?.length || pData?.comentari) {
+              comentarisItems = pData.comentarisItems || pData.items || null;
+              comentariText   = pData.comentari || '';
+              periodeUsatNom  = pId;
+              break;
+            }
+          }
+          // Llegat: comentari directe a l'alumne
+          if (!comentariText && data.comentari) {
+            comentariText = data.comentari;
+          }
+        }
+
+        const nom     = data.nom || '';
+        const cognoms = data.cognoms || '';
+        const nomComplet = cognoms ? `${cognoms}, ${nom}` : nom;
+
+        return {
+          id: d.id,
+          nom, cognoms, nomComplet,
+          ralc: data.ralc || '',
+          comentarisItems,
+          comentariText,
+          periodeUsatNom,
+          teItems: !!(comentarisItems?.length),
+          teComentari: !!comentariText,
+        };
+      })
+      .sort((a, b) => (a.cognoms || a.nom).localeCompare(b.cognoms || b.nom, 'ca'));
+
+    // Guardar per usar a enviarAvaluacioCentre
+    window._acAlumnesCarregats = alumnes;
+
+    // Mostrar resum
+    mostrarResumAlumnes(alumnes);
+
+    btn.innerHTML = '✅ Comentaris carregats — clica Enviar per confirmar';
+    btn.style.background = 'linear-gradient(135deg,#059669,#10b981)';
 
   } catch (e) {
-    console.error('Error carregant classe:', e);
-    window.mostrarToast('❌ Error carregant la classe: ' + e.message, 4000);
+    console.error('carregarComentarisClasse:', e);
+    window.mostrarToast('❌ Error: ' + e.message, 5000);
+    btn.innerHTML = '⚡ Carregar comentaris de la classe actual';
+    btn.disabled = false;
   }
 }
 
 /* ══════════════════════════════════════════════════════
-   PREVIEW ALUMNES
+   MOSTRAR RESUM PER ALUMNE
 ══════════════════════════════════════════════════════ */
-async function actualitzarPreviewAlumnes(alumnesManuals) {
-  const grupId = document.getElementById('selGrupAC')?.value;
-  const previewDiv = document.getElementById('previewAlumnesAC');
-  const llistaDiv = document.getElementById('llista-preview-alumnes');
-  const numSpan = document.getElementById('numAlumnesAC');
+function mostrarResumAlumnes(alumnes) {
+  const resum = document.getElementById('resümAlumnesAC');
+  const stats = document.getElementById('statsAC');
+  const taula = document.getElementById('taulaAlumnesAC');
+  const btnEnviar = document.getElementById('btnEnviarAC');
+  if (!resum || !taula) return;
 
-  if (!previewDiv || !llistaDiv) return;
+  const ambItems    = alumnes.filter(a => a.teItems).length;
+  const ambComent   = alumnes.filter(a => !a.teItems && a.teComentari).length;
+  const senseDades  = alumnes.filter(a => !a.teItems && !a.teComentari).length;
 
-  let alumnes = [];
+  stats.innerHTML = [
+    { n: ambItems,   label: 'amb ítems UC',      c: '#059669', bg: '#f0fdf4' },
+    { n: ambComent,  label: 'només comentari',   c: '#d97706', bg: '#fffbeb' },
+    { n: senseDades, label: 'sense dades',        c: '#dc2626', bg: '#fef2f2' },
+  ].map(s => `
+    <div style="padding:8px 14px;background:${s.bg};border-radius:8px;font-size:12px;">
+      <strong style="font-size:18px;color:${s.c};">${s.n}</strong>
+      <span style="color:#6b7280;margin-left:5px;">${s.label}</span>
+    </div>
+  `).join('');
 
-  if (Array.isArray(alumnesManuals)) {
-    alumnes = alumnesManuals;
-  } else if (window.currentClassId) {
-    try {
-      const snap = await window.db.collection('alumnes')
-        .where('classId', '==', window.currentClassId)
-        .get();
-      alumnes = snap.docs.map(d => ({ id: d.id, nom: d.data().nom || '', cognoms: d.data().cognoms || '' }))
-        .sort((a, b) => (a.cognoms||a.nom).localeCompare((b.cognoms||b.nom), 'ca'));
-    } catch (e) {}
-  }
+  // Taula d'alumnes
+  taula.innerHTML = `
+    <table style="width:100%;border-collapse:collapse;font-size:12px;">
+      <thead>
+        <tr style="background:#f3f4f6;position:sticky;top:0;">
+          <th style="padding:8px 12px;text-align:left;font-weight:600;color:#374151;">Alumne/a</th>
+          <th style="padding:8px 12px;text-align:center;font-weight:600;color:#374151;">Ítems UC</th>
+          <th style="padding:8px 12px;text-align:left;font-weight:600;color:#374151;">Assoliments</th>
+          <th style="padding:8px 12px;text-align:center;font-weight:600;color:#374151;">Estat</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${alumnes.map(a => {
+          const COLORS = {
+            'Assoliment Excel·lent': '#7c3aed',
+            'Assoliment Notable':    '#2563eb',
+            'Assoliment Satisfactori':'#d97706',
+            'No Assoliment':         '#dc2626',
+            'No avaluat':            '#9ca3af',
+          };
+          const itemsHtml = a.comentarisItems?.map(it => {
+            const c = COLORS[it.assoliment] || '#9ca3af';
+            return `<span style="background:${c};color:#fff;padding:2px 6px;border-radius:4px;font-size:10px;margin:1px;display:inline-block;">${escapeHtml(it.assoliment||'?')}</span>`;
+          }).join('') || '';
 
-  if (alumnes.length === 0) {
-    previewDiv.style.display = 'none';
-    return;
-  }
+          const estat = a.teItems
+            ? `<span style="color:#059669;font-weight:700;">✅ ${a.comentarisItems.length} ítems</span>`
+            : a.teComentari
+            ? `<span style="color:#d97706;font-weight:700;">💬 comentari</span>`
+            : `<span style="color:#dc2626;font-weight:700;">⚠️ buit</span>`;
 
-  numSpan.textContent = alumnes.length;
-  llistaDiv.innerHTML = alumnes.map(a => {
-    const nomComplet = a.cognoms ? `${a.cognoms}, ${a.nom}` : a.nom;
-    return `<span style="display:inline-block;background:#e0e7ff;color:#4338ca;padding:3px 8px;
-                  border-radius:6px;margin:2px;font-size:12px;">${escapeHtml(nomComplet)}</span>`;
-  }).join('');
-  previewDiv.style.display = 'block';
+          return `
+            <tr style="border-bottom:1px solid #f3f4f6;">
+              <td style="padding:7px 12px;font-weight:600;color:#1e1b4b;">${escapeHtml(a.nomComplet)}</td>
+              <td style="padding:7px 12px;text-align:center;color:#6b7280;">${a.comentarisItems?.length || '—'}</td>
+              <td style="padding:7px 12px;">${itemsHtml || (a.teComentari ? '<span style="color:#9ca3af;font-style:italic;">text lliure</span>' : '—')}</td>
+              <td style="padding:7px 12px;text-align:center;">${estat}</td>
+            </tr>`;
+        }).join('')}
+      </tbody>
+    </table>
+  `;
+
+  resum.style.display = 'block';
+
+  // Mostrar botó enviar
+  const total = alumnes.filter(a => a.teItems || a.teComentari).length;
+  document.getElementById('cntEnviarAC').textContent = total;
+  btnEnviar.style.display = total > 0 ? 'block' : 'none';
 }
 
 /* ══════════════════════════════════════════════════════
    ENVIAR A FIREBASE
+   Cada alumne té els seus propis ítems i comentari
 ══════════════════════════════════════════════════════ */
 async function enviarAvaluacioCentre() {
   const materiaEl  = document.getElementById('selMateriaAC');
@@ -413,126 +425,91 @@ async function enviarAvaluacioCentre() {
   const descComuna = document.getElementById('descComunaAC')?.value?.trim() || '';
 
   if (!materiaEl?.value || !grupEl?.value) {
-    window.mostrarToast('⚠️ Has de seleccionar matèria i grup', 3000);
+    window.mostrarToast('⚠️ Selecciona matèria i grup', 3000);
     return;
   }
 
+  const alumnes = window._acAlumnesCarregats;
+  if (!alumnes?.length) {
+    window.mostrarToast('⚠️ Primer carrega els comentaris de la classe', 3000);
+    return;
+  }
+
+  const materiaId  = materiaEl.value;
   const materiaNom = materiaEl.options[materiaEl.selectedIndex]?.dataset.nom || materiaEl.value;
+  const grupId     = grupEl.value;
   const grupNom    = grupEl.options[grupEl.selectedIndex]?.dataset.nom || grupEl.value;
   const curs       = grupEl.options[grupEl.selectedIndex]?.dataset.curs || '2024-25';
-
-  // Llegir ítems
-  const items = [];
-  document.querySelectorAll('#llistaItemsAC [data-id]').forEach(el => {
-    if (el.classList.contains('item-titol')) {
-      const id = el.dataset.id;
-      const titol     = el.value.trim();
-      const comentari = document.querySelector(`.item-comentari[data-id="${id}"]`)?.value?.trim() || '';
-      const assoliment= document.querySelector(`.item-assoliment[data-id="${id}"]`)?.value || 'No avaluat';
-      if (titol || comentari) {
-        items.push({ titol, comentari, assoliment });
-      }
-    }
-  });
-
-  if (items.length === 0) {
-    window.mostrarToast('⚠️ Afegeix almenys un ítem d\'avaluació', 3000);
-    return;
-  }
-
-  // Obtenir alumnes de la classe
-  const classId = window.currentClassId;
-  if (!classId) {
-    window.mostrarToast('⚠️ Cap classe oberta', 3000);
-    return;
-  }
+  const periodeId  = window.currentPeriodeId || 'general';
+  const profUid    = firebase.auth().currentUser?.uid || '';
+  const profEmail  = firebase.auth().currentUser?.email || '';
 
   const btnEnviar = document.getElementById('btnEnviarAC');
   btnEnviar.disabled = true;
-  btnEnviar.textContent = '⏳ Enviant...';
+  btnEnviar.innerHTML = '⏳ Enviant...';
 
   try {
-    const alumnesSnap = await window.db.collection('alumnes')
-      .where('classId', '==', classId)
-      .get();
-    // Ordenar en memòria per evitar índex compost
-
-    if (alumnesSnap.empty) {
-      window.mostrarToast('⚠️ No hi ha alumnes per enviar', 3000);
-      btnEnviar.disabled = false;
-      btnEnviar.textContent = '🏫 Enviar al centre';
-      return;
-    }
-
     const db = window.db;
-    const batch = db.batch();
+    // Dividir en blocs de 400 per límit de Firestore batch (500 max)
+    const alumnesAEnviar = alumnes.filter(a => a.teItems || a.teComentari);
     let count = 0;
 
-    // Referència de la col·lecció principal
-    // Clau: avaluacio_centre/{curs}/{materiaId}/{alumneId}
-    const materiaId = materiaEl.value;
-    const periodeId = window.currentPeriodeId || 'general';
+    for (let i = 0; i < alumnesAEnviar.length; i += 400) {
+      const chunk = alumnesAEnviar.slice(i, i + 400);
+      const batch = db.batch();
 
-    for (const doc of alumnesSnap.docs) {
-      const alumne = doc.data();
-      const alumneId = doc.id;
+      chunk.forEach(alumne => {
+        // Items: prioritat als ítems UC; si no, crear un ítem amb el comentari
+        const items = alumne.teItems
+          ? alumne.comentarisItems.map(it => ({
+              titol:      it.titol      || '',
+              assoliment: it.assoliment || 'No avaluat',
+              comentari:  it.comentari  || alumne.comentariText || '',
+            }))
+          : [{ titol: 'Comentari', comentari: alumne.comentariText, assoliment: 'No avaluat' }];
 
-      // RALC com a identificador secundari (si existeix)
-      const ralc = alumne.ralc || alumne.numeroRALC || '';
+        const ref = db
+          .collection('avaluacio_centre')
+          .doc(curs)
+          .collection(materiaId)
+          .doc(alumne.id);
 
-      // Obtenir comentari específic d'aquest alumne si existeix
-      const comentariAlumne = window.currentPeriodeId
-        ? alumne.comentarisPerPeriode?.[window.currentPeriodeId]
-        : alumne.comentari;
+        batch.set(ref, {
+          nom:             alumne.nom,
+          cognoms:         alumne.cognoms,
+          nomComplet:      alumne.nomComplet,
+          ralc:            alumne.ralc,
+          grup:            grupNom,
+          grupId,
+          materiaNom,
+          materiaId,
+          curs,
+          periodeId,
+          descripcioComuna: descComuna,
+          items,
+          professorUid:    profUid,
+          professorEmail:  profEmail,
+          updatedAt:       firebase.firestore.FieldValue.serverTimestamp(),
+        }, { merge: true });
 
-      // Si l'alumne té ítems propis, usar-los; sinó, usar els ítems comuns del modal
-      const itemsAlumne = comentariAlumne?.items?.length
-        ? comentariAlumne.items
-        : items;
+        count++;
+      });
 
-      const refDoc = db
-        .collection('avaluacio_centre')
-        .doc(curs)
-        .collection(materiaId)
-        .doc(alumneId);
-
-      batch.set(refDoc, {
-        // Dades de l'alumne
-        nom:     alumne.nom || '',
-        cognoms: alumne.cognoms || '',
-        grup:    grupNom,
-        grupId:  grupEl.value,
-        tutor:   alumne.tutor || '',
-        ralc,
-        // Dades de la matèria
-        materiaNom,
-        materiaId,
-        curs,
-        periodeId,
-        // Contingut
-        descripcioComuna: descComuna,
-        items: itemsAlumne,
-        // Metadades
-        professorUid:   firebase.auth().currentUser?.uid || '',
-        professoremail: firebase.auth().currentUser?.email || '',
-        updatedAt: firebase.firestore.FieldValue.serverTimestamp()
-      }, { merge: true });
-
-      count++;
+      await batch.commit();
     }
 
-    await batch.commit();
-
     window.mostrarToast(`✅ ${count} alumnes enviats a Avaluació Centre`, 3000);
+    window._acAlumnesCarregats = null;
     document.getElementById('modalAvaluacioCentre')?.remove();
 
   } catch (e) {
-    console.error('Error enviant avaluació:', e);
+    console.error('enviarAvaluacioCentre:', e);
     window.mostrarToast('❌ Error: ' + e.message, 5000);
     btnEnviar.disabled = false;
-    btnEnviar.textContent = '🏫 Enviar al centre';
+    btnEnviar.innerHTML = '🏫 Enviar al centre (<span id="cntEnviarAC">...</span> alumnes)';
   }
 }
+
 
 /* ══════════════════════════════════════════════════════
    CARREGAR MATÈRIES I GRUPS
