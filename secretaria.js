@@ -60,7 +60,7 @@ async function obrirPanellSecretaria() {
   `;
 
   overlay.innerHTML = `
-    <div style="width:min(960px,100%);background:#fff;display:flex;flex-direction:column;
+    <div style="width:100%;max-width:1400px;background:#fff;display:flex;flex-direction:column;
                 overflow:hidden;box-shadow:-20px 0 60px rgba(0,0,0,0.3);">
 
       <!-- HEADER -->
@@ -1113,7 +1113,7 @@ function modalNouUsuari(onCreat) {
 /* ══════════════════════════════════════════════════════
    MODAL EDITAR ROLS
 ══════════════════════════════════════════════════════ */
-function modalEditarRols(usuari, onGuardat) {
+async function modalEditarRols(usuari, onGuardat) {
   const rolsActuals = Array.isArray(usuari.rols) ? usuari.rols :
                       (usuari.isAdmin ? ['admin'] : ['professor']);
   const descrip = {
@@ -1123,6 +1123,15 @@ function modalEditarRols(usuari, onGuardat) {
     revisor:    'Lectura/edició cursos assignats',
     admin:      'Accés total a la plataforma',
   };
+
+  // Carregar nivells per assignar al revisor
+  let nivellsCentre = [];
+  try {
+    const snap = await window.db.collection('nivells_centre').orderBy('ordre').get();
+    nivellsCentre = snap.docs.map(d=>({id:d.id,...d.data()}));
+  } catch(e){}
+
+  const revisorNivells = Array.isArray(usuari.revisio_nivells) ? usuari.revisio_nivells : [];
 
   crearModal(`🎭 Rols — ${usuari.nom||usuari.email}`, `
     <div style="display:flex;flex-direction:column;gap:10px;">
@@ -1135,31 +1144,84 @@ function modalEditarRols(usuari, onGuardat) {
           <input type="checkbox" class="chk-rol-edit" value="${r}"
             ${rolsActuals.includes(r)?'checked':''}
             style="width:18px;height:18px;accent-color:${rolColor(r)};">
-          <div>
+          <div style="flex:1;">
             <div style="font-weight:700;color:${rolColor(r)};">${r}</div>
             <div style="font-size:12px;color:#9ca3af;">${descrip[r]||''}</div>
           </div>
         </label>
       `).join('')}
     </div>
+
+    <!-- Secció revisor: assignar nivells -->
+    <div id="secRevisorNivells" style="margin-top:14px;padding:14px;background:#fef3c7;
+         border:1.5px solid #fde68a;border-radius:10px;
+         display:${rolsActuals.includes('revisor')?'block':'none'};">
+      <div style="font-size:13px;font-weight:700;color:#92400e;margin-bottom:10px;">
+        🔍 Nivells que pot revisar
+      </div>
+      ${nivellsCentre.length === 0
+        ? `<p style="font-size:12px;color:#9ca3af;">Cap nivell creat. Creen primer des de la pestanya Estructura.</p>`
+        : `<div style="display:flex;flex-direction:column;gap:6px;">
+            <label style="font-size:12px;display:flex;align-items:center;gap:8px;cursor:pointer;">
+              <input type="checkbox" id="chkRevisorTot" ${revisorNivells.includes('_tot')?'checked':''}
+                style="width:15px;height:15px;"> Tot el centre (tots els nivells)
+            </label>
+            <div id="selNivellsRevisor" style="padding-left:20px;display:flex;flex-direction:column;gap:4px;
+                 ${revisorNivells.includes('_tot')?'opacity:0.4;pointer-events:none':''}">
+              ${nivellsCentre.map(n=>`
+                <label style="font-size:12px;display:flex;align-items:center;gap:8px;cursor:pointer;">
+                  <input type="checkbox" class="chk-nivell-revisor" value="${n.id}"
+                    ${revisorNivells.includes(n.id)?'checked':''}
+                    style="width:15px;height:15px;">
+                  ${esH(n.nom)} <span style="color:#9ca3af;">(${esH(n.curs||'')})</span>
+                </label>
+              `).join('')}
+            </div>
+          </div>`
+      }
+    </div>
   `, async () => {
     const rols = [...document.querySelectorAll('.chk-rol-edit:checked')].map(c=>c.value);
+
+    // Recollir nivells assignats al revisor
+    let revisioNivells = [];
+    if (rols.includes('revisor')) {
+      if (document.getElementById('chkRevisorTot')?.checked) {
+        revisioNivells = ['_tot'];
+      } else {
+        revisioNivells = [...document.querySelectorAll('.chk-nivell-revisor:checked')].map(c=>c.value);
+      }
+    }
+
     await window.db.collection('professors').doc(usuari.id).update({
       rols: rols.length>0?rols:['professor'],
-      isAdmin: rols.includes('admin')
+      isAdmin: rols.includes('admin'),
+      revisio_nivells: revisioNivells,
+      revisio_tot: revisioNivells.includes('_tot'),
     });
     window.mostrarToast('✅ Rols actualitzats');
     onGuardat?.();
     return true;
   }, 'Guardar rols');
 
-  // Actualitzar bord checkbox visualment
+  // Actualitzar bord checkbox visualment + mostrar secció revisor
   setTimeout(()=>{
     document.querySelectorAll('.chk-rol-edit').forEach(chk=>{
       chk.addEventListener('change', ()=>{
         const row = document.getElementById(`row-rol-${chk.value}`);
         if (row) row.style.borderColor = chk.checked ? rolColor(chk.value) : '#e5e7eb';
+        // Mostrar/ocultar secció nivells revisor
+        if (chk.value === 'revisor') {
+          const sec = document.getElementById('secRevisorNivells');
+          if (sec) sec.style.display = chk.checked ? 'block' : 'none';
+        }
       });
+    });
+    // Tot el centre toggle
+    document.getElementById('chkRevisorTot')?.addEventListener('change', (e)=>{
+      const sel = document.getElementById('selNivellsRevisor');
+      if (sel) { sel.style.opacity = e.target.checked ? '0.4' : '1';
+                 sel.style.pointerEvents = e.target.checked ? 'none' : ''; }
     });
   }, 100);
 }

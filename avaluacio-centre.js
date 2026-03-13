@@ -38,37 +38,48 @@ const ASSOLIMENT_COLORS = {
    S'injecta al costat del botó Excel existent
 ══════════════════════════════════════════════════════ */
 function injectarBotoAvaluacioCentre() {
+  // Evitar múltiples injeccions
   if (document.getElementById('btnAvaluacioCentre')) return;
 
-  const tryInject = () => {
+  const doInject = () => {
+    // Doble-check per evitar race conditions
+    if (document.getElementById('btnAvaluacioCentre')) return;
     const btnExcel = document.getElementById('btnExportExcel');
-    if (!btnExcel) { setTimeout(tryInject, 600); return; }
+    if (!btnExcel) return;
 
     const btn = document.createElement('button');
     btn.id = 'btnAvaluacioCentre';
     btn.className = 'btn-outline btn-sm';
     btn.style.cssText = `
       background: linear-gradient(135deg, #7c3aed, #4f46e5);
-      color: #fff;
-      border: none;
-      font-weight: 600;
+      color: #fff; border: none; font-weight: 600;
     `;
-    btn.innerHTML = '🏫 Afegir a Avaluació Centre';
-    btn.title = 'Envia els comentaris d\'aquesta pàgina a l\'avaluació del centre';
+    btn.innerHTML = '🏫 Avaluació Centre';
+    btn.title = 'Envia els comentaris i assoliments al quadre institucional';
     btn.addEventListener('click', obrirModalAvaluacioCentre);
-
     btnExcel.insertAdjacentElement('afterend', btn);
     console.log('✅ Botó Avaluació Centre injectat');
   };
 
-  // Esperar que el botó Excel existeixi (es crea quan es carrega una classe)
-  const observer = new MutationObserver(() => {
+  // Un sol MutationObserver que es desconnecta immediatament un cop injectat
+  let _obs = null;
+  const tryInject = () => {
+    if (document.getElementById('btnAvaluacioCentre')) { _obs?.disconnect(); return; }
     if (document.getElementById('btnExportExcel')) {
-      observer.disconnect();
-      tryInject();
+      _obs?.disconnect();
+      doInject();
+      return;
     }
-  });
-  observer.observe(document.body, { childList: true, subtree: true });
+    if (!_obs) {
+      _obs = new MutationObserver(() => {
+        if (document.getElementById('btnExportExcel') && !document.getElementById('btnAvaluacioCentre')) {
+          _obs.disconnect(); _obs = null;
+          doInject();
+        }
+      });
+      _obs.observe(document.body, { childList: true, subtree: true });
+    }
+  };
   tryInject();
 }
 
@@ -321,16 +332,25 @@ async function carregarDesDeClasseActual() {
       ? data.comentarisPerPeriode?.[periodeActiu]
       : data.comentari;
 
-    // Si té estructura d'ítems (ultracomentator), carregar
-    if (comentariData?.items && Array.isArray(comentariData.items)) {
-      comentariData.items.forEach(item => {
-        afegirItemUI(item.titol || '', item.comentari || '', item.assoliment || '');
+    // UltraComentator guarda: comentarisPerPeriode[periodeId].comentarisItems = [{titol, assoliment}]
+    // i el comentari text a: comentarisPerPeriode[periodeId].comentari
+    // Hem de reconstruir: per cada ítem, el comentari és el text general (o buit per ítem)
+    const comentarisItems = comentariData?.comentarisItems || comentariData?.items || null;
+    const comentariText   = typeof comentariData === 'string' ? comentariData : (comentariData?.comentari || '');
+
+    if (comentarisItems && Array.isArray(comentarisItems) && comentarisItems.length > 0) {
+      comentarisItems.forEach(item => {
+        // El comentari per ítem pot ser el text general o buit (UC no guarda per ítem)
+        afegirItemUI(item.titol || '', item.comentari || comentariText || '', item.assoliment || '');
       });
-      window.mostrarToast(`✅ ${comentariData.items.length} ítems carregats`, 2000);
+      window.mostrarToast(`✅ ${comentarisItems.length} ítems carregats de l'UltraComentator`, 2000);
+    } else if (comentariText) {
+      // Hi ha comentari però sense estructura d'ítems — crear un ítem amb el text
+      afegirItemUI('Comentari general', comentariText, '');
+      window.mostrarToast('ℹ️ Comentari carregat sense estructura d\'ítems', 3000);
     } else {
-      // Afegir un ítem buit
       afegirItemUI();
-      window.mostrarToast('ℹ️ No s\'han trobat ítems estructurats. Afegeix-los manualment.', 3500);
+      window.mostrarToast('ℹ️ Cap comentari guardat per a aquest alumne en el període actiu', 3500);
     }
 
     // Actualitzar preview alumnes
@@ -365,8 +385,8 @@ async function actualitzarPreviewAlumnes(alumnesManuals) {
       const snap = await window.db.collection('alumnes')
         .where('classId', '==', window.currentClassId)
         .get();
-      alumnes = snap.docs.map(d => ({ id: d.id, nom: d.data().nom }))
-        .sort((a, b) => a.nom.localeCompare(b.nom, 'ca'));
+      alumnes = snap.docs.map(d => ({ id: d.id, nom: d.data().nom || '', cognoms: d.data().cognoms || '' }))
+        .sort((a, b) => (a.cognoms||a.nom).localeCompare((b.cognoms||b.nom), 'ca'));
     } catch (e) {}
   }
 
@@ -376,10 +396,11 @@ async function actualitzarPreviewAlumnes(alumnesManuals) {
   }
 
   numSpan.textContent = alumnes.length;
-  llistaDiv.innerHTML = alumnes.map(a =>
-    `<span style="display:inline-block;background:#e0e7ff;color:#4338ca;padding:3px 8px;
-                  border-radius:6px;margin:2px;font-size:12px;">${escapeHtml(a.nom)}</span>`
-  ).join('');
+  llistaDiv.innerHTML = alumnes.map(a => {
+    const nomComplet = a.cognoms ? `${a.cognoms}, ${a.nom}` : a.nom;
+    return `<span style="display:inline-block;background:#e0e7ff;color:#4338ca;padding:3px 8px;
+                  border-radius:6px;margin:2px;font-size:12px;">${escapeHtml(nomComplet)}</span>`;
+  }).join('');
   previewDiv.style.display = 'block';
 }
 

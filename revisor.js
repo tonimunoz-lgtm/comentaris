@@ -27,19 +27,26 @@ window.injectarBotoRevisor = function() {
 ══════════════════════════════════════════════════════ */
 async function llegirPermisosRevisor() {
   const uid = firebase.auth().currentUser?.uid;
-  if (!uid) return { cursos: [], grups: [], materies: [] };
+  if (!uid) return { nivells: [], cursos: [], grups: [], materies: [], totsNivells: false };
 
   try {
     const doc = await window.db.collection('professors').doc(uid).get();
     const data = doc.data() || {};
+
+    // Suport nou camp revisio_nivells + camp llegat revisio_cursos/grups
+    const nivells = data.revisio_nivells || [];
+    const totsNivells = data.revisio_tot || nivells.includes('_tot') ||
+                        window.teRol?.('admin') || window.teRol?.('superadmin') || false;
+
     return {
-      cursos:    data.revisio_cursos    || [],
-      grups:     data.revisio_grups     || [],
-      materies:  data.revisio_materies  || [],
-      totsNivells: data.revisio_tot     || false
+      nivells:     nivells.filter(n => n !== '_tot'),
+      cursos:      data.revisio_cursos   || [],
+      grups:       data.revisio_grups    || [],
+      materies:    data.revisio_materies || [],
+      totsNivells
     };
   } catch (e) {
-    return { cursos: [], grups: [], materies: [] };
+    return { nivells: [], cursos: [], grups: [], materies: [], totsNivells: false };
   }
 }
 
@@ -60,7 +67,8 @@ async function obrirPanellRevisio() {
     ? grups
     : grups.filter(g =>
         permisos.grups.includes(g.id) ||
-        permisos.cursos.some(c => g.curs === c)
+        permisos.cursos.some(c => g.curs === c) ||
+        permisos.nivells.some(nId => g.nivellId === nId)
       );
 
   const materiesesPermeses = permisos.totsNivells
