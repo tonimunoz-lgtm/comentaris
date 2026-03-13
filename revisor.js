@@ -505,3 +505,6 @@ function escapeHtml(str) {
 }
 
 console.log('✅ revisor.js: inicialitzat');
+
+// Exportar funcions principals
+window.obrirPanellRevisio = obrirPanellRevisio;
