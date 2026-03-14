@@ -78,9 +78,13 @@ async function obrirPanellTutoria() {
   const uid = firebase.auth().currentUser?.uid;
   if (!uid) return;
 
+  // Carregar curs actiu des de Firestore
+  const cursActiu = await obtenirCursActiuTutoria();
+
   // Carregar config del tutor
   const config = await carregarConfigTutor(uid);
-  const materies = await carregarMateriesCentre();
+  // Matèries ara estan a grups_centre amb parentGrupId (no materies_centre)
+  const materies = await carregarMateriesCentre(); // llegat
   const grups = await carregarGrupsCentre();
 
   const overlay = document.createElement('div');
@@ -135,8 +139,8 @@ async function obrirPanellTutoria() {
           padding:6px 12px;border:1.5px solid #e5e7eb;border-radius:8px;
           font-size:13px;outline:none;background:#fff;">
           <option value="">Selecciona curs</option>
-          ${[...new Set(grups.map(g => g.curs))].sort().reverse().map(c =>
-            `<option value="${c}">${c}</option>`
+          ${[...new Set(grups.map(g => g.curs).filter(Boolean))].sort().reverse().map(c =>
+            `<option value="${c}" ${c === cursActiu ? 'selected' : ''}>${c}</option>`
           ).join('')}
         </select>
         <button id="btnCarregarTutoria" style="
@@ -184,36 +188,54 @@ async function obrirPanellTutoria() {
     })
   );
 
-  // Quan canvia el curs, actualitzar el selector de grups
-  overlay.querySelector('#selCursTutoria').addEventListener('change', () => {
-    const curs = overlay.querySelector('#selCursTutoria').value;
+  // Quan canvia el curs, mostrar els grups de tutoria del curs
+  const actualitzarGrupsTutoria = (curs) => {
     const selGrup = overlay.querySelector('#selGrupTutoria');
     if (!curs) {
       selGrup.innerHTML = '<option value="">— Primer tria un curs —</option>';
       return;
     }
-    const grupsCurs = grups.filter(g => g.curs === curs || !g.curs);
+    // Filtrar: grups de tipus 'tutoria' del curs seleccionat
+    // Si no n'hi ha tutories, mostrar tots els grups classe
+    const tutories = grups.filter(g =>
+      g.tipus === 'tutoria' && (g.curs === curs || !g.curs)
+    );
+    const grupsCurs = tutories.length > 0
+      ? tutories
+      : grups.filter(g => g.tipus === 'classe' && (g.curs === curs || !g.curs));
+
     if (grupsCurs.length === 0) {
-      selGrup.innerHTML = '<option value="">Cap grup per a aquest curs</option>';
+      selGrup.innerHTML = '<option value="">Cap grup de tutoria per a aquest curs</option>';
       return;
     }
-    // Agrupar per nivell
     const perNivell = {};
     grupsCurs.forEach(g => {
-      const k = g.nivellNom || g.nivellId || 'Altres';
+      const k = g.nivellNom || 'Sense nivell';
       if (!perNivell[k]) perNivell[k] = [];
       perNivell[k].push(g);
     });
-    const TIPUS = {classe:'🏫',materia:'📚',projecte:'🔬',optativa:'🎨'};
-    selGrup.innerHTML = '<option value="">— Tria el grup —</option>' +
+    selGrup.innerHTML = '<option value="">— Tria el grup de tutoria —</option>' +
       Object.entries(perNivell).map(([nivell, gs]) =>
         `<optgroup label="${nivell}">` +
         gs.sort((a,b)=>(a.ordre||99)-(b.ordre||99)).map(g =>
-          `<option value="${g.id}">${TIPUS[g.tipus]||'📁'} ${g.nom}</option>`
+          `<option value="${g.id}">🧑‍🏫 ${g.nom}</option>`
         ).join('') +
         `</optgroup>`
       ).join('');
+  };
+
+  overlay.querySelector('#selCursTutoria').addEventListener('change', (e) => {
+    actualitzarGrupsTutoria(e.target.value);
   });
+
+  // Preseleccionar curs actiu
+  if (cursActiu) {
+    const selCurs = overlay.querySelector('#selCursTutoria');
+    if (selCurs) {
+      selCurs.value = cursActiu;
+      actualitzarGrupsTutoria(cursActiu);
+    }
+  }
 
   overlay.querySelector('#btnCarregarTutoria').addEventListener('click', async () => {
     const curs  = overlay.querySelector('#selCursTutoria').value;
@@ -374,7 +396,10 @@ async function mostrarDetallAlumne(alumne, materies) {
   const noAss = compteNoAssoliments(alumne, materies);
   const totAss = compteTotalAssoliments(alumne);
   const materiesAlumne = alumne.materies || {};
-  const materiesTotals = materies.filter(m => materiesAlumne[m.id]);
+  // Usar les matèries directament des de l'alumne (clau=id, valor={nom,items})
+  const materiesTotals = Object.entries(materiesAlumne).map(([id, data]) => ({
+    id, nom: data.nom || id, ...data
+  }));
 
   const COLORS = {
     'Assoliment Excel·lent':   { bg: '#22c55e', text: '#fff' },
@@ -428,8 +453,8 @@ async function mostrarDetallAlumne(alumne, materies) {
       </h3>
       <div style="display:flex;flex-direction:column;gap:8px;">
         ${materiesTotals.map(mat => {
-          const dadesMat = materiesAlumne[mat.id] || {};
-          const items = dadesMat.items || [];
+          const dadesMat = mat; // ja conté {nom, items, ...}
+          const items = mat.items || [];
           const naCount = items.filter(i => i.assoliment === 'No Assoliment').length;
           const total = items.length;
 
@@ -896,17 +921,23 @@ function compteTotalAssoliments(alumne) {
 /* ══════════════════════════════════════════════════════
    LLEGIR ALUMNES DEL GRUP DES D'AVALUACIÓ CENTRE
 ══════════════════════════════════════════════════════ */
-async function llegirAlumnesGrupCentre(curs, grupId, materies) {
+async function llegirAlumnesGrupCentre(curs, grupId, _materiesLlegat) {
   const db = window.db;
   const resultat = {};
 
-  // Primer: llegir alumnes directament de grups_centre (llista mestra)
+  // 1. Llegir el grup seleccionat (tutoria o classe)
+  let grupDoc = null;
+  let grupClasId = grupId; // ID del grup classe pare (per buscar les matèries)
   try {
-    const grupDoc = await db.collection('grups_centre').doc(grupId).get();
+    grupDoc = await db.collection('grups_centre').doc(grupId).get();
     if (grupDoc.exists) {
-      const alumnesCentre = grupDoc.data().alumnes || [];
+      const gd = grupDoc.data();
+      // Si és tutoria, el grup classe pare és parentGrupId
+      if (gd.parentGrupId) grupClasId = gd.parentGrupId;
+
+      const alumnesCentre = gd.alumnes || [];
       alumnesCentre.forEach((a, idx) => {
-        const id = a.ralc || `alumne_${idx}`;
+        const id = a.ralc || `alumne_${idx}_${a.nom}`;
         resultat[id] = {
           id,
           nom:     a.nom || '',
@@ -918,36 +949,65 @@ async function llegirAlumnesGrupCentre(curs, grupId, materies) {
       });
     }
   } catch(e) {
-    console.warn('llegirAlumnesGrupCentre grups_centre:', e.message);
+    console.warn('llegirAlumnesGrupCentre:', e.message);
   }
 
-  // Segon: enriquir amb dades d'avaluació si n'hi ha
-  for (const mat of materies) {
+  // 2. Trobar TOTES les matèries del grup classe pare
+  //    (grups_centre on parentGrupId = grupClasId)
+  let candidatsMat = [];
+  try {
+    const snap = await db.collection('grups_centre')
+      .where('parentGrupId', '==', grupClasId)
+      .get();
+    candidatsMat = snap.docs.map(d => ({ id: d.id, ...d.data() }))
+      .filter(g => g.tipus !== 'tutoria'); // excloure la pròpia tutoria
+  } catch(e) {
+    console.warn('llegirMateries:', e.message);
+  }
+
+  // Si no n'hi ha (dades antigues), usar tots els grups del curs com a candidats
+  if (candidatsMat.length === 0) {
     try {
-      const snap = await db
-        .collection('avaluacio_centre')
+      const snap = await db.collection('grups_centre').get();
+      candidatsMat = snap.docs.map(d=>({id:d.id,...d.data()}))
+        .filter(g => g.curs===curs && g.tipus!=='classe' && g.tipus!=='tutoria');
+    } catch(e) {}
+  }
+
+  // 3. Llegir dades d'avaluació de cada matèria per als alumnes del grup
+  for (const mat of candidatsMat) {
+    try {
+      // Buscar per grupId = grupClasId (el professor envia al grup classe)
+      const snap = await db.collection('avaluacio_centre')
         .doc(curs)
         .collection(mat.id)
-        .where('grupId', '==', grupId)
-        .get();
+        .get(); // llegir tot i filtrar en memòria
 
       snap.docs.forEach(d => {
         const data = d.data();
-        // Buscar l'alumne pel RALC o crear-lo si no existeix
-        const key = data.ralc || d.id;
-        if (!resultat[key]) {
-          resultat[key] = {
-            id: key,
-            nom:     data.nom || '',
-            cognoms: data.cognoms || '',
-            ralc:    data.ralc || '',
-            grupId:  data.grupId || grupId,
+        // Trobar l'alumne per RALC o nom
+        const key = data.ralc || `alumne_${Object.keys(resultat).length}_${data.nom}`;
+        const alumneKey = Object.keys(resultat).find(k =>
+          (data.ralc && resultat[k].ralc === data.ralc) ||
+          (resultat[k].nom === data.nom && resultat[k].cognoms === (data.cognoms||''))
+        ) || key;
+
+        if (!resultat[alumneKey]) {
+          resultat[alumneKey] = {
+            id: alumneKey,
+            nom: data.nom||'', cognoms: data.cognoms||'',
+            ralc: data.ralc||'', grupId,
             materies: {}
           };
         }
-        resultat[key].materies[mat.id] = { nom: mat.nom, ...data };
+        resultat[alumneKey].materies[mat.id] = {
+          nom: mat.nom || mat.id,
+          items: data.items || [],
+          descripcioComuna: data.descripcioComuna || '',
+          ...data
+        };
       });
-    } catch(e) { /* matèria sense dades */ }
+    } catch(e) { /* matèria sense dades per aquest grup */ }
   }
 
   return Object.values(resultat);
@@ -956,6 +1016,24 @@ async function llegirAlumnesGrupCentre(curs, grupId, materies) {
 /* ══════════════════════════════════════════════════════
    CARREGAR CONFIG DEL TUTOR
 ══════════════════════════════════════════════════════ */
+async function obtenirCursActiuTutoria() {
+  // Primer: usar el ja carregat
+  if (window._cursActiu) return window._cursActiu;
+  // Segon: llegir de Firestore
+  try {
+    const doc = await window.db.collection('_sistema').doc('config').get();
+    const curs = doc.data()?.cursActiu;
+    if (curs) { window._cursActiu = curs; return curs; }
+  } catch(e) {}
+  // Tercer: calcular de l'any actual
+  const ara = new Date();
+  const any = ara.getMonth() >= 8 ? ara.getFullYear() : ara.getFullYear()-1;
+  const curs = `${any}-${String(any+1).slice(-2)}`;
+  window._cursActiu = curs;
+  return curs;
+}
+
+
 async function carregarConfigTutor(uid) {
   try {
     const doc = await window.db.collection('professors').doc(uid).get();
