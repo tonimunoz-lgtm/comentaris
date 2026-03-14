@@ -1297,9 +1297,10 @@ function _renderCommentPanel(nom, comentari, assolamentsHTML, studentId, histori
 
 // Guarda comentari preservant historial de les últimes 3 versions
 // Exportar funcions de períodes per a app-patch.js
-window.renderPeriodesTabs = p => renderPeriodesTabs(p);
-window.renderStudentsList = () => renderStudentsList();
-window.showCommentsEmpty  = () => showCommentsEmpty();
+window.renderPeriodesTabs  = p  => renderPeriodesTabs(p);
+window.renderStudentsList  = ()  => renderStudentsList();
+window.showCommentsEmpty   = ()  => showCommentsEmpty();
+window.loadClassesScreen   = ()  => loadClassesScreen();
 
 window._saveComentariWithHistory =
 async function _saveComentariWithHistory(studentId, nouText, metadades = null) {
