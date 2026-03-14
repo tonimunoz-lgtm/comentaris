@@ -1417,7 +1417,9 @@ async function modalEditarRols(usuari, onGuardat) {
    TAB BUTLLETINS i QUADRE DADES (simplificats)
 ══════════════════════════════════════════════════════ */
 async function renderButlletins(body) {
-  const [nivells, grups] = await Promise.all([carregarNivells(), carregarGrupsCentre()]);
+  const [nivells, grups, cursActiu] = await Promise.all([
+    carregarNivells(), carregarGrupsCentre(), carregarCursActiu()
+  ]);
 
   body.innerHTML = `
     <h3 style="font-size:16px;font-weight:700;color:#1e1b4b;margin-bottom:16px;">📄 Butlletins</h3>
@@ -1430,7 +1432,7 @@ async function renderButlletins(body) {
           <select id="bCurs" style="width:100%;padding:8px 10px;border:1.5px solid #e5e7eb;border-radius:8px;font-size:13px;outline:none;">
             <option value="">— Tria curs —</option>
             ${[...new Set(grups.map(g=>g.curs).filter(Boolean))].sort().reverse()
-              .map(c=>`<option value="${c}">${c}</option>`).join('')}
+              .map(c=>`<option value="${c}" ${c===cursActiu?'selected':''}>${c}</option>`).join('')}
           </select>
         </div>
         <div>
@@ -1799,7 +1801,9 @@ function generarButlleti(alumne, curs, grupNom) {
 }
 
 async function renderQuadreDades(body) {
-  const [nivells, grups] = await Promise.all([carregarNivells(), carregarGrupsCentre()]);
+  const [nivells, grups, cursActiu] = await Promise.all([
+    carregarNivells(), carregarGrupsCentre(), carregarCursActiu()
+  ]);
   const cursos = [...new Set(grups.map(g=>g.curs).filter(Boolean))].sort().reverse();
 
   body.innerHTML = `
@@ -1808,7 +1812,7 @@ async function renderQuadreDades(body) {
       <div>
         <label style="font-size:12px;font-weight:600;color:#374151;display:block;margin-bottom:4px;">Curs</label>
         <select id="selCursQD" style="padding:9px 12px;border:1.5px solid #e5e7eb;border-radius:9px;font-size:13px;outline:none;">
-          ${cursos.length ? cursos.map(c=>`<option value="${c}">${c}</option>`).join('') : '<option value="">Cap curs</option>'}
+          ${cursos.length ? cursos.map(c=>`<option value="${c}" ${c===cursActiu?'selected':''}>${c}</option>`).join('') : '<option value="">Cap curs</option>'}
         </select>
       </div>
       <div>
