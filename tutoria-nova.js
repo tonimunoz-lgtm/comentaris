@@ -436,7 +436,10 @@ async function mostrarDetallAlumne(alumne, materies, cursActual) {
   const materiesAlumne = alumne.materies || {};
   // Usar les matèries directament des de l'alumne (clau=id, valor={nom,items})
   const materiesTotals = Object.entries(materiesAlumne).map(([id, data]) => ({
-    id, nom: data.nom || id, ...data
+    ...data,
+    id,
+    // materiaNom és el nom de la matèria; data.nom és el nom de l'alumne
+    nom: data.materiaNom || data.nom_materia || id,
   }));
 
   const _normA = s => (s||'').toLowerCase().normalize('NFD')
@@ -469,7 +472,7 @@ async function mostrarDetallAlumne(alumne, materies, cursActual) {
             (() => {
               const sel = document.getElementById('selGrupTutoria');
               const opt = sel?.options[sel?.selectedIndex];
-              return (opt && opt.value) ? opt.text.replace(/^🏫\s*/,'').trim() : (alumne.grup || '—');
+              return (opt && opt.value) ? opt.text.replace(/^[🏫🧑‍🏫\s]*/u,'').trim() : (alumne.grup || '—');
             })()
           )}</strong>
           ${alumne.ralc ? ` · RALC: ${escapeHtml(alumne.ralc)}` : ''}
@@ -558,8 +561,7 @@ async function mostrarDetallAlumne(alumne, materies, cursActual) {
             <div style="font-weight:800;color:#fff;font-size:14px;display:flex;align-items:center;gap:8px;">
               📚 ${escapeHtml(mat.nom)}
             </div>
-            <div style="font-size:11px;color:rgba(255,255,255,0.7);text-align:right;display:flex;align-items:center;gap:6px;">
-              ${dadesMat.professorEmail ? `<span>👤 ${escapeHtml(dadesMat.professorEmail)}</span>` : ''}
+            <div style="font-size:11px;color:rgba(255,255,255,0.7);text-align:right;">
               ${dadesMat.periodeNom ? `<span style="background:rgba(255,255,255,0.2);color:#fff;padding:2px 7px;border-radius:5px;font-size:10px;font-weight:700;">${escapeHtml(dadesMat.periodeNom)}</span>` : ''}
             </div>
           </div>
