@@ -373,22 +373,9 @@ async function carregarComentarisClasse() {
         let comentariText   = periodeData?.comentari || '';
         let periodeUsatNom  = periodeId ? 'actiu' : '—';
 
-        // Si no hi ha dades al periode actiu, buscar en altres períodes
-        if (!comentarisItems && !comentariText) {
-          const tots = data.comentarisPerPeriode || {};
-          for (const [pId, pData] of Object.entries(tots)) {
-            if (pData?.comentarisItems?.length || pData?.comentari) {
-              comentarisItems = pData.comentarisItems || pData.items || null;
-              comentariText   = pData.comentari || '';
-              periodeUsatNom  = pId;
-              break;
-            }
-          }
-          // Llegat: comentari directe a l'alumne
-          if (!comentariText && data.comentari) {
-            comentariText = data.comentari;
-          }
-        }
+        // IMPORTANT: NO buscar en altres períodes
+        // Cada periode és independent. Si no hi ha dades → alumne sense comentari en aquest periode
+        // (no barrejar amb comentaris antics d'altres trimestres)
 
         const nom     = data.nom || '';
         const cognoms = data.cognoms || '';
