@@ -547,6 +547,18 @@ async function enviarAvaluacioCentre() {
     return;
   }
 
+  if (!descComuna) {
+    // Marcar el camp com a error i fer focus
+    const descEl = document.getElementById('descComunaAC');
+    if (descEl) {
+      descEl.style.borderColor = '#dc2626';
+      descEl.focus();
+      descEl.addEventListener('input', () => { descEl.style.borderColor = ''; }, { once: true });
+    }
+    window.mostrarToast('⚠️ La descripció comuna és obligatòria. Explica el context de la matèria per al butlletí.', 4000);
+    return;
+  }
+
   const alumnes = window._acAlumnesCarregats;
   if (!alumnes?.length) {
     window.mostrarToast('⚠️ Primer carrega els comentaris de la classe', 3000);
