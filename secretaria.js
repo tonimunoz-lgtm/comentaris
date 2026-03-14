@@ -353,7 +353,7 @@ async function renderEstructura(body) {
       el.innerHTML = `
         <div style="flex:1;min-width:0;">
           <div style="font-weight:700;color:#1e1b4b;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">🏫 ${esH(g.nom)}</div>
-          <div style="font-size:10px;color:#9ca3af;">${(g.alumnes||[]).length} alumnes · ${(materiesPer[g.id]||[]).length} mat.</div>
+          <div style="font-size:10px;color:#9ca3af;">${(materiesPer[g.id]||[]).length} matèries</div>
         </div>
         <div>${botoEdit()}${botoDel()}</div>`;
       el.querySelector('.btn-ed').addEventListener('click', e => { e.stopPropagation(); modalGrup(g); });
@@ -366,13 +366,18 @@ async function renderEstructura(body) {
         if (e.target.closest('button')) return;
         grupActiu = g.id; materiaActiva = null;
         renderGrups(); renderMateries();
-        // Mostrar alumnes del grup classe
-        document.getElementById('titol-col-alumnes').textContent = `ALUMNES — ${g.nom}`;
-        alumnesFont = 'grup';
-        renderAlumnes(g);
+        // Quan cliques un grup, mostrar la columna alumnes buida fins que es triï una matèria
+        document.getElementById('titol-col-alumnes').textContent = `ALUMNES`;
+        alumnesFont = null;
+        renderAlumnes(null);
+        // Missatge orientatiu
+        const colAl = document.getElementById('col-alumnes');
+        if (colAl) colAl.innerHTML = '<p style="font-size:11px;color:#9ca3af;text-align:center;padding:20px 0;">← Tria una matèria per veure els alumnes</p>';
+        // Desactivar botons alumnes (només actius amb matèria seleccionada)
+        ['btnNouAlumne','btnImportarAlumnes'].forEach(id=>{
+          const b=document.getElementById(id); if(b){b.disabled=true;b.style.opacity='0.4';}
+        });
         enableBtn('btnNouMateria');
-        enableBtn('btnNouAlumne');
-        enableBtn('btnImportarAlumnes');
         document.getElementById('titol-col-mat').textContent = `MATÈRIES — ${g.nom}`;
       });
       afegirDD(el, cont, gs, i, (x,o) => window.db.collection('grups_centre').doc(x.id).update({ordre:o}).catch(()=>{}));
@@ -568,149 +573,228 @@ async function renderEstructura(body) {
    Matèria / Projecte / Optativa / Tutoria
    i guarda parentGrupId = grup classe pare
 ══════════════════════════════════════════════════════ */
+/* ══════════════════════════════════════════════════════
+   MODAL GRUPS — creació múltiple (A, B, C, D...)
+   Edició: modal simple per canviar el nom
+══════════════════════════════════════════════════════ */
 function modalGrupMateria(existent, parentGrupId, parentGrup, nivell) {
-  crearModal(`${existent?'✏️ Editar':'+ Nova'} matèria / projecte`, `
-    <div style="margin-bottom:12px;">
-      <label style="font-size:12px;font-weight:600;color:#374151;display:block;margin-bottom:5px;">Nom *</label>
-      <input id="inpMNom" type="text" value="${esH(existent?.nom||'')}"
-        placeholder="Ex: Matemàtiques, STEM, Tutoria..."
-        style="width:100%;box-sizing:border-box;padding:9px 11px;border:1.5px solid #e5e7eb;border-radius:9px;font-size:13px;outline:none;font-family:inherit;">
-    </div>
-    <div style="margin-bottom:12px;">
-      <label style="font-size:12px;font-weight:600;color:#374151;display:block;margin-bottom:8px;">Tipus *</label>
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
-        ${[
-          {v:'materia',  i:'📚', l:'Matèria'},
-          {v:'projecte', i:'🔬', l:'Projecte'},
-          {v:'optativa', i:'🎨', l:'Optativa'},
-          {v:'tutoria',  i:'🧑‍🏫', l:'Tutoria'},
-        ].map(t=>`
-          <label style="display:flex;align-items:center;gap:8px;cursor:pointer;padding:9px 11px;
-                        border:1.5px solid #e5e7eb;border-radius:9px;font-size:13px;
-                        background:#f9fafb;transition:border-color 0.15s;"
-                 class="tipo-label" id="lbl-${t.v}">
-            <input type="radio" name="tipusM" value="${t.v}"
-              ${(existent?.tipus||'materia')===t.v?'checked':''}
-              style="accent-color:#059669;">
-            ${t.i} ${t.l}
-          </label>
-        `).join('')}
+  const TIPUS_MAT = [
+    {v:'materia',  i:'📚', l:'Matèria'},
+    {v:'projecte', i:'🔬', l:'Projecte'},
+    {v:'optativa', i:'🎨', l:'Optativa'},
+    {v:'tutoria',  i:'🧑‍🏫', l:'Tutoria'},
+  ];
+  const tipusOpts = TIPUS_MAT.map(t=>`<option value="${t.v}">${t.i} ${t.l}</option>`).join('');
+
+  // MODE EDICIÓ: modal simple
+  if (existent) {
+    crearModal('✏️ Editar matèria', `
+      <div style="margin-bottom:12px;">
+        <label style="font-size:12px;font-weight:600;color:#374151;display:block;margin-bottom:5px;">Nom *</label>
+        <input id="inpMNom" type="text" value="${esH(existent.nom||'')}"
+          style="width:100%;box-sizing:border-box;padding:9px 11px;border:1.5px solid #e5e7eb;border-radius:9px;font-size:13px;outline:none;font-family:inherit;">
       </div>
-    </div>
-    <div style="background:#f3f4f6;padding:9px 11px;border-radius:9px;font-size:12px;color:#6b7280;">
-      Grup: <strong>${esH(parentGrup?.nom||'')} — ${esH(nivell?.nom||'')} (${esH(nivell?.curs||'')})</strong>
-    </div>
-  `, async () => {
-    const nom   = document.getElementById('inpMNom').value.trim();
-    const tipus = document.querySelector('input[name="tipusM"]:checked')?.value || 'materia';
-    if (!nom) { window.mostrarToast('⚠️ El nom és obligatori'); return false; }
-
-    const data = {
-      nom, tipus,
-      parentGrupId: parentGrupId || existent?.parentGrupId,
-      nivellId: nivell?.id || existent?.nivellId,
-      nivellNom: nivell?.nom || existent?.nivellNom,
-      curs: nivell?.curs || existent?.curs,
-      ordre: existent?.ordre ?? 99,
-      alumnes: existent?.alumnes || [],
-    };
-    if (existent) await window.db.collection('grups_centre').doc(existent.id).update({nom, tipus});
-    else await window.db.collection('grups_centre').add(data);
-    window.mostrarToast(existent ? '✅ Actualitzat' : '✅ Creat');
-    await window._secOnGrupCreat?.();
-    return true;
-  }, 'Guardar');
-
-  setTimeout(() => {
-    document.getElementById('inpMNom')?.focus();
-    // Marcar estil de la label seleccionada
-    document.querySelectorAll('input[name="tipusM"]').forEach(r => {
-      r.addEventListener('change', () => {
-        document.querySelectorAll('.tipo-label').forEach(l => l.style.borderColor='#e5e7eb');
-        r.closest('.tipo-label').style.borderColor = '#059669';
+      <div>
+        <label style="font-size:12px;font-weight:600;color:#374151;display:block;margin-bottom:8px;">Tipus</label>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;">
+          ${TIPUS_MAT.map(t=>`
+            <label style="display:flex;align-items:center;gap:7px;cursor:pointer;padding:8px 10px;
+                          border:1.5px solid ${(existent.tipus||'materia')===t.v?'#059669':'#e5e7eb'};
+                          border-radius:8px;font-size:12px;background:#f9fafb;"
+                   class="lbl-tipus-edit" data-v="${t.v}">
+              <input type="radio" name="tipusMEdit" value="${t.v}"
+                ${(existent.tipus||'materia')===t.v?'checked':''}
+                style="accent-color:#059669;">
+              ${t.i} ${t.l}
+            </label>`).join('')}
+        </div>
+      </div>
+    `, async () => {
+      const nom   = document.getElementById('inpMNom').value.trim();
+      const tipus = document.querySelector('input[name="tipusMEdit"]:checked')?.value || existent.tipus;
+      if (!nom) { window.mostrarToast('⚠️ El nom és obligatori'); return false; }
+      await window.db.collection('grups_centre').doc(existent.id).update({ nom, tipus });
+      window.mostrarToast('✅ Actualitzat');
+      await window._secOnGrupCreat?.();
+      return true;
+    }, 'Guardar');
+    setTimeout(() => {
+      document.getElementById('inpMNom')?.focus();
+      document.querySelectorAll('input[name="tipusMEdit"]').forEach(r => {
+        r.addEventListener('change', () => {
+          document.querySelectorAll('.lbl-tipus-edit').forEach(l => l.style.borderColor='#e5e7eb');
+          r.closest('.lbl-tipus-edit').style.borderColor='#059669';
+        });
       });
-      if (r.checked) r.closest('.tipo-label').style.borderColor = '#059669';
-    });
-  }, 100);
-}
+    }, 100);
+    return;
+  }
 
+  // MODE CREACIÓ MÚLTIPLE
+  const nNom = nivell?.nom || parentGrup?.nivellNom || '';
+  const curs = nivell?.curs || parentGrup?.curs || window._cursActiu || '';
+  const nId  = nivell?.id || parentGrup?.nivellId || '';
 
-
-
-/* ══════════════════════════════════════════════════════
-   MODAL NIVELL
-══════════════════════════════════════════════════════ */
-function modalNivell(existent) {
-  const m = crearModal(`${existent ? '✏️ Editar' : '+ Nou'} nivell`, `
-    <div style="margin-bottom:14px;">
-      <label style="font-size:13px;font-weight:600;color:#374151;display:block;margin-bottom:6px;">Nom *</label>
-      <input id="inpNivNom" type="text" value="${esH(existent?.nom||'')}" placeholder="Ex: 1r ESO, 2n Batxillerat..."
-        style="width:100%;box-sizing:border-box;padding:10px 12px;border:1.5px solid #e5e7eb;border-radius:10px;font-size:14px;outline:none;font-family:inherit;">
+  crearModal('+ Noves matèries', `
+    <div style="background:#f0fdf4;border:1.5px solid #bbf7d0;border-radius:9px;
+                padding:9px 12px;margin-bottom:14px;font-size:12px;color:#166534;">
+      Grup: <strong>${esH(parentGrup?.nom||'')} — ${esH(nNom)}${curs?' ('+esH(curs)+')':''}</strong>
     </div>
-    <div style="margin-bottom:14px;">
-      <label style="font-size:13px;font-weight:600;color:#374151;display:block;margin-bottom:6px;">Curs acadèmic *</label>
-      <input id="inpNivCurs" type="text" value="${esH(existent?.curs||(window._cursActiu||'2025-26'))}" placeholder="2025-26"
-        style="width:100%;box-sizing:border-box;padding:10px 12px;border:1.5px solid #e5e7eb;border-radius:10px;font-size:14px;outline:none;font-family:inherit;">
+    <div style="display:grid;grid-template-columns:1fr 150px 28px;gap:8px;
+                margin-bottom:5px;font-size:10px;font-weight:700;color:#9ca3af;padding:0 2px;">
+      <span>NOM</span><span>TIPUS</span><span></span>
     </div>
-    <div>
-      <label style="font-size:13px;font-weight:600;color:#374151;display:block;margin-bottom:6px;">Ordre</label>
-      <input id="inpNivOrdre" type="number" value="${existent?.ordre??99}"
-        style="width:100%;box-sizing:border-box;padding:10px 12px;border:1.5px solid #e5e7eb;border-radius:10px;font-size:14px;outline:none;font-family:inherit;">
-    </div>
+    <div id="contMat" style="display:flex;flex-direction:column;gap:6px;margin-bottom:10px;"></div>
+    <button id="btnAfegirMat" style="width:100%;padding:7px;background:#f3f4f6;
+      border:1.5px dashed #d1d5db;border-radius:8px;font-size:12px;font-weight:600;
+      color:#6b7280;cursor:pointer;">+ Afegir una altra matèria</button>
   `, async () => {
-    const nom   = document.getElementById('inpNivNom').value.trim();
-    const curs  = document.getElementById('inpNivCurs').value.trim();
-    const ordre = parseInt(document.getElementById('inpNivOrdre').value)||99;
-    if (!nom||!curs) { window.mostrarToast('⚠️ Omple els camps obligatoris'); return false; }
-    const data = {nom, curs, ordre};
-    if (existent) await window.db.collection('nivells_centre').doc(existent.id).update(data);
-    else await window.db.collection('nivells_centre').add(data);
-    // Actualitzar curs actiu global
-    await guardarCursActiu(curs);
-    window.mostrarToast(existent ? '✅ Nivell actualitzat' : '✅ Nivell creat');
-    await window._secOnNivellCreat?.();
-    return true;
-  });
-  setTimeout(()=>document.getElementById('inpNivNom')?.focus(), 100);
-}
+    const files = [...document.querySelectorAll('.fila-mat')];
+    const nous  = files.map(f=>({
+      nom:   f.querySelector('.inp-mat-nom').value.trim(),
+      tipus: f.querySelector('.sel-mat-tipus').value,
+    })).filter(x=>x.nom);
+    if (!nous.length) { window.mostrarToast('⚠️ Escriu almenys un nom'); return false; }
 
-/* ══════════════════════════════════════════════════════
-   MODAL GRUP
-══════════════════════════════════════════════════════ */
-function modalGrup(existent, nivellIdFix, nivellFix) {
-  // Els grups sempre són de tipus "classe" — el tipus només es tria a les matèries
-  crearModal(`${existent ? '✏️ Editar' : '+ Nou'} grup`, `
-    <div style="margin-bottom:14px;">
-      <label style="font-size:13px;font-weight:600;color:#374151;display:block;margin-bottom:6px;">Nom del grup *</label>
-      <input id="inpGrpNom" type="text" value="${esH(existent?.nom||'')}"
-        placeholder="Ex: A, B, Els Anecs, Els Pollastres..."
-        style="width:100%;box-sizing:border-box;padding:10px 12px;border:1.5px solid #e5e7eb;
-               border-radius:10px;font-size:14px;outline:none;font-family:inherit;">
-    </div>
-    <div style="background:#f0fdf4;border:1.5px solid #bbf7d0;border-radius:10px;
-                padding:10px 12px;font-size:12px;color:#166534;margin-bottom:14px;">
-      🏫 Grup classe — Les matèries i projectes s'afegiran dins d'aquest grup
-    </div>
-    <div style="background:#f3f4f6;padding:9px 12px;border-radius:9px;font-size:12px;color:#6b7280;">
-      Nivell: <strong>${esH(nivellFix?.nom || existent?.nivellNom || '—')}
-      ${nivellFix?.curs || existent?.curs ? ` (${esH(nivellFix?.curs || existent?.curs)})` : ''}</strong>
-    </div>
-  `, async () => {
-    const nom   = document.getElementById('inpGrpNom').value.trim();
-    const nId   = nivellIdFix || existent?.nivellId;
-    const nNom  = nivellFix?.nom || existent?.nivellNom || '';
-    const curs  = nivellFix?.curs || existent?.curs || '';
-    const ordre = existent?.ordre ?? 99;
-    if (!nom) { window.mostrarToast('⚠️ El nom és obligatori'); return false; }
-    const data = { nom, tipus: 'classe', nivellId: nId, nivellNom: nNom, curs, ordre, alumnes: existent?.alumnes||[] };
-    if (existent) await window.db.collection('grups_centre').doc(existent.id).update({ nom });
-    else await window.db.collection('grups_centre').add(data);
-    window.mostrarToast(existent ? '✅ Grup actualitzat' : '✅ Grup creat');
+    let ordre = 1;
+    try {
+      const snap = await window.db.collection('grups_centre').where('parentGrupId','==',parentGrupId).get();
+      ordre = snap.size + 1;
+    } catch(e){}
+
+    for (const m of nous) {
+      await window.db.collection('grups_centre').add({
+        nom: m.nom, tipus: m.tipus,
+        parentGrupId, nivellId: nId, nivellNom: nNom, curs,
+        ordre: ordre++, alumnes: []
+      });
+    }
+    window.mostrarToast(`✅ ${nous.length} matèri${nous.length!==1?'es':'a'} creada${nous.length!==1?'s':''}`);
     await window._secOnGrupCreat?.();
     return true;
-  });
-  setTimeout(() => document.getElementById('inpGrpNom')?.focus(), 100);
+  }, 'Crear');
+
+  let _mIdx = 0;
+  const addFilaMat = () => {
+    const cont = document.getElementById('contMat');
+    if (!cont) return;
+    const div = document.createElement('div');
+    div.className='fila-mat';
+    div.style.cssText='display:grid;grid-template-columns:1fr 150px 28px;gap:6px;align-items:center;';
+    div.innerHTML=`
+      <input class="inp-mat-nom" type="text" placeholder="Ex: Matemàtiques, STEM..."
+        style="padding:8px 9px;border:1.5px solid #e5e7eb;border-radius:8px;font-size:12px;
+               outline:none;font-family:inherit;width:100%;box-sizing:border-box;">
+      <select class="sel-mat-tipus"
+        style="padding:8px;border:1.5px solid #e5e7eb;border-radius:8px;font-size:12px;
+               outline:none;background:#f9fafb;width:100%;">
+        ${tipusOpts}
+      </select>
+      <button class="btn-rm" style="background:none;border:none;color:#9ca3af;font-size:16px;cursor:pointer;line-height:1;padding:0;">✕</button>
+    `;
+    div.querySelector('.btn-rm').addEventListener('click', ()=>{ if(cont.children.length>1) div.remove(); });
+    div.querySelector('.inp-mat-nom').addEventListener('keydown', e=>{
+      if(e.key==='Enter'){ e.preventDefault(); addFilaMat();
+        setTimeout(()=>{ const ins=cont.querySelectorAll('.inp-mat-nom'); ins[ins.length-1]?.focus(); },40); }
+    });
+    cont.appendChild(div);
+  };
+
+  setTimeout(()=>{
+    addFilaMat();
+    document.getElementById('btnAfegirMat')?.addEventListener('click', addFilaMat);
+    setTimeout(()=>document.querySelector('#contMat .inp-mat-nom')?.focus(), 40);
+  }, 80);
 }
+
+function modalGrup(existent, nivellIdFix, nivellFix) {
+  // MODE EDICIÓ
+  if (existent) {
+    crearModal('✏️ Editar grup', `
+      <div>
+        <label style="font-size:13px;font-weight:600;color:#374151;display:block;margin-bottom:6px;">Nom del grup *</label>
+        <input id="inpGrpNom" type="text" value="${esH(existent.nom||'')}"
+          style="width:100%;box-sizing:border-box;padding:10px 12px;border:1.5px solid #e5e7eb;
+                 border-radius:10px;font-size:14px;outline:none;font-family:inherit;">
+      </div>
+    `, async () => {
+      const nom = document.getElementById('inpGrpNom').value.trim();
+      if (!nom) { window.mostrarToast('⚠️ El nom és obligatori'); return false; }
+      await window.db.collection('grups_centre').doc(existent.id).update({ nom });
+      window.mostrarToast('✅ Grup actualitzat');
+      await window._secOnGrupCreat?.();
+      return true;
+    });
+    setTimeout(()=>document.getElementById('inpGrpNom')?.focus(), 100);
+    return;
+  }
+
+  // MODE CREACIÓ MÚLTIPLE
+  const nId  = nivellIdFix;
+  const nNom = nivellFix?.nom || '';
+  const curs = nivellFix?.curs || window._cursActiu || '';
+
+  crearModal('+ Nous grups', `
+    <div style="background:#eff6ff;border:1.5px solid #bfdbfe;border-radius:9px;
+                padding:9px 12px;margin-bottom:14px;font-size:12px;color:#1d4ed8;">
+      Nivell: <strong>${esH(nNom)}${curs?' ('+esH(curs)+')':''}</strong>
+    </div>
+    <div style="font-size:10px;font-weight:700;color:#9ca3af;margin-bottom:5px;padding:0 2px;">NOM DEL GRUP</div>
+    <div id="contGrups" style="display:flex;flex-direction:column;gap:6px;margin-bottom:10px;"></div>
+    <button id="btnAfegirGrup" style="width:100%;padding:7px;background:#f3f4f6;
+      border:1.5px dashed #d1d5db;border-radius:8px;font-size:12px;font-weight:600;
+      color:#6b7280;cursor:pointer;">+ Afegir un altre grup</button>
+    <p style="font-size:11px;color:#9ca3af;margin-top:8px;text-align:center;">
+      Prem Enter per afegir ràpidament el següent grup
+    </p>
+  `, async () => {
+    const files = [...document.querySelectorAll('.fila-grup')];
+    const nous  = files.map(f=>f.value.trim()).filter(Boolean);
+    if (!nous.length) { window.mostrarToast('⚠️ Escriu almenys un nom'); return false; }
+
+    let ordre = 1;
+    try {
+      const snap = await window.db.collection('grups_centre')
+        .where('nivellId','==',nId).where('tipus','==','classe').get();
+      ordre = snap.size + 1;
+    } catch(e){}
+
+    for (const nom of nous) {
+      await window.db.collection('grups_centre').add({
+        nom, tipus:'classe', nivellId:nId, nivellNom:nNom, curs, ordre:ordre++, alumnes:[]
+      });
+    }
+    window.mostrarToast(`✅ ${nous.length} grup${nous.length!==1?'s':''} creat${nous.length!==1?'s':''}`);
+    await window._secOnGrupCreat?.();
+    return true;
+  }, 'Crear');
+
+  const addFilaGrup = () => {
+    const cont = document.getElementById('contGrups');
+    if (!cont) return;
+    const div = document.createElement('div');
+    div.style.cssText='display:flex;gap:7px;align-items:center;';
+    div.innerHTML=`
+      <input class="fila-grup" type="text" placeholder="Ex: A, B, Els Anecs..."
+        style="flex:1;padding:9px 11px;border:1.5px solid #e5e7eb;border-radius:9px;font-size:13px;
+               outline:none;font-family:inherit;">
+      <button class="btn-rm" style="background:none;border:none;color:#9ca3af;font-size:17px;cursor:pointer;line-height:1;padding:0;">✕</button>
+    `;
+    div.querySelector('.btn-rm').addEventListener('click', ()=>{ if(cont.children.length>1) div.remove(); });
+    div.querySelector('input').addEventListener('keydown', e=>{
+      if(e.key==='Enter'){ e.preventDefault(); addFilaGrup();
+        setTimeout(()=>{ const ins=cont.querySelectorAll('.fila-grup'); ins[ins.length-1]?.focus(); },40); }
+    });
+    cont.appendChild(div);
+  };
+
+  setTimeout(()=>{
+    addFilaGrup();
+    document.getElementById('btnAfegirGrup')?.addEventListener('click', addFilaGrup);
+    setTimeout(()=>document.querySelector('#contGrups .fila-grup')?.focus(), 40);
+  }, 80);
+}
+
 
 /* ══════════════════════════════════════════════════════
    MODAL AFEGIR ALUMNE
