@@ -509,39 +509,47 @@ function mostrarResumAlumnes(alumnes) {
 function extraureComentariItem(textGlobal, titolActual, titolSeguent) {
   if (!textGlobal || !titolActual) return '';
 
-  // Normalitzar: eliminar accents i passar a minúscules per cercar
-  const norm = s => (s||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().trim();
-
+  // Normalitzar text per cercar sense accents ni majúscules
+  const norm = s => (s||'').normalize('NFD').replace(/[̀-ͯ]/g,'').toLowerCase().trim();
   const textNorm = norm(textGlobal);
 
-  // Cercar on comença la frase d'aquest ítem
-  // Patrons: "pel que fa a [titol]" o simplement el títol
-  const patrons = [
-    `pel que fa a ${norm(titolActual)}`,
-    `pel que fa al ${norm(titolActual)}`,
-    `quant a ${norm(titolActual)}`,
-    norm(titolActual),
-  ];
+  // Paraules de connexió que pot inserir l'UC entre "Pel que fa" i el títol
+  const CONNECTORS = ['a les', 'a l', 'al', 'a', 'als', 'les', 'el', 'els', ''];
 
-  let start = -1;
-  for (const patro of patrons) {
-    const idx = textNorm.indexOf(patro);
-    if (idx !== -1) { start = idx; break; }
-  }
-  if (start === -1) return ''; // no trobat
+  // Trobar posició d'inici del bloc d'aquest ítem
+  const cercaInici = (titol) => {
+    const t = norm(titol);
+    // 1. Intentar amb variants de "pel que fa"
+    const prefixos = ['pel que fa', 'quant', 'en relacio a', 'respecte a'];
+    for (const pref of prefixos) {
+      for (const con of CONNECTORS) {
+        const cerca = con ? `${pref} ${con} ${t}` : `${pref} ${t}`;
+        const idx = textNorm.indexOf(cerca);
+        if (idx !== -1) return idx;
+      }
+    }
+    // 2. Cercar només el títol com a paraula (mínim 5 caràcters)
+    if (t.length >= 5) {
+      const idx = textNorm.indexOf(t);
+      if (idx !== -1) return idx;
+    }
+    // 3. Cercar les primeres 3 paraules del títol
+    const paraules = t.split(/\s+/).slice(0,3).join(' ');
+    if (paraules.length >= 4) {
+      const idx = textNorm.indexOf(paraules);
+      if (idx !== -1) return idx;
+    }
+    return -1;
+  };
 
-  // Cercar on acaba (on comença el següent ítem)
+  const start = cercaInici(titolActual);
+  if (start === -1) return '';
+
+  // Trobar on acaba (on comença el seguent bloc)
   let end = textGlobal.length;
   if (titolSeguent) {
-    const patronsSeg = [
-      `pel que fa a ${norm(titolSeguent)}`,
-      `pel que fa al ${norm(titolSeguent)}`,
-      `quant a ${norm(titolSeguent)}`,
-    ];
-    for (const patro of patronsSeg) {
-      const idx = textNorm.indexOf(patro, start + 1);
-      if (idx !== -1 && idx < end) { end = idx; break; }
-    }
+    const endPos = cercaInici(titolSeguent);
+    if (endPos !== -1 && endPos > start) end = endPos;
   }
 
   return textGlobal.slice(start, end).trim();
@@ -655,6 +663,8 @@ async function enviarAvaluacioCentre() {
     window.mostrarToast(`✅ ${count} alumnes enviats a Avaluació Centre`, 3000);
     window._acAlumnesCarregats = null;
     document.getElementById('modalAvaluacioCentre')?.remove();
+    // Refresc immediat dels badges 🏫
+    setTimeout(() => window._refrescarBadgeAlumneActiu?.(), 500);
 
   } catch (e) {
     console.error('enviarAvaluacioCentre:', e);
