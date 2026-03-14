@@ -1877,17 +1877,15 @@ function modalEditarPeriode(periode, guardarConfig, onOk) {
 function modalCrearPeriode(ordre, PERIODES, nomsPersonalitzats, guardarConfig, onOk) {
   const jaCreats = ordre;
   const disponibles = PERIODES.filter(p => !jaCreats.includes(p.codi));
-
-  if (disponibles.length === 0) {
-    window.mostrarToast('Tots els períodes predefinits ja estan creats', 3000);
-    return;
-  }
+  // Permetre crear períodes personalitzats fins i tot si els predefinits estan tots creats
 
   crearModal('+ Nou període', `
-    <div style="display:flex;flex-direction:column;gap:8px;">
+    ${disponibles.length > 0 ? `
+    <div style="font-size:12px;font-weight:700;color:#6b7280;margin-bottom:8px;">PERÍODES PREDEFINITS</div>
+    <div style="display:flex;flex-direction:column;gap:6px;margin-bottom:14px;">
       ${disponibles.map(p => `
         <button class="btn-crear-periode" data-codi="${p.codi}" style="
-          padding:11px 16px;border:1.5px solid #e5e7eb;border-radius:10px;
+          padding:10px 14px;border:1.5px solid #e5e7eb;border-radius:9px;
           background:#fff;cursor:pointer;text-align:left;font-family:inherit;
           font-size:13px;font-weight:600;color:#1e1b4b;
           display:flex;align-items:center;justify-content:space-between;
@@ -1895,6 +1893,16 @@ function modalCrearPeriode(ordre, PERIODES, nomsPersonalitzats, guardarConfig, o
           ${esH(nomsPersonalitzats[p.codi] || p.nom)}
           <span style="font-size:11px;color:#9ca3af;font-weight:400;">clic per crear</span>
         </button>`).join('')}
+    </div>` : ''}
+    <div style="font-size:12px;font-weight:700;color:#6b7280;margin-bottom:8px;">PERÍODE PERSONALITZAT</div>
+    <div style="display:flex;gap:8px;">
+      <input id="inpNomNouPeriode" type="text" placeholder="Ex: Avaluació intermèdia, Projecte..."
+        style="flex:1;padding:9px 12px;border:1.5px solid #e5e7eb;border-radius:9px;
+               font-size:13px;outline:none;font-family:inherit;">
+      <button id="btnCrearPersonalitzat" style="padding:9px 16px;background:#7c3aed;color:#fff;
+        border:none;border-radius:9px;font-weight:700;cursor:pointer;font-size:13px;white-space:nowrap;">
+        + Crear
+      </button>
     </div>
   `, async () => { return false; }, ''); // no ok button, uses individual buttons
 
@@ -1909,6 +1917,22 @@ function modalCrearPeriode(ordre, PERIODES, nomsPersonalitzats, guardarConfig, o
         onOk();
         window.mostrarToast(`✅ Període creat`);
       });
+    });
+    // Període personalitzat
+    const inpCustom = document.getElementById('inpNouNouPeriode') || document.getElementById('inpNomNouPeriode');
+    document.getElementById('btnCrearPersonalitzat')?.addEventListener('click', async () => {
+      const nom = document.getElementById('inpNomNouPeriode')?.value?.trim();
+      if (!nom) { window.mostrarToast('⚠️ Escriu un nom'); return; }
+      const codi = `custom_${Date.now()}`;
+      nomsPersonalitzats[codi] = nom;
+      ordre.push(codi);
+      await guardarConfig();
+      document.getElementById('_modalSec')?.remove();
+      onOk();
+      window.mostrarToast(`✅ Període "${nom}" creat`);
+    });
+    document.getElementById('inpNomNouPeriode')?.addEventListener('keydown', e => {
+      if (e.key === 'Enter') document.getElementById('btnCrearPersonalitzat')?.click();
     });
     // Ocultar el botó Cancel·lar i canviar el títol del modal
     const cancelBtn = document.getElementById('_btnCancelModal');
@@ -2145,7 +2169,39 @@ async function carregarDadesButlletins(grups) {
       return;
     }
 
+    // Recompte de matèries: quines han enviat i quines no
+    const materiesGrup = grups.filter(g =>
+      g.parentGrupId === grupId && g.tipus !== 'tutoria'
+    );
+    const materiesAmbEnviament = matUniques.map(m=>m.nom);
+    const materiesSenseEnviament = materiesGrup
+      .filter(g => !materiesAmbEnviament.includes(g.nom))
+      .map(g => g.nom);
+
     resDiv.innerHTML = `
+      ${materiesGrup.length > 0 ? `
+      <div style="background:#f9fafb;border:1.5px solid #e5e7eb;border-radius:10px;
+                  padding:12px 16px;margin-bottom:16px;">
+        <div style="font-size:12px;font-weight:700;color:#374151;margin-bottom:8px;">
+          📚 Estat d'enviament per matèria
+        </div>
+        <div style="display:flex;gap:6px;flex-wrap:wrap;">
+          ${materiesGrup.map(g => {
+            const enviada = materiesAmbEnviament.includes(g.nom);
+            return `<span style="padding:4px 10px;border-radius:7px;font-size:11px;font-weight:600;
+              background:${enviada?'#f0fdf4':'#fef2f2'};
+              color:${enviada?'#059669':'#dc2626'};
+              border:1px solid ${enviada?'#bbf7d0':'#fca5a5'};">
+              ${enviada?'✅':'⚠️'} ${esH(g.nom)}
+            </span>`;
+          }).join('')}
+        </div>
+        ${materiesSenseEnviament.length > 0 ? `
+        <div style="font-size:11px;color:#dc2626;margin-top:8px;">
+          ⚠️ Matèries sense enviament: ${materiesSenseEnviament.map(n=>esH(n)).join(', ')}
+        </div>` : '<div style="font-size:11px;color:#059669;margin-top:6px;">✅ Totes les matèries han enviat avaluació</div>'}
+      </div>` : ''}
+
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;flex-wrap:wrap;gap:8px;">
         <div style="font-size:13px;color:#6b7280;">
           <strong style="color:#1e1b4b;">${alumnes.length}</strong> alumnes ·
