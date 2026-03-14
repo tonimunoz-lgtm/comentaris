@@ -2067,11 +2067,20 @@ async function carregarDadesButlletins(grups) {
       try {
         // Buscar documents que pertanyin al grup classe seleccionat
         // El professor pot haver enviat amb grupId = grupId del grup classe
-        const snap = await db.collection('avaluacio_centre')
+        // Cercar per grupClasseId (nou camp) o per grupId (llegat)
+        let snap = await db.collection('avaluacio_centre')
           .doc(curs)
           .collection(cand.id)
-          .where('grupId', '==', grupId)
+          .where('grupClasseId', '==', grupId)
           .get();
+        // Si no trobar per grupClasseId, intentar per grupId (dades antigues)
+        if (snap.empty) {
+          snap = await db.collection('avaluacio_centre')
+            .doc(curs)
+            .collection(cand.id)
+            .where('grupId', '==', grupId)
+            .get();
+        }
 
         if (!snap.empty) {
           const nomMat = cand.nom || cand.id;
@@ -2101,41 +2110,8 @@ async function carregarDadesButlletins(grups) {
               comentariGlobal: d.comentariGlobal || '',
             };
           });
-        } else {
-          // Intentar sense filtre grupId (per compatibilitat amb dades antigues)
-          const snap2 = await db.collection('avaluacio_centre')
-            .doc(curs)
-            .collection(cand.id)
-            .limit(3)
-            .get();
-          if (!snap2.empty) {
-            const nomMat = cand.nom || cand.id;
-            let hasAnyDoc = false;
-            snap2.docs.forEach(doc => {
-              const d = doc.data();
-              if (trimestre) {
-                if (!d.periodeNom || d.periodeNom !== trimestre) return;
-              }
-              hasAnyDoc = true;
-              const key = d.ralc || `${d.cognoms}_${d.nom}`;
-              if (!alumnesAmbDades[key]) {
-                alumnesAmbDades[key] = {
-                  nom: d.nom||'', cognoms: d.cognoms||'', ralc: d.ralc||'',
-                  nomComplet: d.cognoms ? `${d.cognoms}, ${d.nom}` : d.nom,
-                  materies: {}
-                };
-              }
-              if (!alumnesAmbDades[key].materies[cand.id]) {
-                alumnesAmbDades[key].materies[cand.id] = {
-                  nom: nomMat, periodeNom: d.periodeNom||'',
-                  items: d.items||[], descripcioComuna: d.descripcioComuna||'',
-                  comentariGlobal: d.comentariGlobal||''
-                };
-              }
-            });
-            if (hasAnyDoc) materiesAmbDades.push({ id: cand.id, nom: nomMat });
-          }
         }
+        // Nota: eliminat el fallback sense grupId per evitar barreja entre grups
       } catch(e) { /* ignorem errors de subcoleccions que no existeixen */ }
     }
 
