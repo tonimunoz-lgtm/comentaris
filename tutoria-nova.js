@@ -101,9 +101,18 @@ async function obrirPanellTutoria() {
 
   // Carregar config del tutor
   const config = await carregarConfigTutor(uid);
-  // Matèries ara estan a grups_centre amb parentGrupId (no materies_centre)
   const materies = await carregarMateriesCentre(); // llegat
   const grups = await carregarGrupsCentre();
+
+  // Determinar quins grups de tutoria pot veure aquest usuari
+  // pedagog → tots | tutor → només els assignats | admin/secretaria → tots
+  const perfilUsuari = window._userProfile || {};
+  const rolsUsuari   = perfilUsuari.rols || [];
+  const esPedagog    = rolsUsuari.includes('pedagog') || rolsUsuari.includes('admin') || rolsUsuari.includes('secretaria');
+  const tutoriaGrups = perfilUsuari.tutoria_grups || [];
+  const tutorTot     = tutoriaGrups.includes('_tot');
+
+  const potVeureTots = esPedagog || tutorTot;
 
   const overlay = document.createElement('div');
   overlay.id = 'panellTutoria';
@@ -214,10 +223,13 @@ async function obrirPanellTutoria() {
       return;
     }
     // Filtrar: grups de tipus 'tutoria' del curs seleccionat
-    // Si no n'hi ha tutories, mostrar tots els grups classe
-    const tutories = grups.filter(g =>
+    let tutories = grups.filter(g =>
       g.tipus === 'tutoria' && (g.curs === curs || !g.curs)
     );
+    // Si és tutor amb grups assignats (no pedagog/admin), filtrar per grups permesos
+    if (!potVeureTots && tutoriaGrups.length > 0) {
+      tutories = tutories.filter(g => tutoriaGrups.includes(g.id));
+    }
     const grupsCurs = tutories.length > 0
       ? tutories
       : grups.filter(g => g.tipus === 'classe' && (g.curs === curs || !g.curs));
@@ -252,6 +264,13 @@ async function obrirPanellTutoria() {
     if (selCurs) {
       selCurs.value = cursActiu;
       actualitzarGrupsTutoria(cursActiu);
+      // Si només hi ha un grup disponible, autoseleccionar-lo
+      setTimeout(() => {
+        const selGrup = overlay.querySelector('#selGrupTutoria');
+        if (selGrup && selGrup.options.length === 2) { // 1 opció + placeholder
+          selGrup.selectedIndex = 1;
+        }
+      }, 100);
     }
   }
 
