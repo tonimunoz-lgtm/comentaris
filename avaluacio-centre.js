@@ -602,15 +602,14 @@ async function enviarAvaluacioCentre() {
         // Cada fragment comença amb "Pel que fa a [títol]" i acaba quan comença el següent.
         const comentariGlobal = alumne.comentariText || '';
 
+        const blocs = comentariGlobal ? dividirTextEnBlocs(comentariGlobal) : [];
+
         const items = alumne.teItems
-          ? alumne.comentarisItems.map((it, idx, arr) => {
-              const titol     = it.titol      || '';
-              const assoliment= it.assoliment || 'No avaluat';
-              // Extreure el fragment del text corresponent a la posició idx
-              const comentari = extraureComentariItem(
-                comentariGlobal, titol, arr[idx+1]?.titol || null,
-                idx, arr.length
-              );
+          ? alumne.comentarisItems.map((it, idx) => {
+              const titol      = it.titol      || '';
+              const assoliment = it.assoliment || 'No avaluat';
+              // Prioritat: comentari guardat per ítem (nou) > bloc del text global (fallback)
+              const comentari  = it.comentari || blocs[idx] || '';
               return { titol, assoliment, comentari };
             })
           : [];
