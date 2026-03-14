@@ -2342,9 +2342,6 @@ function generarButlleti(alumne, curs, grupNom, trimestre) {
       ${mat.descripcioComuna
         ? `<div class="mat-desc" style="font-style:italic;">${esH(mat.descripcioComuna)}</div>`
         : ''}
-      ${mat.comentariGlobal
-        ? `<div class="mat-desc">${esH(mat.comentariGlobal)}</div>`
-        : ''}
       ${(mat.items||[]).length > 0 ? `
       <table>
         <thead>
