@@ -2274,20 +2274,27 @@ async function carregarDadesButlletins(grups) {
 }
 
 function generarButlleti(alumne, curs, grupNom, trimestre) {
-  const COLORS_ASSL = {
-    'Assoliment Excel·lent': '#7c3aed',
-    'Assoliment Notable':    '#2563eb',
-    'Assoliment Satisfactori':'#d97706',
-    'No Assoliment':         '#dc2626',
-    'No avaluat':            '#9ca3af',
+  // Normalitzar assoliment independent de majúscules/accents
+  const _normAss = s => (s||'').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'').trim();
+  const colorAss = s => {
+    const n = _normAss(s);
+    if (n.includes('excellent') || n.includes('excelllent')) return '#059669';
+    if (n.includes('notable'))     return '#2563eb';
+    if (n.includes('satisfactori'))return '#d97706';
+    if (n.includes('no ass'))      return '#dc2626';
+    return '#9ca3af';
   };
-  const SHORT = {
-    'Assoliment Excel·lent': 'AE',
-    'Assoliment Notable':    'AN',
-    'Assoliment Satisfactori':'AS',
-    'No Assoliment':         'NA',
-    'No avaluat':            '--',
+  const shortAss = s => {
+    const n = _normAss(s);
+    if (n.includes('excellent') || n.includes('excelllent')) return 'AE';
+    if (n.includes('notable'))     return 'AN';
+    if (n.includes('satisfactori'))return 'AS';
+    if (n.includes('no ass'))      return 'NA';
+    return '--';
   };
+  // Compatibilitat: COLORS_ASSL i SHORT com a funcions
+  const COLORS_ASSL = { };
+  const SHORT = { };
 
   const nomComplet = alumne.cognoms ? `${alumne.cognoms}, ${alumne.nom}` : alumne.nom;
   const materies = Object.values(alumne.materies);
@@ -2357,8 +2364,8 @@ function generarButlleti(alumne, curs, grupNom, trimestre) {
               <td><strong>${esH(it.titol||'')}</strong></td>
               <td>${esH(it.comentari||'')}</td>
               <td style="text-align:center;">
-                <span class="badge" style="background:${COLORS_ASSL[it.assoliment]||'#9ca3af'}">
-                  ${SHORT[it.assoliment]||'--'}
+                <span class="badge" style="background:${colorAss(it.assoliment)}">
+                  ${shortAss(it.assoliment)}
                 </span><br>
                 <span style="font-size:8pt;color:#666;">${esH(it.assoliment||'No avaluat')}</span>
               </td>
