@@ -209,6 +209,36 @@ async function obrirModalAvaluacioCentre() {
 
   document.body.appendChild(modal);
 
+  // Mostrar estat del periode actiu (obert/tancat)
+  setTimeout(async () => {
+    const pId  = window._tcClassId || window.currentPeriodeId;
+    const pNom = window.currentPeriodes?.[pId]?.nom || '';
+    const pCodi= window.currentPeriodes?.[pId]?.codi || '';
+    const badge = document.getElementById('avcPeriodeBadge');
+    if (badge && pNom) {
+      try {
+        const doc = await window.db.collection('_sistema').doc('periodes_tancats').get();
+        const tancats = doc.data()?.tancats || [];
+        const tancat = pCodi && tancats.includes(pCodi);
+        badge.innerHTML = `<span style="
+          display:inline-block;padding:3px 10px;border-radius:6px;font-size:11px;font-weight:700;
+          background:${tancat?'#fef2f2':'#f0fdf4'};
+          color:${tancat?'#dc2626':'#059669'};
+          border:1px solid ${tancat?'#fca5a5':'#bbf7d0'};">
+          ${tancat?'🔒 Tancat':'✅ Obert'} — ${pNom}
+        </span>`;
+        if (tancat) {
+          const btnEnviar = document.getElementById('btnEnviarAC');
+          if (btnEnviar) {
+            btnEnviar.disabled = true;
+            btnEnviar.style.opacity = '0.5';
+            btnEnviar.title = 'Període tancat per Secretaria';
+          }
+        }
+      } catch(e) {}
+    }
+  }, 200);
+
   // Preseleccionar grup automàticament des de la classe actual
   setTimeout(async () => {
     try {
@@ -533,6 +563,17 @@ async function enviarAvaluacioCentre() {
   const alumnes = window._acAlumnesCarregats;
   if (!alumnes?.length) {
     window.mostrarToast('⚠️ Primer carrega els comentaris de la classe', 3000);
+    return;
+  }
+
+  // Verificar si el periode actiu està tancat per Secretaria
+  const periodeIdCheck = window._tcClassId || window.currentPeriodeId;
+  const periodeNomCheck = window.currentPeriodes?.[periodeIdCheck]?.nom || '';
+  const periodesInfo = await window.db.collection('_sistema').doc('periodes_tancats').get().catch(()=>null);
+  const tancatsCheck = periodesInfo?.data()?.tancats || [];
+  const codiCheck = window.currentPeriodes?.[periodeIdCheck]?.codi || '';
+  if (codiCheck && tancatsCheck.includes(codiCheck)) {
+    window.mostrarToast(`🔒 El període "${periodeNomCheck}" està tancat per Secretaria. No es poden enviar noves avaluacions.`, 5000);
     return;
   }
 
