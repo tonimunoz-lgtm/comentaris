@@ -492,185 +492,194 @@ if (document.readyState !== 'loading') patchMostrarNomComplet();
 
 console.log('✅ app-patch.js v2: integració completada');
 
+
 /* ══════════════════════════════════════════════════════
-   PERÍODES FIXES: Pre-avaluació, 1r T, 2n T, 3r T, Final
-   Intercepta el botó + de períodes per oferir opcions fixes
-   Bloqueja trimestres tancats per secretaria
+   PESTANYES PERÍODES — Professor
+   1. Eliminar el menú ⋮ (professors no gestionen períodes)
+   2. Botó + mostra selector de períodes fixes
+      (els períodes disponibles vénen de _sistema/periodes)
 ══════════════════════════════════════════════════════ */
 
-const PERIODES_FIXES = [
-  { codi: 'preav',  nom: 'Pre-avaluació',  ordre: 0 },
-  { codi: 'T1',     nom: '1r Trimestre',   ordre: 1 },
-  { codi: 'T2',     nom: '2n Trimestre',   ordre: 2 },
-  { codi: 'T3',     nom: '3r Trimestre',   ordre: 3 },
-  { codi: 'final',  nom: 'Final de curs',  ordre: 4 },
+const PERIODES_FIXES_PROF = [
+  { codi: 'preav', nom: 'Pre-avaluació', ordre: 0 },
+  { codi: 'T1',    nom: '1r Trimestre',  ordre: 1 },
+  { codi: 'T2',    nom: '2n Trimestre',  ordre: 2 },
+  { codi: 'T3',    nom: '3r Trimestre',  ordre: 3 },
+  { codi: 'final', nom: 'Final de curs', ordre: 4 },
 ];
 
-// Interceptar el botó + de períodes
+// Ocultar el menú ⋮ de les pestanyes (professors no editen períodes)
+function ocultarMenuPestanyes() {
+  // Afegir CSS global per ocultar els ⋮
+  if (document.getElementById('_styleOcultarMenu')) return;
+  const style = document.createElement('style');
+  style.id = '_styleOcultarMenu';
+  style.textContent = `.periode-tab-menu { display: none !important; }`;
+  document.head.appendChild(style);
+}
+
+// Substituir el botó + per un selector de períodes fixes
 function patchBotoAddPeriode() {
   const btn = document.getElementById('btnAddPeriode');
   if (!btn || btn._patched) return;
   btn._patched = true;
 
-  const original = btn.onclick;
-  btn.onclick = null;
+  // Clonar per eliminar l'event listener original d'app.js
+  const nou = btn.cloneNode(true);
+  nou._patched = true;
+  btn.parentNode.replaceChild(nou, btn);
 
-  // Clonar per eliminar listeners antics
-  const btnNou = btn.cloneNode(true);
-  btnNou._patched = true;
-  btn.parentNode.replaceChild(btnNou, btn);
-
-  btnNou.addEventListener('click', async (e) => {
+  nou.addEventListener('click', async e => {
     e.stopPropagation();
-    e.preventDefault();
-    await mostrarMenuPeriodesFixes();
+    await mostrarSelectorPeriodes();
   });
 }
 
-async function mostrarMenuPeriodesFixes() {
-  document.getElementById('_menuPeriodes')?.remove();
+async function mostrarSelectorPeriodes() {
+  document.getElementById('_selectorPeriodes')?.remove();
 
-  // Períodes existents a la classe
-  const existents = Object.values(window.currentPeriodes || {}).map(p => p.nom);
+  // Períodes ja existents a la classe actual
+  const existents = Object.keys(window.currentPeriodes || {}).map(pid => {
+    return window.currentPeriodes[pid].nom;
+  });
 
-  // Períodes tancats (des de Firestore _sistema/periodes_tancats)
+  // Períodes tancats per secretaria
   let tancats = [];
   try {
     const doc = await window.db.collection('_sistema').doc('periodes_tancats').get();
     tancats = doc.data()?.tancats || [];
   } catch(e) {}
 
-  const menu = document.createElement('div');
-  menu.id = '_menuPeriodes';
-  menu.style.cssText = `
-    position:fixed;inset:0;z-index:99999;background:rgba(0,0,0,0.5);
-    display:flex;align-items:center;justify-content:center;
+  // Períodes disponibles per afegir
+  const disponibles = PERIODES_FIXES_PROF.filter(p => !existents.includes(p.nom));
+
+  if (disponibles.length === 0) {
+    window.mostrarToast('Ja tens tots els períodes creats', 3000);
+    return;
+  }
+
+  const overlay = document.createElement('div');
+  overlay.id = '_selectorPeriodes';
+  overlay.style.cssText = `
+    position:fixed;inset:0;z-index:99999;background:rgba(0,0,0,0.4);
+    display:flex;align-items:center;justify-content:center;padding:16px;
   `;
 
-  const disponibles = PERIODES_FIXES.filter(p => !existents.includes(p.nom));
-
-  menu.innerHTML = `
-    <div style="background:#fff;border-radius:16px;padding:24px;width:360px;
-                box-shadow:0 20px 50px rgba(0,0,0,0.3);">
-      <h3 style="font-size:16px;font-weight:800;color:#1e1b4b;margin:0 0 16px;">
-        + Afegir període
-      </h3>
-      ${disponibles.length === 0
-        ? '<p style="color:#9ca3af;font-size:13px;">Tots els períodes ja estan creats.</p>'
-        : `<div style="display:flex;flex-direction:column;gap:8px;">
-            ${PERIODES_FIXES.map(p => {
-              const jaExisteix = existents.includes(p.nom);
-              const tancat = tancats.includes(p.codi);
-              return `
-                <button class="btn-afegir-periode" data-codi="${p.codi}" data-nom="${p.nom}" data-ordre="${p.ordre}"
-                  ${jaExisteix || tancat ? 'disabled' : ''}
-                  style="padding:11px 16px;border-radius:10px;border:1.5px solid #e5e7eb;
-                         background:${tancat?'#fef2f2':jaExisteix?'#f9fafb':'#fff'};
-                         cursor:${jaExisteix||tancat?'not-allowed':'pointer'};
-                         text-align:left;display:flex;align-items:center;justify-content:space-between;
-                         font-family:inherit;font-size:13px;font-weight:600;
-                         color:${tancat?'#dc2626':jaExisteix?'#9ca3af':'#1e1b4b'};">
-                  <span>${p.nom}</span>
-                  <span style="font-size:11px;font-weight:400;color:#9ca3af;">
-                    ${tancat?'🔒 Tancat':jaExisteix?'✓ Ja creat':''}
-                  </span>
-                </button>
-              `;
-            }).join('')}
-          </div>`
-      }
-      <div style="display:flex;justify-content:flex-end;margin-top:16px;">
-        <button id="_btnTancarMenuP" style="padding:8px 18px;background:#f3f4f6;border:none;
-          border-radius:8px;font-weight:600;cursor:pointer;font-size:13px;">Tancar</button>
+  overlay.innerHTML = `
+    <div style="background:#fff;border-radius:16px;padding:24px;width:100%;max-width:380px;
+                box-shadow:0 20px 50px rgba(0,0,0,0.25);">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
+        <h3 style="font-size:15px;font-weight:800;color:#1e1b4b;margin:0;">+ Nou període</h3>
+        <button id="_btnTancarSP" style="background:none;border:none;font-size:20px;
+          cursor:pointer;color:#9ca3af;line-height:1;">✕</button>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:7px;">
+        ${PERIODES_FIXES_PROF.map(p => {
+          const jaExisteix = existents.includes(p.nom);
+          const tancat     = tancats.includes(p.codi);
+          const blocat     = jaExisteix || tancat;
+          return `
+            <button class="btn-sel-periode" data-nom="${p.nom}" data-codi="${p.codi}" data-ordre="${p.ordre}"
+              ${blocat ? 'disabled' : ''}
+              style="padding:10px 14px;border-radius:9px;text-align:left;font-family:inherit;
+                     border:1.5px solid ${blocat ? '#f3f4f6' : '#e5e7eb'};
+                     background:${tancat ? '#fef2f2' : jaExisteix ? '#f9fafb' : '#fff'};
+                     cursor:${blocat ? 'default' : 'pointer'};
+                     display:flex;justify-content:space-between;align-items:center;
+                     font-size:13px;font-weight:600;
+                     color:${tancat ? '#dc2626' : jaExisteix ? '#9ca3af' : '#1e1b4b'};">
+              <span>${p.nom}</span>
+              <span style="font-size:11px;font-weight:400;color:#9ca3af;">
+                ${tancat ? '🔒 Tancat' : jaExisteix ? '✓ Ja creat' : ''}
+              </span>
+            </button>`;
+        }).join('')}
       </div>
     </div>
   `;
 
-  document.body.appendChild(menu);
-  menu.querySelector('#_btnTancarMenuP').addEventListener('click', () => menu.remove());
-  menu.addEventListener('click', e => { if (e.target === menu) menu.remove(); });
+  document.body.appendChild(overlay);
+  overlay.querySelector('#_btnTancarSP').addEventListener('click', () => overlay.remove());
+  overlay.addEventListener('click', e => { if (e.target === overlay) overlay.remove(); });
 
-  menu.querySelectorAll('.btn-afegir-periode:not([disabled])').forEach(btn => {
+  overlay.querySelectorAll('.btn-sel-periode:not([disabled])').forEach(btn => {
+    btn.style.transition = 'border-color 0.12s';
+    btn.addEventListener('mouseenter', () => btn.style.borderColor = '#7c3aed');
+    btn.addEventListener('mouseleave', () => btn.style.borderColor = '#e5e7eb');
+
     btn.addEventListener('click', async () => {
       const nom   = btn.dataset.nom;
       const ordre = parseInt(btn.dataset.ordre);
-      const nouId = `p_${Date.now()}`;
+      const codi  = btn.dataset.codi;
 
-      if (!window.currentPeriodes) window.currentPeriodes = {};
-      window.currentPeriodes[nouId] = { nom, ordre, codi: btn.dataset.codi };
+      btn.innerHTML = '⏳ Creant...'; btn.disabled = true;
 
-      await window.db.collection('classes').doc(window.currentClassId).update({
-        periodes: window.currentPeriodes
-      });
+      try {
+        // Usar la mateixa lògica que app.js internament
+        // Accedim a window.currentPeriodes (exportat via defineProperty a app.js)
+        const periodes = window.currentPeriodes || {};
+        const nouId    = `p_${Date.now()}`;
+        const maxOrdre = Object.keys(periodes).length === 0 ? 0
+          : Math.max(...Object.values(periodes).map(p => p.ordre || 0)) + 1;
 
-      window.currentPeriodeId = nouId;
-      window._tcClassId = nouId;
+        periodes[nouId] = { nom, ordre: Math.max(ordre, maxOrdre), codi };
 
-      if (typeof window.renderPeriodesTabs === 'function') window.renderPeriodesTabs();
-      if (typeof window.renderStudentsList === 'function') window.renderStudentsList();
+        await window.db.collection('classes').doc(window.currentClassId).update({
+          periodes
+        });
 
-      menu.remove();
-      window.mostrarToast(`✅ Període "${nom}" creat`);
+        // Actualitzar les variables d'app.js a través de window
+        window.currentPeriodeId = nouId;
+        window._tcClassId       = nouId;
+
+        // Cridar les funcions d'app.js exportades
+        if (typeof window.renderPeriodesTabs === 'function') window.renderPeriodesTabs();
+        if (typeof window.renderStudentsList  === 'function') window.renderStudentsList();
+
+        window.mostrarToast?.(`✅ Període "${nom}" creat`);
+        overlay.remove();
+      } catch(err) {
+        console.error('Crear periode:', err);
+        window.mostrarToast?.('❌ Error: ' + err.message);
+        btn.disabled = false;
+        btn.textContent = nom;
+      }
     });
   });
 }
 
-// Verificar si el periode actiu està tancat (bloqueja enviament a avaluació)
-window.isPeriodeTancat = async function(codi) {
-  try {
-    const doc = await window.db.collection('_sistema').doc('periodes_tancats').get();
-    const tancats = doc.data()?.tancats || [];
-    return tancats.includes(codi);
-  } catch(e) { return false; }
-};
+// Activar: ocultar menú i patchejar botó quan es carrega una classe
+const _initPeriodesPatch = () => {
+  ocultarMenuPestanyes();
 
-// Interceptar renderPeriodesTabs per mostrar cadenat als períodes tancats
-const _origRenderPT = window.renderPeriodesTabs;
-if (_origRenderPT) {
-  window.renderPeriodesTabs = function(progres) {
-    _origRenderPT(progres);
-    // Afegir indicador de tancat als tabs
-    setTimeout(async () => {
-      try {
-        const doc = await window.db.collection('_sistema').doc('periodes_tancats').get();
-        const tancats = doc.data()?.tancats || [];
-        if (!tancats.length) return;
-
-        document.querySelectorAll('.periode-tab').forEach(tab => {
-          const pid = tab.dataset.pid;
-          const periodeData = window.currentPeriodes?.[pid];
-          if (periodeData?.codi && tancats.includes(periodeData.codi)) {
-            if (!tab.querySelector('.badge-tancat')) {
-              const badge = document.createElement('span');
-              badge.className = 'badge-tancat';
-              badge.style.cssText = 'font-size:10px;margin-left:4px;color:#dc2626;';
-              badge.textContent = '🔒';
-              badge.title = 'Avaluació tancada per Secretaria';
-              tab.appendChild(badge);
-            }
-          }
-        });
-      } catch(e) {}
-    }, 200);
+  // Esperar que el botó existeixi
+  const tryPatch = () => {
+    if (document.getElementById('btnAddPeriode')) {
+      patchBotoAddPeriode();
+    } else {
+      setTimeout(tryPatch, 300);
+    }
   };
-}
+  tryPatch();
 
-// Activar el patch quan el DOM estigui llest
-const tryPatchPeriode = () => {
-  if (document.getElementById('btnAddPeriode')) {
-    patchBotoAddPeriode();
-  } else {
-    setTimeout(tryPatchPeriode, 500);
+  // Re-patchejar quan es renderitzen les tabs (app.js les recrea)
+  if (typeof window.renderPeriodesTabs === 'function' && !window._ptPatchDone) {
+    window._ptPatchDone = true;
+    const _orig = window.renderPeriodesTabs;
+    window.renderPeriodesTabs = function(p) {
+      _orig(p);
+      setTimeout(patchBotoAddPeriode, 50);
+    };
   }
 };
 
-// Re-aplicar el patch cada vegada que es carrega una classe (app.js crida renderPeriodesTabs)
-const _origRPT2 = window.renderPeriodesTabs;
-if (_origRPT2 && !window._periodePatchApplied) {
-  window._periodePatchApplied = true;
-  const __wrap = function(p) { _origRPT2(p); setTimeout(patchBotoAddPeriode, 100); };
-  window.renderPeriodesTabs = __wrap;
-}
-
-setTimeout(tryPatchPeriode, 1000);
+// Esperar que app.js hagi exportat renderPeriodesTabs
+const _waitAndInit = () => {
+  if (typeof window.renderPeriodesTabs === 'function') {
+    _initPeriodesPatch();
+  } else {
+    setTimeout(_waitAndInit, 300);
+  }
+};
+setTimeout(_waitAndInit, 500);
 
