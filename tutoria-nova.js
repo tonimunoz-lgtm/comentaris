@@ -465,11 +465,12 @@ async function mostrarDetallAlumne(alumne, materies, cursActual) {
         </div>
         <div style="font-size:13px;opacity:0.8;">
           Grup: <strong>${escapeHtml(
-            // Intentar agafar el nom del grup des de qualsevol matèria
-            Object.values(alumne.materies||{})[0]?.grup ||
-            alumne.grup ||
-            document.getElementById('selGrupTutoria')?.options[
-              document.getElementById('selGrupTutoria')?.selectedIndex]?.text || '—'
+            // Agafar el text del selector de grup (nom del grup classe A, B, C...)
+            (() => {
+              const sel = document.getElementById('selGrupTutoria');
+              const opt = sel?.options[sel?.selectedIndex];
+              return (opt && opt.value) ? opt.text.replace(/^🏫\s*/,'').trim() : (alumne.grup || '—');
+            })()
           )}</strong>
           ${alumne.ralc ? ` · RALC: ${escapeHtml(alumne.ralc)}` : ''}
         </div>
@@ -508,9 +509,9 @@ async function mostrarDetallAlumne(alumne, materies, cursActual) {
 
           return `
             <div style="display:flex;align-items:center;gap:10px;">
-              <div style="width:150px;font-size:12px;font-weight:600;color:#374151;
-                          white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">
-                ${escapeHtml(mat.nom)}
+              <div style="width:160px;font-size:12px;font-weight:700;color:#1e1b4b;
+                          overflow:hidden;text-overflow:ellipsis;">
+                📚 ${escapeHtml(mat.nom)}
               </div>
               <div style="flex:1;display:flex;gap:3px;">
                 ${items.map(item => {
@@ -551,15 +552,15 @@ async function mostrarDetallAlumne(alumne, materies, cursActual) {
         <div style="margin-bottom:20px;border:1.5px solid #e5e7eb;border-radius:12px;overflow:hidden;">
           <!-- Capçalera matèria -->
           <div style="
-            background:#f3f4f6;padding:10px 16px;
+            background:linear-gradient(135deg,#1e1b4b,#312e81);padding:10px 16px;
             display:flex;justify-content:space-between;align-items:center;
           ">
-            <div style="font-weight:700;color:#1e1b4b;font-size:14px;display:flex;align-items:center;gap:8px;">
+            <div style="font-weight:800;color:#fff;font-size:14px;display:flex;align-items:center;gap:8px;">
               📚 ${escapeHtml(mat.nom)}
             </div>
-            <div style="font-size:11px;color:#9ca3af;text-align:right;">
-              ${dadesMat.professorEmail||dadesMat.professorUid ? `<span>👤 ${escapeHtml(dadesMat.professorEmail||'')}</span>` : ''}
-              ${dadesMat.periodeNom ? `<span style="margin-left:6px;background:#e0e7ff;color:#4338ca;padding:2px 7px;border-radius:5px;font-size:10px;font-weight:700;">${escapeHtml(dadesMat.periodeNom)}</span>` : ''}
+            <div style="font-size:11px;color:rgba(255,255,255,0.7);text-align:right;display:flex;align-items:center;gap:6px;">
+              ${dadesMat.professorEmail ? `<span>👤 ${escapeHtml(dadesMat.professorEmail)}</span>` : ''}
+              ${dadesMat.periodeNom ? `<span style="background:rgba(255,255,255,0.2);color:#fff;padding:2px 7px;border-radius:5px;font-size:10px;font-weight:700;">${escapeHtml(dadesMat.periodeNom)}</span>` : ''}
             </div>
           </div>
 
