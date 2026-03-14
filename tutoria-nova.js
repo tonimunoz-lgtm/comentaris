@@ -11,6 +11,24 @@ console.log('🚦 tutoria-nova.js carregat');
 /* ══════════════════════════════════════════════════════
    CONFIGURACIÓ PER DEFECTE
 ══════════════════════════════════════════════════════ */
+// Normalitzar text d'assoliment per comparar independent de majúscules/punt mig
+function _esNoAssolit(s) {
+  const n = (s||'').toLowerCase().normalize('NFD').replace(/[̀-ͯ·]/g,'').trim();
+  return n.includes('no ass');
+}
+function _esExcellent(s) {
+  const n = (s||'').toLowerCase().normalize('NFD').replace(/[̀-ͯ·]/g,'').trim();
+  return n.includes('excel');
+}
+function _esNotable(s) {
+  const n = (s||'').toLowerCase().normalize('NFD').replace(/[̀-ͯ·]/g,'').trim();
+  return n.includes('notable');
+}
+function _esSatisfactori(s) {
+  const n = (s||'').toLowerCase().normalize('NFD').replace(/[̀-ͯ·]/g,'').trim();
+  return n.includes('satisfactori');
+}
+
 const SEMAFORS_DEFAULT = [
   {
     id: 'sa1',
@@ -460,7 +478,7 @@ async function mostrarDetallAlumne(alumne, materies) {
         ${materiesTotals.map(mat => {
           const dadesMat = mat; // ja conté {nom, items, ...}
           const items = mat.items || [];
-          const naCount = items.filter(i => i.assoliment === 'No Assoliment').length;
+          const naCount = items.filter(i => _esNoAssolit(i.assoliment)).length;
           const total = items.length;
 
           return `
@@ -879,13 +897,13 @@ function avaluarRegla(alumne, regla, materies) {
     case 'noAssolimentMateria': {
       const mat = (alumne.materies || {})[materiaId];
       if (!mat) return false;
-      return (mat.items || []).some(i => i.assoliment === 'No Assoliment');
+      return (mat.items || []).some(i => _esNoAssolit(i.assoliment));
     }
     case 'assolamentsExcellents': {
       let n = 0;
       Object.values(alumne.materies || {}).forEach(mat => {
         (mat.items || []).forEach(i => {
-          if (i.assoliment === 'Assoliment Excel·lent') n++;
+          if (_esExcellent(i.assoliment)) n++;
         });
       });
       return comparar(n, operador, valor);
@@ -909,7 +927,7 @@ function compteNoAssoliments(alumne, materies) {
   let n = 0;
   Object.values(alumne.materies || {}).forEach(mat => {
     (mat.items || []).forEach(i => {
-      if (i.assoliment === 'No Assoliment') n++;
+      if (_esNoAssolit(i.assoliment)) n++;
     });
   });
   return n;
