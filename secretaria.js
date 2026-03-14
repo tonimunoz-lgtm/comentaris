@@ -2277,19 +2277,19 @@ function generarButlleti(alumne, curs, grupNom, trimestre) {
   // Normalitzar assoliment independent de majúscules/accents
   const _normAss = s => (s||'').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'').trim();
   const colorAss = s => {
-    const n = _normAss(s);
-    if (n.includes('excellent') || n.includes('excelllent')) return '#059669';
-    if (n.includes('notable'))     return '#2563eb';
-    if (n.includes('satisfactori'))return '#d97706';
-    if (n.includes('no ass'))      return '#dc2626';
+    const n = _normAss(s).replace(/[·•·]/g,''); // eliminar punt mig
+    if (n.includes('excellent') || n.includes('excelllent') || n.includes('excel')) return '#059669';
+    if (n.includes('notable'))      return '#2563eb';
+    if (n.includes('satisfactori')) return '#d97706';
+    if (n.includes('no ass'))       return '#dc2626';
     return '#9ca3af';
   };
   const shortAss = s => {
-    const n = _normAss(s);
-    if (n.includes('excellent') || n.includes('excelllent')) return 'AE';
-    if (n.includes('notable'))     return 'AN';
-    if (n.includes('satisfactori'))return 'AS';
-    if (n.includes('no ass'))      return 'NA';
+    const n = _normAss(s).replace(/[·•·]/g,'');
+    if (n.includes('excellent') || n.includes('excelllent') || n.includes('excel')) return 'AE';
+    if (n.includes('notable'))      return 'AN';
+    if (n.includes('satisfactori')) return 'AS';
+    if (n.includes('no ass'))       return 'NA';
     return '--';
   };
   // Compatibilitat: COLORS_ASSL i SHORT com a funcions
