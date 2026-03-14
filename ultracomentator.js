@@ -7,7 +7,7 @@ console.log('⚡ ultracomentator.js carregat');
 // ESPERAR QUE tutoria.js HAGI INJECTAT EL BOTÓ
 // ============================================================
 function initUltracomentator() {
-  const btn = document.getElementById('btnProfessor');
+  const btn = document.getElementById('btnTutoria');
   if (!btn) { setTimeout(initUltracomentator, 600); return; }
   transformarBotoTutoria(btn);
 }
@@ -17,15 +17,15 @@ function initUltracomentator() {
 // Igual que el botó ⋮ verd de l'app
 // ============================================================
 function transformarBotoTutoria(originalBtn) {
-  if (document.getElementById('btnProfessorWrapper')) return;
+  if (document.getElementById('btnTutoriaWrapper')) return;
 
   // Un sol botó — un clic obre el menú (com el ⋮ verd)
   const btnMain = document.createElement('button');
-  btnMain.id = 'btnProfessorMain';
+  btnMain.id = 'btnTutoriaMain';
   // Copiar classe exacta del botó original + position:relative per al menú
   btnMain.className = originalBtn.className;
   btnMain.style.cssText = 'position:relative;';
-  btnMain.innerHTML = '👨‍🏫 Professor ▾';
+  btnMain.innerHTML = '📋 Tutoria ▾';
   btnMain.title = 'Opcions de tutoria';
 
   // Menú desplegable — posicionat relatiu al btnMain
@@ -58,7 +58,7 @@ function transformarBotoTutoria(originalBtn) {
   `;
 
   // Amagar el botó original i inserir el nou al seu lloc
-  originalBtn.id = 'btnProfessor_hidden';
+  originalBtn.id = 'btnTutoria_hidden';
   originalBtn.style.display = 'none';
   originalBtn.parentNode.insertBefore(btnMain, originalBtn);
   btnMain.appendChild(menu);
@@ -102,7 +102,7 @@ function transformarBotoTutoria(originalBtn) {
       window.openTutoriaModal();
     } else {
       // Fallback: clicar el botó hidden original
-      const btnH = document.getElementById('btnProfessor_hidden');
+      const btnH = document.getElementById('btnTutoria_hidden');
       if (btnH) btnH.click();
     }
   });
@@ -1393,17 +1393,24 @@ Escriu ÚNICAMENT els ${itesMActius.length} bloc${itesMActius.length !== 1 ? 's'
     const comentari = (data.text || '').trim();
     resultText.textContent = comentari;
 
+    // Dividir el text en blocs per ítem i enriquir itesMActius
+    const blocsGenerats = dividirTextEnBlocsUC(comentari, itesMActius.length);
+    const itesMActiusAmbComentari = itesMActius.map((item, i) => ({
+      ...item,
+      comentariGenerat: blocsGenerats[i] || ''
+    }));
+
     // Mostrar botó guardar si hi ha alumne actiu (modal comentaris obert)
     const btnGuardar = document.getElementById('ucGuardarAlumne');
     const btnSeguent = document.getElementById('ucGuardarSeguent');
     if (window._tcStudentId) {
       if (btnGuardar) {
         btnGuardar.style.display = 'inline-flex';
-        btnGuardar.onclick = () => guardarComentariAlumne(comentari, modal, itesMActius, false);
+        btnGuardar.onclick = () => guardarComentariAlumne(comentari, modal, itesMActiusAmbComentari, false);
       }
       if (btnSeguent) {
         btnSeguent.style.display = 'inline-flex';
-        btnSeguent.onclick = () => guardarComentariAlumne(comentari, modal, itesMActius, true);
+        btnSeguent.onclick = () => guardarComentariAlumne(comentari, modal, itesMActiusAmbComentari, true);
       }
     }
 
@@ -1443,6 +1450,38 @@ function _ucActualitzarFilaComentari(studentId, classId, comentari) {
   } catch(e) { console.warn('[UC] Error actualitzant fila:', e); }
 }
 
+
+// Dividir text generat per IA en blocs per ítem
+// La IA separa blocs amb línies en blanc o amb "Pel que fa"
+function dividirTextEnBlocsUC(text, nItems) {
+  if (!text || nItems === 0) return [];
+
+  // Primer intent: dividir per línies en blanc (dos o més \n)
+  let blocs = text.split(/\n\s*\n/).map(b => b.trim()).filter(b => b.length > 0);
+
+  // Si no hi ha prou blocs, dividir per "Pel que fa" o equivalent
+  if (blocs.length < nItems) {
+    blocs = text.split(/(?=Pel que fa\b)/i).map(b => b.trim()).filter(b => b.length > 0);
+  }
+
+  // Si encara no hi ha prou blocs, dividir per punt i majúscula
+  if (blocs.length < nItems) {
+    blocs = text.split(/\. (?=[A-ZÁÉÍÓÚÜÀÈÌÒÙÏÜ])/).map((b, i, arr) =>
+      i < arr.length - 1 ? b + '.' : b
+    ).filter(b => b.trim().length > 0);
+  }
+
+  // Assegurar que tenim exactament nItems blocs
+  while (blocs.length < nItems) blocs.push('');
+  if (blocs.length > nItems) {
+    // Unir els blocs sobrants amb l'últim
+    const extra = blocs.splice(nItems - 1);
+    blocs.push(extra.join(' '));
+  }
+
+  return blocs;
+}
+
 async function guardarComentariAlumne(comentari, modal, items = [], passarAlSeguent = false) {
   // Capturar IDs en el moment de cridar la funcio (no pas per referencia)
   const studentIdActual = window._tcStudentId;
@@ -1465,9 +1504,11 @@ async function guardarComentariAlumne(comentari, modal, items = [], passarAlSegu
     if (!db) throw new Error('Firebase no disponible');
 
     // Guardar comentari + metadades ítems dins el periode actiu
+    // Ara cada ítem inclou el seu comentari específic (comentariGenerat)
     const metadades = items.map(it => ({
-      titol: it.titol || '',
-      assoliment: it.assoliment || ''
+      titol:     it.titol     || '',
+      assoliment: it.assoliment || '',
+      comentari: it.comentariGenerat || it.comentari || ''
     }));
 
     const update = {
