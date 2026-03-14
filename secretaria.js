@@ -678,46 +678,38 @@ function modalNivell(existent) {
    MODAL GRUP
 ══════════════════════════════════════════════════════ */
 function modalGrup(existent, nivellIdFix, nivellFix) {
-  const m = crearModal(`${existent ? '✏️ Editar' : '+ Nou'} grup`, `
+  // Els grups sempre són de tipus "classe" — el tipus només es tria a les matèries
+  crearModal(`${existent ? '✏️ Editar' : '+ Nou'} grup`, `
     <div style="margin-bottom:14px;">
-      <label style="font-size:13px;font-weight:600;color:#374151;display:block;margin-bottom:6px;">Nom *</label>
-      <input id="inpGrpNom" type="text" value="${esH(existent?.nom||'')}" placeholder="Ex: 3A, Matemàtiques, STEM..."
-        style="width:100%;box-sizing:border-box;padding:10px 12px;border:1.5px solid #e5e7eb;border-radius:10px;font-size:14px;outline:none;font-family:inherit;">
+      <label style="font-size:13px;font-weight:600;color:#374151;display:block;margin-bottom:6px;">Nom del grup *</label>
+      <input id="inpGrpNom" type="text" value="${esH(existent?.nom||'')}"
+        placeholder="Ex: A, B, Els Anecs, Els Pollastres..."
+        style="width:100%;box-sizing:border-box;padding:10px 12px;border:1.5px solid #e5e7eb;
+               border-radius:10px;font-size:14px;outline:none;font-family:inherit;">
     </div>
-    <div style="margin-bottom:14px;">
-      <label style="font-size:13px;font-weight:600;color:#374151;display:block;margin-bottom:6px;">Tipus *</label>
-      <select id="inpGrpTipus" style="width:100%;padding:10px 12px;border:1.5px solid #e5e7eb;border-radius:10px;font-size:14px;outline:none;background:#f9fafb;">
-        ${Object.entries(TIPUS_GRUP).map(([k,v])=>`
-          <option value="${k}" ${(existent?.tipus||'classe')===k?'selected':''}>${v.icon} ${v.label}</option>
-        `).join('')}
-      </select>
+    <div style="background:#f0fdf4;border:1.5px solid #bbf7d0;border-radius:10px;
+                padding:10px 12px;font-size:12px;color:#166534;margin-bottom:14px;">
+      🏫 Grup classe — Les matèries i projectes s'afegiran dins d'aquest grup
     </div>
-    <div style="margin-bottom:14px;">
-      <label style="font-size:13px;font-weight:600;color:#374151;display:block;margin-bottom:6px;">Nivell</label>
-      <input type="text" value="${esH(nivellFix?.nom || existent?.nivellNom || '')}"
-        disabled style="width:100%;box-sizing:border-box;padding:10px 12px;border:1.5px solid #e5e7eb;border-radius:10px;font-size:14px;background:#f3f4f6;font-family:inherit;">
-    </div>
-    <div>
-      <label style="font-size:13px;font-weight:600;color:#374151;display:block;margin-bottom:6px;">Ordre</label>
-      <input id="inpGrpOrdre" type="number" value="${existent?.ordre??99}"
-        style="width:100%;box-sizing:border-box;padding:10px 12px;border:1.5px solid #e5e7eb;border-radius:10px;font-size:14px;outline:none;font-family:inherit;">
+    <div style="background:#f3f4f6;padding:9px 12px;border-radius:9px;font-size:12px;color:#6b7280;">
+      Nivell: <strong>${esH(nivellFix?.nom || existent?.nivellNom || '—')}
+      ${nivellFix?.curs || existent?.curs ? ` (${esH(nivellFix?.curs || existent?.curs)})` : ''}</strong>
     </div>
   `, async () => {
     const nom   = document.getElementById('inpGrpNom').value.trim();
-    const tipus = document.getElementById('inpGrpTipus').value;
-    const ordre = parseInt(document.getElementById('inpGrpOrdre').value)||99;
     const nId   = nivellIdFix || existent?.nivellId;
     const nNom  = nivellFix?.nom || existent?.nivellNom || '';
     const curs  = nivellFix?.curs || existent?.curs || '';
+    const ordre = existent?.ordre ?? 99;
     if (!nom) { window.mostrarToast('⚠️ El nom és obligatori'); return false; }
-    const data = {nom, tipus, nivellId:nId, nivellNom:nNom, curs, ordre, alumnes: existent?.alumnes||[]};
-    if (existent) await window.db.collection('grups_centre').doc(existent.id).update({nom,tipus,ordre});
+    const data = { nom, tipus: 'classe', nivellId: nId, nivellNom: nNom, curs, ordre, alumnes: existent?.alumnes||[] };
+    if (existent) await window.db.collection('grups_centre').doc(existent.id).update({ nom });
     else await window.db.collection('grups_centre').add(data);
     window.mostrarToast(existent ? '✅ Grup actualitzat' : '✅ Grup creat');
     await window._secOnGrupCreat?.();
     return true;
   });
-  setTimeout(()=>document.getElementById('inpGrpNom')?.focus(), 100);
+  setTimeout(() => document.getElementById('inpGrpNom')?.focus(), 100);
 }
 
 /* ══════════════════════════════════════════════════════
