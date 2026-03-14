@@ -664,6 +664,106 @@ firebase.auth().onAuthStateChanged(user => {
 
 
 /* ══════════════════════════════════════════════════════
+   DRAG & DROP PESTANYES DE PERÍODES
+   El professor pot reordenar les pestanyes arrossegant
+══════════════════════════════════════════════════════ */
+function activarDragDropTabs() {
+  const container = document.getElementById('periodesTabs');
+  if (!container || container._ddActivat) return;
+  container._ddActivat = true;
+
+  let ddFrom = null;
+
+  const actualitzarDragListeners = () => {
+    container.querySelectorAll('.periode-tab').forEach((tab, i) => {
+      if (tab._ddBound) return;
+      tab._ddBound = true;
+      tab.draggable = true;
+      tab.style.cursor = 'grab';
+
+      tab.addEventListener('dragstart', e => {
+        ddFrom = i;
+        tab.style.opacity = '0.5';
+        e.dataTransfer.effectAllowed = 'move';
+      });
+      tab.addEventListener('dragend', () => { tab.style.opacity = '1'; });
+      tab.addEventListener('dragover', e => {
+        e.preventDefault();
+        tab.style.outline = '2px dashed #7c3aed';
+      });
+      tab.addEventListener('dragleave', () => { tab.style.outline = ''; });
+      tab.addEventListener('drop', async e => {
+        e.preventDefault();
+        tab.style.outline = '';
+        const tabs = [...container.querySelectorAll('.periode-tab')];
+        const toIdx = tabs.indexOf(tab);
+        if (ddFrom === null || ddFrom === toIdx) return;
+
+        // Reordenar els períodes
+        const periodes = window.currentPeriodes;
+        if (!periodes) return;
+
+        const sorted = Object.entries(periodes)
+          .sort((a,b) => (a[1].ordre||0) - (b[1].ordre||0));
+
+        // Moure l'element
+        const [moved] = sorted.splice(ddFrom, 1);
+        sorted.splice(toIdx, 0, moved);
+
+        // Actualitzar ordres
+        sorted.forEach(([pid, pdata], i) => {
+          periodes[pid] = { ...pdata, ordre: i };
+        });
+
+        // Guardar a Firebase
+        try {
+          await window.db.collection('classes').doc(window.currentClassId).update({
+            periodes
+          });
+          // Re-renderitzar
+          window.currentPeriodes = periodes;
+          if (typeof window.renderPeriodesTabs === 'function') {
+            window.renderPeriodesTabs();
+          }
+        } catch(e) {
+          window.mostrarToast?.('❌ Error guardant ordre: ' + e.message);
+        }
+      });
+    });
+  };
+
+  // Activar en el render inicial i cada vegada que es re-renderitzen
+  actualitzarDragListeners();
+  const obs = new MutationObserver(actualitzarDragListeners);
+  obs.observe(container, { childList: true });
+}
+
+// Activar quan el container existeixi
+const _initDDTabs = () => {
+  if (document.getElementById('periodesTabs')) {
+    activarDragDropTabs();
+  } else {
+    setTimeout(_initDDTabs, 500);
+  }
+};
+setTimeout(_initDDTabs, 1000);
+
+// Re-activar cada cop que es renderitzen les tabs
+const _wrapRPT = window.renderPeriodesTabs;
+if (_wrapRPT && !window._ddTabsWrapped) {
+  window._ddTabsWrapped = true;
+  window.renderPeriodesTabs = function(p) {
+    _wrapRPT(p);
+    // Reset els flags perquè el MutationObserver els detecti com a nous
+    setTimeout(() => {
+      document.querySelectorAll('.periode-tab').forEach(t => delete t._ddBound);
+      activarDragDropTabs();
+    }, 50);
+  };
+}
+
+
+/* ══════════════════════════════════════════════════════
    OCULTAR BOTONS D'ALUMNES DEL PROFESSOR
    El control d'alumnes és exclusiu de Secretaria
 ══════════════════════════════════════════════════════ */
