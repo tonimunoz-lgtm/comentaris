@@ -505,6 +505,142 @@ document.addEventListener('DOMContentLoaded', patchMostrarNomComplet);
 // Per si ja ha carregat
 if (document.readyState !== 'loading') patchMostrarNomComplet();
 
+/* ══════════════════════════════════════════════════════
+   NOTIFICACIÓ CANVIS DE GRUP DES DE SECRETARIA
+   Quan Secretaria actualitza un grup_centre, notificar
+   al professor que recarregui la classe
+══════════════════════════════════════════════════════ */
+function iniciarEscoltaCanvisGrup() {
+  if (!window.currentClassId || !window.db) return;
+
+  // Llegir el grupCentreId de la classe actual
+  window.db.collection('classes').doc(window.currentClassId).get().then(doc => {
+    const grupCentreId = doc.data()?.grupCentreId;
+    if (!grupCentreId) return;
+
+    // Escoltar canvis al grup del centre
+    const unsub = window.db.collection('grups_centre').doc(grupCentreId)
+      .onSnapshot(snap => {
+        if (!snap.metadata.hasPendingWrites && snap.exists) {
+          const alumnesCentre = snap.data()?.alumnes || [];
+          const alumnesClasse = window.classStudents || [];
+
+          // Comparar nombre d'alumnes
+          if (alumnesCentre.length !== alumnesClasse.length && alumnesCentre.length > 0) {
+            mostrarBannerActualitzacio(alumnesCentre.length, alumnesClasse.length, grupCentreId);
+          }
+        }
+      }, () => {});
+
+    // Netejar listener quan es canvia de classe
+    window._unsubGrupCentre = unsub;
+  }).catch(()=>{});
+}
+
+function mostrarBannerActualitzacio(nCentre, nClasse, grupCentreId) {
+  if (document.getElementById('_bannerActualitzacio')) return;
+
+  const banner = document.createElement('div');
+  banner.id = '_bannerActualitzacio';
+  banner.style.cssText = `
+    position:fixed;top:0;left:0;right:0;z-index:99998;
+    background:linear-gradient(135deg,#f59e0b,#d97706);
+    color:#fff;padding:12px 20px;
+    display:flex;align-items:center;justify-content:space-between;
+    box-shadow:0 4px 12px rgba(0,0,0,0.2);font-family:inherit;
+  `;
+  banner.innerHTML = `
+    <div style="display:flex;align-items:center;gap:10px;">
+      <span style="font-size:18px;">📋</span>
+      <div>
+        <strong>Secretaria ha actualitzat la llista d'alumnes</strong>
+        <div style="font-size:12px;opacity:0.9;">
+          Centre: ${nCentre} alumnes · Classe actual: ${nClasse} alumnes
+        </div>
+      </div>
+    </div>
+    <div style="display:flex;gap:8px;">
+      <button id="_btnActualitzarClasse" style="padding:8px 18px;background:#fff;color:#d97706;
+        border:none;border-radius:8px;font-weight:700;cursor:pointer;font-size:13px;">
+        🔄 Actualitzar classe
+      </button>
+      <button id="_btnTancarBanner" style="padding:8px 14px;background:rgba(255,255,255,0.3);
+        color:#fff;border:none;border-radius:8px;font-size:13px;cursor:pointer;">
+        Ara no
+      </button>
+    </div>
+  `;
+  document.body.appendChild(banner);
+
+  document.getElementById('_btnTancarBanner').addEventListener('click', () => banner.remove());
+
+  document.getElementById('_btnActualitzarClasse').addEventListener('click', async () => {
+    banner.innerHTML = '<div style="padding:4px 20px;">⏳ Actualitzant alumnes...</div>';
+    try {
+      const grupDoc = await window.db.collection('grups_centre').doc(grupCentreId).get();
+      const alumnesCentre = grupDoc.data()?.alumnes || [];
+      const classId = window.currentClassId;
+
+      // Crear alumnes nous a la col·lecció alumnes
+      const classeDoc = await window.db.collection('classes').doc(classId).get();
+      const alumnesActuals = classeDoc.data()?.alumnes || [];
+
+      // Llegir RALCs i noms actuals
+      const docsActuals = await Promise.all(
+        alumnesActuals.map(id => window.db.collection('alumnes').doc(id).get())
+      );
+      const ralcsActuals = new Set(docsActuals.map(d=>d.data()?.ralc).filter(Boolean));
+      const nomsActuals  = new Set(docsActuals.map(d=>`${d.data()?.nom}_${d.data()?.cognoms}`));
+
+      const nousBatch = window.db.batch();
+      const nousIds = [...alumnesActuals];
+      const profUID = firebase.auth().currentUser?.uid;
+
+      for (const a of alumnesCentre) {
+        const key = `${a.nom}_${a.cognoms}`;
+        if ((a.ralc && ralcsActuals.has(a.ralc)) || nomsActuals.has(key)) continue;
+        const ref = window.db.collection('alumnes').doc();
+        nousBatch.set(ref, {
+          nom: a.nom, cognoms: a.cognoms, ralc: a.ralc||'',
+          comentari:'', ownerUid: profUID, classId
+        });
+        nousIds.push(ref.id);
+      }
+      nousBatch.update(window.db.collection('classes').doc(classId), { alumnes: nousIds });
+      await nousBatch.commit();
+
+      banner.remove();
+      window.mostrarToast?.(`✅ ${nousIds.length - alumnesActuals.length} alumnes nous afegits`);
+      if (typeof window.renderStudentsList === 'function') window.renderStudentsList();
+    } catch(e) {
+      banner.remove();
+      window.mostrarToast?.('❌ Error: ' + e.message);
+    }
+  });
+}
+
+// Activar quan es carrega una classe
+firebase.auth().onAuthStateChanged(user => {
+  if (!user) return;
+  // Observar canvis de currentClassId
+  const _origOpenClass = window.openClass;
+  if (_origOpenClass && !window._openClassPatched) {
+    window._openClassPatched = true;
+  }
+  // Escoltar via MutationObserver o polling
+  let _lastClassId = null;
+  setInterval(() => {
+    const cId = window.currentClassId;
+    if (cId && cId !== _lastClassId) {
+      _lastClassId = cId;
+      window._unsubGrupCentre?.();
+      document.getElementById('_bannerActualitzacio')?.remove();
+      setTimeout(iniciarEscoltaCanvisGrup, 500);
+    }
+  }, 1000);
+});
+
+
 console.log('✅ app-patch.js v2: integració completada');
 
 
