@@ -793,8 +793,13 @@ function ocultarBotonsAlumnesProfesor() {
     #btnCancelDeleteStudents,
     #confirmDeleteStudentsBtn,
     #btnImportClassroom,
-    #modalClassroomImport {
+    #modalClassroomImport,
+    .student-item-btn.delete,
+    .delete-checkbox {
       display: none !important;
+    }
+    .student-item-actions {
+      /* Amagar accions d'alumne */
     }
   `;
   document.head.appendChild(style);
@@ -881,22 +886,51 @@ async function mostrarSelectorPeriodes() {
   document.getElementById('_selectorPeriodes')?.remove();
 
   // Períodes ja existents a la classe actual
-  const existents = Object.keys(window.currentPeriodes || {}).map(pid => {
-    return window.currentPeriodes[pid].nom;
-  });
+  const existentsNoms = Object.values(window.currentPeriodes || {}).map(p => p.nom);
 
-  // Períodes tancats per secretaria
+  // Llegir configuració de Secretaria: tancats + noms personalitzats + ordre
   let tancats = [];
+  let nomsPersonalitzats = {};
+  let ordreSecretaria = [];
   try {
     const doc = await window.db.collection('_sistema').doc('periodes_tancats').get();
-    tancats = doc.data()?.tancats || [];
+    if (doc.exists) {
+      tancats            = doc.data()?.tancats || [];
+      nomsPersonalitzats = doc.data()?.noms    || {};
+      ordreSecretaria    = doc.data()?.ordre   || [];
+    }
   } catch(e) {}
 
-  // Períodes disponibles per afegir
-  const disponibles = PERIODES_FIXES_PROF.filter(p => !existents.includes(p.nom));
+  // Construir llista completa de períodes disponibles
+  // Combinar els 5 fixes + els customs creats per Secretaria
+  const FIXES_CODIS = ['preav','T1','T2','T3','final'];
+  const periodesTots = [
+    ...PERIODES_FIXES_PROF.map(p => ({
+      ...p,
+      nom: nomsPersonalitzats[p.codi] || p.nom
+    })),
+    // Afegir custom periods de Secretaria
+    ...ordreSecretaria
+      .filter(codi => !FIXES_CODIS.includes(codi))
+      .map((codi, i) => ({
+        codi,
+        nom: nomsPersonalitzats[codi] || codi,
+        ordre: 10 + i
+      }))
+  ];
+
+  // Mantenir l'ordre de Secretaria si existeix
+  const periodesOrdenats = ordreSecretaria.length > 0
+    ? ordreSecretaria
+        .map(codi => periodesTots.find(p => p.codi === codi))
+        .filter(Boolean)
+    : periodesTots;
+
+  // Filtrar els que ja existeixen a la classe
+  const disponibles = periodesOrdenats.filter(p => !existentsNoms.includes(p.nom));
 
   if (disponibles.length === 0) {
-    window.mostrarToast('Ja tens tots els períodes creats', 3000);
+    window.mostrarToast('Ja tens tots els períodes disponibles creats', 3000);
     return;
   }
 
@@ -916,17 +950,15 @@ async function mostrarSelectorPeriodes() {
           cursor:pointer;color:#9ca3af;line-height:1;">✕</button>
       </div>
       <div style="display:flex;flex-direction:column;gap:7px;">
-        ${PERIODES_FIXES_PROF.map(p => {
-          const jaExisteix = existents.includes(p.nom);
-          const tancat     = tancats.includes(p.codi);
-          const blocat     = jaExisteix || tancat;
+        ${disponibles.map(p => {
+          const tancat = tancats.includes(p.codi);
           return `
             <button class="btn-sel-periode" data-nom="${p.nom}" data-codi="${p.codi}" data-ordre="${p.ordre}"
-              ${blocat ? 'disabled' : ''}
+              ${tancat ? 'disabled' : ''}
               style="padding:10px 14px;border-radius:9px;text-align:left;font-family:inherit;
-                     border:1.5px solid ${blocat ? '#f3f4f6' : '#e5e7eb'};
-                     background:${tancat ? '#fef2f2' : jaExisteix ? '#f9fafb' : '#fff'};
-                     cursor:${blocat ? 'default' : 'pointer'};
+                     border:1.5px solid ${tancat ? '#fef2f2' : '#e5e7eb'};
+                     background:${tancat ? '#fef2f2' : '#fff'};
+                     cursor:${tancat ? 'default' : 'pointer'};
                      display:flex;justify-content:space-between;align-items:center;
                      font-size:13px;font-weight:600;
                      color:${tancat ? '#dc2626' : jaExisteix ? '#9ca3af' : '#1e1b4b'};">
