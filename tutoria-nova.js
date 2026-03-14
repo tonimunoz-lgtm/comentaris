@@ -302,12 +302,15 @@ async function carregarAlumnesTutoria(curs, grupId, grups, materies, config) {
       semafor: calcularSemafor(a, semafors, materies)
     }));
 
-    // Ordenar per prioritat de semàfor (primer els més crítics)
+    // Ordenar: 1r per semàfor (més crític primer), 2n per nº NA (més NA primer), 3r per cognoms
     alumnesAmbSemafor.sort((a, b) => {
       const pA = semafors.findIndex(s => s.id === a.semafor?.id);
       const pB = semafors.findIndex(s => s.id === b.semafor?.id);
       if (pA !== pB) return pA - pB;
-      return (a.cognoms || '').localeCompare(b.cognoms || '');
+      const naA = compteNoAssoliments(a, materies);
+      const naB = compteNoAssoliments(b, materies);
+      if (naB !== naA) return naB - naA; // més NA primer
+      return (a.cognoms || '').localeCompare(b.cognoms || '', 'ca');
     });
 
     // Renderitzar llista
