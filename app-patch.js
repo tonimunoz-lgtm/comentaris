@@ -417,8 +417,9 @@ function patchMostrarNomComplet() {
               if (li.dataset) li.dataset.nom = nomComplet.toLowerCase();
             }
             // Indicador d'enviament a Avaluació Centre
-            if (d.grupCentreId && !li.querySelector('.badge-avc')) {
-              // Buscar si hi ha dades a avaluacio_centre per aquest alumne
+            if (d.grupCentreId) {
+              // Eliminar badge anterior i re-verificar per al periode actiu
+              li.querySelector('.badge-avc')?.remove();
               verificarEnviamentAvaluacio(li.dataset.id, d, li);
             }
           }).catch(()=>{});
@@ -447,30 +448,44 @@ function patchMostrarNomComplet() {
 async function verificarEnviamentAvaluacio(alumneId, alumneData, liEl) {
   if (!window.db || !alumneData.grupCentreId) return;
   try {
-    const curs = window._cursActiu || await obtenirCursActiu();
-    // Buscar en qualsevol subcolecció de avaluacio_centre/{curs}
+    const curs      = window._cursActiu || await obtenirCursActiu();
+    // Llegir el periode actiu i el seu nom per filtrar
+    const periodeId = window.currentPeriodeId || window._tcClassId;
+    let   periodeNom = null;
+    if (periodeId && window.currentPeriodes?.[periodeId]) {
+      periodeNom = window.currentPeriodes[periodeId].nom;
+    }
+
     const doc = await window.db.collection('avaluacio_centre')
       .doc(curs)
       .collection(alumneData.grupCentreId)
       .doc(alumneId)
       .get();
 
-    if (doc.exists) {
-      // Afegir badge verd al costat del nom
-      const badge = document.createElement('span');
+    if (!doc.exists) return;
+
+    // Si tenim periodeNom, verificar que el doc correspon a aquest periode
+    if (periodeNom) {
+      const docPeriodeNom = doc.data()?.periodeNom;
+      // Si el doc té periodeNom i no coincideix → no mostrar badge
+      if (docPeriodeNom && docPeriodeNom !== periodeNom) return;
+    }
+
+    // Afegir o actualitzar badge
+    let badge = liEl.querySelector('.badge-avc');
+    if (!badge) {
+      badge = document.createElement('span');
       badge.className = 'badge-avc';
-      badge.title = 'Avaluació Centre enviada';
       badge.style.cssText = `
         display:inline-block;background:#059669;color:#fff;
         border-radius:4px;font-size:9px;font-weight:700;
         padding:1px 5px;margin-left:5px;vertical-align:middle;
       `;
-      badge.textContent = '🏫';
       const span = liEl.querySelector('.student-name');
-      if (span && !liEl.querySelector('.badge-avc')) {
-        span.insertAdjacentElement('afterend', badge);
-      }
+      if (span) span.insertAdjacentElement('afterend', badge);
     }
+    badge.textContent = '🏫';
+    badge.title = `Avaluació enviada${periodeNom ? ' — ' + periodeNom : ''}`;
   } catch(e) {}
 }
 
