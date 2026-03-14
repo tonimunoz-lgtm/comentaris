@@ -606,6 +606,47 @@ async function renderEstructura(body) {
    MODAL GRUPS — creació múltiple (A, B, C, D...)
    Edició: modal simple per canviar el nom
 ══════════════════════════════════════════════════════ */
+/* ══════════════════════════════════════════════════════
+   MODAL NIVELL — crear i editar
+══════════════════════════════════════════════════════ */
+function modalNivell(existent) {
+  crearModal(`${existent ? '✏️ Editar' : '+ Nou'} nivell`, `
+    <div style="margin-bottom:12px;">
+      <label style="font-size:13px;font-weight:600;color:#374151;display:block;margin-bottom:6px;">Nom *</label>
+      <input id="inpNivNom" type="text" value="${esH(existent?.nom||'')}"
+        placeholder="Ex: 1r ESO, 2n Batxillerat..."
+        style="width:100%;box-sizing:border-box;padding:10px 12px;border:1.5px solid #e5e7eb;
+               border-radius:10px;font-size:14px;outline:none;font-family:inherit;">
+    </div>
+    <div>
+      <label style="font-size:13px;font-weight:600;color:#374151;display:block;margin-bottom:6px;">Curs acadèmic *</label>
+      <input id="inpNivCurs" type="text"
+        value="${esH(existent?.curs||(window._cursActiu||'2025-26'))}"
+        placeholder="2025-26"
+        style="width:100%;box-sizing:border-box;padding:10px 12px;border:1.5px solid #e5e7eb;
+               border-radius:10px;font-size:14px;outline:none;font-family:inherit;">
+    </div>
+  `, async () => {
+    const nom  = document.getElementById('inpNivNom').value.trim();
+    const curs = document.getElementById('inpNivCurs').value.trim();
+    if (!nom || !curs) { window.mostrarToast('⚠️ Omple els camps obligatoris'); return false; }
+    const data = { nom, curs, ordre: existent?.ordre ?? 99 };
+    if (existent) {
+      await window.db.collection('nivells_centre').doc(existent.id).update(data);
+    } else {
+      // Calcular ordre màxim
+      const snap = await window.db.collection('nivells_centre').get();
+      data.ordre = snap.size + 1;
+      await window.db.collection('nivells_centre').add(data);
+    }
+    await guardarCursActiu(curs);
+    window.mostrarToast(existent ? '✅ Nivell actualitzat' : '✅ Nivell creat');
+    await window._secOnNivellCreat?.();
+    return true;
+  });
+  setTimeout(() => document.getElementById('inpNivNom')?.focus(), 100);
+}
+
 function modalGrupMateria(existent, parentGrupId, parentGrup, nivell) {
   const TIPUS_MAT = [
     {v:'materia',  i:'📚', l:'Matèria'},
