@@ -961,10 +961,10 @@ async function mostrarSelectorPeriodes() {
                      cursor:${tancat ? 'default' : 'pointer'};
                      display:flex;justify-content:space-between;align-items:center;
                      font-size:13px;font-weight:600;
-                     color:${tancat ? '#dc2626' : jaExisteix ? '#9ca3af' : '#1e1b4b'};">
+                     color:${tancat ? '#dc2626' : '#1e1b4b'};">
               <span>${p.nom}</span>
               <span style="font-size:11px;font-weight:400;color:#9ca3af;">
-                ${tancat ? '🔒 Tancat' : jaExisteix ? '✓ Ja creat' : ''}
+                ${tancat ? '🔒 Tancat' : ''}
               </span>
             </button>`;
         }).join('')}
