@@ -98,10 +98,8 @@ function injectarBotoAvaluacioCentre() {
 async function obrirModalAvaluacioCentre() {
   document.getElementById('modalAvaluacioCentre')?.remove();
 
-  const [materies, grups] = await Promise.all([
-    carregarMateriesCentre(),
-    carregarGrupsCentre()
-  ]);
+  const grups = await carregarGrupsCentre();
+  const materies = []; // matèria s'agafa del grup
 
   // Preseleccionar a partir del nom de la classe actual
   const classTitle = document.getElementById('classTitle')?.textContent || '';
@@ -148,23 +146,17 @@ async function obrirModalAvaluacioCentre() {
         <div style="font-size:12px;font-weight:700;color:#7c3aed;letter-spacing:0.05em;margin-bottom:14px;">
           PAS 1 — CONFIGURACIÓ
         </div>
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:14px;">
-          <div>
-            <label style="font-size:12px;font-weight:600;color:#374151;display:block;margin-bottom:5px;">Matèria del centre *</label>
-            <select id="selMateriaAC" style="width:100%;padding:9px 12px;border:1.5px solid #e5e7eb;
-                    border-radius:9px;font-size:13px;outline:none;background:#fff;">
-              <option value="">— Tria la matèria —</option>
-              ${materies.map(m => `<option value="${m.id}" data-nom="${escapeHtml(m.nom)}">${escapeHtml(m.nom)}</option>`).join('')}
-            </select>
-          </div>
-          <div>
-            <label style="font-size:12px;font-weight:600;color:#374151;display:block;margin-bottom:5px;">Grup del centre *</label>
-            <select id="selGrupAC" style="width:100%;padding:9px 12px;border:1.5px solid #e5e7eb;
-                    border-radius:9px;font-size:13px;outline:none;background:#fff;">
-              <option value="">— Tria el grup —</option>
-              ${grupsOpts}
-            </select>
-          </div>
+        <div style="margin-bottom:14px;">
+          <label style="font-size:12px;font-weight:600;color:#374151;display:block;margin-bottom:5px;">
+            Grup del centre * 
+            <span style="font-weight:400;color:#9ca3af;">(grup classe, matèria o projecte)</span>
+          </label>
+          <select id="selGrupAC" style="width:100%;padding:9px 12px;border:1.5px solid #e5e7eb;
+                  border-radius:9px;font-size:13px;outline:none;background:#fff;">
+            <option value="">— Tria el grup —</option>
+            ${grupsOpts}
+          </select>
+          <div id="infoGrupAC" style="font-size:11px;color:#9ca3af;margin-top:4px;"></div>
         </div>
         <div>
           <label style="font-size:12px;font-weight:600;color:#374151;display:block;margin-bottom:5px;">
@@ -248,20 +240,15 @@ async function obrirModalAvaluacioCentre() {
           }
         }
 
-        // Preseleccionar matèria si la classe té materiaId guardat
-        if (classeData.materiaId) {
-          const selMat = document.getElementById('selMateriaAC');
-          if (selMat) selMat.value = classeData.materiaId;
-        }
-
-        // Preseleccionar descripció comuna si la matèria en té una
-        const selMat = document.getElementById('selMateriaAC');
-        if (selMat?.value) {
-          const matDoc = await window.db.collection('materies_centre').doc(selMat.value).get();
-          const descComuna = matDoc.data()?.descripcioComuna;
-          if (descComuna) {
-            const ta = document.getElementById('descComunaAC');
-            if (ta && !ta.value) ta.value = descComuna;
+        // Si el grup té descripció comuna, preomplir
+        if (grupCentreId || classeData.grupCentreId) {
+          const gId = grupCentreId || classeData.grupCentreId;
+          const gDoc = await window.db.collection('grups_centre').doc(gId).get();
+          if (gDoc.exists) {
+            const gData = gDoc.data();
+            // Mostrar info del grup
+            const info = document.getElementById('infoGrupAC');
+            if (info) info.textContent = `${gData.nivellNom||''} · ${(gData.alumnes||[]).length} alumnes`;
           }
         }
       }
@@ -289,6 +276,21 @@ async function carregarComentarisClasse() {
   if (!classId) {
     window.mostrarToast('⚠️ Primer obre una classe', 3000);
     return;
+  }
+
+  // Mostrar info del grup seleccionat
+  const selGrup = document.getElementById('selGrupAC');
+  if (selGrup?.value) {
+    try {
+      const gDoc = await window.db.collection('grups_centre').doc(selGrup.value).get();
+      if (gDoc.exists) {
+        const info = document.getElementById('infoGrupAC');
+        if (info) {
+          const gd = gDoc.data();
+          info.textContent = `${gd.nivellNom||''} · ${(gd.alumnes||[]).length} alumnes al centre`;
+        }
+      }
+    } catch(e) {}
   }
 
   const btn = document.getElementById('btnCarregarComentarisAC');
@@ -464,12 +466,11 @@ function mostrarResumAlumnes(alumnes) {
    Cada alumne té els seus propis ítems i comentari
 ══════════════════════════════════════════════════════ */
 async function enviarAvaluacioCentre() {
-  const materiaEl  = document.getElementById('selMateriaAC');
   const grupEl     = document.getElementById('selGrupAC');
   const descComuna = document.getElementById('descComunaAC')?.value?.trim() || '';
 
-  if (!materiaEl?.value || !grupEl?.value) {
-    window.mostrarToast('⚠️ Selecciona matèria i grup', 3000);
+  if (!grupEl?.value) {
+    window.mostrarToast('⚠️ Selecciona el grup', 3000);
     return;
   }
 
@@ -479,12 +480,13 @@ async function enviarAvaluacioCentre() {
     return;
   }
 
-  const materiaId  = materiaEl.value;
-  const materiaNom = materiaEl.options[materiaEl.selectedIndex]?.dataset.nom || materiaEl.value;
   const grupId     = grupEl.value;
   const grupNom    = grupEl.options[grupEl.selectedIndex]?.dataset.nom || grupEl.value;
   const curs       = grupEl.options[grupEl.selectedIndex]?.dataset.curs || '2024-25';
-  const periodeId  = window.currentPeriodeId || 'general';
+  // Usem grupId com a materiaId — el grup ja identifica la matèria/classe/projecte
+  const materiaId  = grupId;
+  const materiaNom = grupNom;
+  const periodeId  = window._tcClassId || window.currentPeriodeId || 'general';
   const profUid    = firebase.auth().currentUser?.uid || '';
   const profEmail  = firebase.auth().currentUser?.email || '';
 
@@ -594,7 +596,7 @@ function preseleccionarValors(modal, classTitle, classSub, materies, grups) {
     titleLower.includes(m.nom.toLowerCase())
   );
   if (materiaTrobada) {
-    const selMateria = modal.querySelector('#selMateriaAC');
+    // selMateria eliminat — el grup identifica la matèria
     if (selMateria) selMateria.value = materiaTrobada.id;
   }
 
