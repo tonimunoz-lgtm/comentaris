@@ -521,14 +521,28 @@ function iniciarEscoltaCanvisGrup() {
     // Escoltar canvis al grup del centre
     const unsub = window.db.collection('grups_centre').doc(grupCentreId)
       .onSnapshot(snap => {
-        if (!snap.metadata.hasPendingWrites && snap.exists) {
+        if (!snap.metadata.hasPendingWrites && !snap.metadata.fromCache && snap.exists) {
           const alumnesCentre = snap.data()?.alumnes || [];
-          const alumnesClasse = window.classStudents || [];
-
-          // Comparar nombre d'alumnes
-          if (alumnesCentre.length !== alumnesClasse.length && alumnesCentre.length > 0) {
-            mostrarBannerActualitzacio(alumnesCentre.length, alumnesClasse.length, grupCentreId);
-          }
+          if (!alumnesCentre.length) return;
+          // Async check en IIFE
+          (async () => {
+            try {
+              const classId = window.currentClassId;
+              if (!classId) return;
+              const classeDoc2 = await window.db.collection('classes').doc(classId).get();
+              const alumnesIds = classeDoc2?.data()?.alumnes || [];
+              // Carregar RALCs dels alumnes actuals (mostra de 5 per velocitat)
+              const sampleDocs = await Promise.all(
+                alumnesIds.slice(0,10).map(id => window.db.collection('alumnes').doc(id).get())
+              );
+              const ralcsClasse = new Set(sampleDocs.map(d=>d.data()?.ralc).filter(Boolean));
+              const ralcsCentre = alumnesCentre.map(a=>a.ralc).filter(Boolean);
+              const novsRalcs = ralcsCentre.filter(r => r && !ralcsClasse.has(r));
+              if (novsRalcs.length > 0 && !document.getElementById('_bannerActualitzacio')) {
+                mostrarBannerActualitzacio(alumnesCentre.length, alumnesIds.length, grupCentreId);
+              }
+            } catch(e) {}
+          })();
         }
       }, () => {});
 
@@ -610,8 +624,16 @@ function mostrarBannerActualitzacio(nCentre, nClasse, grupCentreId) {
       await nousBatch.commit();
 
       banner.remove();
-      window.mostrarToast?.(`✅ ${nousIds.length - alumnesActuals.length} alumnes nous afegits`);
-      if (typeof window.renderStudentsList === 'function') window.renderStudentsList();
+      const nouCount = nousIds.length - alumnesActuals.length;
+      window.mostrarToast?.(`✅ ${nouCount} alumnes nous afegits`);
+      // Recarregar la classe completament
+      if (typeof window.renderStudentsList === 'function') {
+        // Actualitzar classStudents directament
+        window.classStudents = nousIds;
+        window.renderStudentsList();
+      }
+      // Forçar recàrrega completa de la classe si la funció és accessible
+      if (typeof loadClassData === 'function') loadClassData();
     } catch(e) {
       banner.remove();
       window.mostrarToast?.('❌ Error: ' + e.message);
@@ -639,6 +661,31 @@ firebase.auth().onAuthStateChanged(user => {
     }
   }, 1000);
 });
+
+
+/* ══════════════════════════════════════════════════════
+   OCULTAR BOTONS D'ALUMNES DEL PROFESSOR
+   El control d'alumnes és exclusiu de Secretaria
+══════════════════════════════════════════════════════ */
+function ocultarBotonsAlumnesProfesor() {
+  if (document.getElementById('_styleOcultarAlumnes')) return;
+  const style = document.createElement('style');
+  style.id = '_styleOcultarAlumnes';
+  style.textContent = `
+    #btnAddStudent,
+    #btnImportAL,
+    #btnDeleteMode,
+    #btnCancelDeleteStudents,
+    #confirmDeleteStudentsBtn {
+      display: none !important;
+    }
+  `;
+  document.head.appendChild(style);
+}
+
+// Activar immediatament
+document.addEventListener('DOMContentLoaded', ocultarBotonsAlumnesProfesor);
+if (document.readyState !== 'loading') ocultarBotonsAlumnesProfesor();
 
 
 console.log('✅ app-patch.js v2: integració completada');
