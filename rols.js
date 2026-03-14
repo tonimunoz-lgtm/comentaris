@@ -1,5 +1,5 @@
 // rols.js — Sistema de rols i permisos per UltraComentator
-// Rols: superadmin > admin > secretaria > tutor > professor > revisor
+// Rols: superadmin > admin > secretaria > pedagog > tutor > professor > revisor
 // Porta trasera: escriure "abracadabra" des de qualsevol lloc → accés superadmin
 
 console.log('🔐 rols.js carregat');
@@ -12,13 +12,14 @@ window.ROLS = {
   ADMIN:      'admin',
   SECRETARIA: 'secretaria',
   TUTOR:      'tutor',
+  PEDAGOG:    'pedagog',
   PROFESSOR:  'professor',
   REVISOR:    'revisor'
 };
 
 // Jerarquia: cada rol inclou els permisos dels inferiors
 const ROL_JERARQUIA = [
-  'superadmin', 'admin', 'secretaria', 'tutor', 'professor', 'revisor'
+  'superadmin', 'admin', 'secretaria', 'pedagog', 'tutor', 'professor', 'revisor'
 ];
 
 // Perfil de l'usuari actual
@@ -75,6 +76,7 @@ window.teRol = function(rolRequerit) {
 window.esAdmin     = () => window.teRol('admin');
 window.esSecretaria= () => window.teRol('secretaria');
 window.esTutor     = () => window.teRol('tutor');
+window.esPedagog   = () => window.teRol('pedagog');
 window.esProfessor = () => true; // tots poden ser professors
 window.esRevisor   = () => window._userRols?.includes('revisor');
 
@@ -323,8 +325,8 @@ function actualitzarUIRols() {
   }
 
 
-  // Botó Tutoria (per a tutors)
-  if (window.teRol('tutor') && !window.teRol('secretaria')) {
+  // Botó Tutoria (per a tutors i pedagogs)
+  if ((window.teRol('tutor') || window.teRol('pedagog')) && !window.teRol('secretaria')) {
     if (!document.getElementById('tutoriaNavBtn')) {
       const tutBtn = document.createElement('button');
       tutBtn.id = 'tutoriaNavBtn';
