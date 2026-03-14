@@ -1578,28 +1578,17 @@ async function carregarDadesButlletins(grups) {
   try {
     const db = window.db;
     const grupDoc = grups.find(g=>g.id===grupId);
-    const alumnesCentre = grupDoc?.alumnes || [];
+    let alumnesCentre = grupDoc?.alumnes || [];
 
-    if (alumnesCentre.length === 0) {
-      resDiv.innerHTML = '<p style="color:#9ca3af;text-align:center;padding:30px;">Cap alumne en aquest grup. Afegeix alumnes des de la pestanya Estructura.</p>';
-      return;
-    }
-
-    // Estratègia: llegir totes les subcoleccions conegudes de avaluacio_centre/{curs}
-    // Les subcoleccions s'identifiquen per:
-    //   1. grupId = el grupId del grup classe seleccionat (professors envien per grup classe)
-    //   2. grupId = qualsevol subcolecció on grupId === grupId
-    // Com que Firestore JS no permet llistar subcoleccions des del client,
-    // llegim TOTS els grups del centre del mateix curs i busquem dades per a cada un
-
+    // Estratègia: llegir totes les subcoleccions de avaluacio_centre/{curs}
+    // que tinguin dades per a aquest grup classe
     const totsGrups = await carregarGrupsCentre();
-    // Candidats: tots els grups del curs (tant grups classe com matèries)
     const candidats = totsGrups.filter(g => !g.curs || g.curs === curs);
 
     const materiesAmbDades = [];
     const alumnesAmbDades  = {};
 
-    // Inicialitzar amb tots els alumnes del centre
+    // 1r: Si el grup té alumnes a grups_centre, usar-los com a llista mestra
     alumnesCentre.forEach(a => {
       const key = a.ralc || `${a.cognoms}_${a.nom}`;
       alumnesAmbDades[key] = {
@@ -1628,9 +1617,10 @@ async function carregarDadesButlletins(grups) {
             const d = doc.data();
             const key = d.ralc || `${d.cognoms}_${d.nom}`;
             if (!alumnesAmbDades[key]) {
+              // Alumne trobat a avaluacio_centre però no al grup — afegir-lo
               alumnesAmbDades[key] = {
                 nom: d.nom||'', cognoms: d.cognoms||'', ralc: d.ralc||'',
-                nomComplet: d.cognoms ? `${d.cognoms}, ${d.nom}` : d.nom,
+                nomComplet: d.cognoms ? `${d.cognoms}, ${d.nom}` : (d.nom||'Desconegut'),
                 materies: {}
               };
             }
@@ -1709,6 +1699,12 @@ async function carregarDadesButlletins(grups) {
           <strong style="color:#dc2626;">${senseDades.length}</strong> sense dades
         </div>
         <div style="display:flex;gap:8px;">
+          ${alumnesCentre.length === 0 && ambDades.length > 0 ? `
+            <button id="bReconstruir" style="padding:7px 14px;background:#f59e0b;color:#fff;border:none;border-radius:8px;font-weight:600;cursor:pointer;font-size:12px;"
+              title="Recupera la llista d'alumnes al grup classe des de les dades d'avaluació">
+              🔄 Recuperar alumnes al grup
+            </button>
+          ` : ''}
           <button id="bGenTots" style="padding:7px 14px;background:#7c3aed;color:#fff;border:none;border-radius:8px;font-weight:600;cursor:pointer;font-size:12px;">
             📄 Generar tots (${ambDades.length})
           </button>
@@ -1752,6 +1748,24 @@ async function carregarDadesButlletins(grups) {
     `;
 
     // Events
+    document.getElementById('bReconstruir')?.addEventListener('click', async () => {
+      const btn = document.getElementById('bReconstruir');
+      btn.disabled = true; btn.textContent = '⏳ Recuperant...';
+      // Reconstruir la llista d'alumnes al grup classe des d'avaluacio_centre
+      const alumnesRecup = ambDades.map(a => ({
+        nom: a.nom, cognoms: a.cognoms, ralc: a.ralc
+      }));
+      try {
+        await window.db.collection('grups_centre').doc(grupId).update({ alumnes: alumnesRecup });
+        window.mostrarToast(`✅ ${alumnesRecup.length} alumnes recuperats al grup classe`, 3000);
+        btn.textContent = '✅ Recuperat!';
+        setTimeout(() => document.getElementById('bCarregar')?.click(), 1000);
+      } catch(e) {
+        window.mostrarToast('❌ Error: ' + e.message);
+        btn.disabled = false; btn.textContent = '🔄 Recuperar alumnes al grup';
+      }
+    });
+
     document.getElementById('bGenTots')?.addEventListener('click', () => {
       ambDades.forEach(a => generarButlleti(a, curs, grupDoc?.nom||''));
     });
