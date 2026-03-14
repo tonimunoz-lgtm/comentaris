@@ -1502,94 +1502,144 @@ async function modalEditarRols(usuari, onGuardat) {
    professors no puguin modificar aquella avaluació
 ══════════════════════════════════════════════════════ */
 async function renderPeriodes(body) {
-  const PERIODES_FIXES = [
-    { codi: 'preav', nom: 'Pre-avaluació',  ordre: 0 },
-    { codi: 'T1',    nom: '1r Trimestre',   ordre: 1 },
-    { codi: 'T2',    nom: '2n Trimestre',   ordre: 2 },
-    { codi: 'T3',    nom: '3r Trimestre',   ordre: 3 },
-    { codi: 'final', nom: 'Final de curs',  ordre: 4 },
+  const PERIODES = [
+    { codi: 'preav', nom: 'Pre-avaluació', ordre: 0 },
+    { codi: 'T1',    nom: '1r Trimestre',  ordre: 1 },
+    { codi: 'T2',    nom: '2n Trimestre',  ordre: 2 },
+    { codi: 'T3',    nom: '3r Trimestre',  ordre: 3 },
+    { codi: 'final', nom: 'Final de curs', ordre: 4 },
   ];
 
-  // Llegir estat actual
+  // Llegir estat actual de Firestore
   let tancats = [];
+  let nomsPersonalitzats = {}; // codi → nom personalitzat
   try {
     const doc = await window.db.collection('_sistema').doc('periodes_tancats').get();
-    tancats = doc.data()?.tancats || [];
+    if (doc.exists) {
+      tancats = doc.data()?.tancats || [];
+      nomsPersonalitzats = doc.data()?.noms || {};
+    }
   } catch(e) {}
 
-  body.innerHTML = `
-    <h3 style="font-size:16px;font-weight:700;color:#1e1b4b;margin-bottom:6px;">🔒 Control de períodes</h3>
-    <p style="font-size:13px;color:#6b7280;margin-bottom:20px;">
-      Tanca un període per impedir que els professors modifiquin les avaluacions d'aquell trimestre.
-      Els professors podran consultar els comentaris però no crear-ne de nous ni modificar-los.
-    </p>
+  // Aplicar noms personalitzats
+  const periodes = PERIODES.map(p => ({
+    ...p,
+    nomMostrat: nomsPersonalitzats[p.codi] || p.nom
+  }));
 
-    <div style="display:flex;flex-direction:column;gap:10px;max-width:500px;" id="llista-periodes-ctrl"></div>
+  const render = () => {
+    body.innerHTML = `
+      <h3 style="font-size:16px;font-weight:700;color:#1e1b4b;margin-bottom:6px;">📅 Gestió de períodes</h3>
+      <p style="font-size:13px;color:#6b7280;margin-bottom:20px;">
+        Defineix els períodes d'avaluació del curs. Pots canviar-ne el nom, tancar-los
+        (impedeix que els professors hi enviïn avaluacions) o obrir-los de nou.
+      </p>
 
-    <div style="margin-top:24px;background:#fef3c7;border:1.5px solid #fde68a;border-radius:10px;
-                padding:14px 16px;font-size:12px;color:#92400e;max-width:500px;">
-      <strong>⚠️ Nota:</strong> Un cop tancat un període, els professors veiran el missatge
-      "🔒 Avaluació tancada" i no podran enviar noves avaluacions per a aquell trimestre.
-      Pots tornar a obrir-lo en qualsevol moment.
-    </div>
-  `;
+      <div style="display:flex;flex-direction:column;gap:10px;max-width:580px;" id="llista-periodes">
+        ${periodes.map(p => {
+          const tancat = tancats.includes(p.codi);
+          return `
+            <div style="display:flex;align-items:center;gap:12px;padding:14px 18px;
+                        border-radius:12px;border:2px solid ${tancat?'#fca5a5':'#e5e7eb'};
+                        background:${tancat?'#fef2f2':'#f9fafb'};"
+                 id="row-periode-${p.codi}">
+              <!-- Ordre drag handle -->
+              <span style="color:#d1d5db;font-size:18px;cursor:grab;flex-shrink:0;">⠿</span>
 
-  const renderLlista = () => {
-    const cont = document.getElementById('llista-periodes-ctrl');
-    if (!cont) return;
-    cont.innerHTML = PERIODES_FIXES.map(p => {
-      const tancat = tancats.includes(p.codi);
-      return `
-        <div style="display:flex;align-items:center;justify-content:space-between;
-                    padding:14px 18px;border-radius:12px;border:2px solid ${tancat?'#fca5a5':'#e5e7eb'};
-                    background:${tancat?'#fef2f2':'#f9fafb'};">
-          <div>
-            <div style="font-weight:700;font-size:14px;color:${tancat?'#dc2626':'#1e1b4b'};">
-              ${tancat?'🔒 ':''} ${esH(p.nom)}
+              <!-- Nom editable inline -->
+              <div style="flex:1;min-width:0;">
+                <input class="inp-periode-nom" data-codi="${p.codi}"
+                  value="${esH(p.nomMostrat)}"
+                  style="font-weight:700;font-size:14px;color:${tancat?'#dc2626':'#1e1b4b'};
+                         border:none;background:transparent;outline:none;font-family:inherit;
+                         width:100%;cursor:text;padding:0;">
+                <div style="font-size:11px;color:#9ca3af;margin-top:3px;">
+                  ${tancat
+                    ? '🔒 Tancat — professors no poden enviar avaluacions'
+                    : '✅ Obert — professors poden enviar avaluacions'}
+                </div>
+              </div>
+
+              <!-- Botó tancar/obrir -->
+              <button class="btn-toggle-periode" data-codi="${p.codi}" data-tancat="${tancat}"
+                style="padding:7px 16px;border:none;border-radius:8px;font-weight:700;
+                       cursor:pointer;font-size:12px;white-space:nowrap;flex-shrink:0;
+                       background:${tancat?'#059669':'#dc2626'};color:#fff;">
+                ${tancat ? '🔓 Obrir' : '🔒 Tancar'}
+              </button>
             </div>
-            <div style="font-size:11px;color:#9ca3af;margin-top:2px;">
-              ${tancat
-                ? 'Tancat — els professors no poden enviar avaluacions'
-                : 'Obert — els professors poden enviar avaluacions'}
-            </div>
-          </div>
-          <button class="btn-toggle-periode" data-codi="${p.codi}" data-tancat="${tancat}"
-            style="padding:8px 18px;border:none;border-radius:9px;font-weight:700;
-                   cursor:pointer;font-size:13px;white-space:nowrap;
-                   background:${tancat?'#059669':'#dc2626'};color:#fff;">
-            ${tancat ? '🔓 Obrir' : '🔒 Tancar'}
-          </button>
-        </div>
-      `;
-    }).join('');
+          `;
+        }).join('')}
+      </div>
 
-    cont.querySelectorAll('.btn-toggle-periode').forEach(btn => {
+      <div style="margin-top:16px;max-width:580px;">
+        <button id="btnGuardarNomsPeriodes" style="padding:9px 20px;background:#7c3aed;color:#fff;
+          border:none;border-radius:9px;font-weight:700;cursor:pointer;font-size:13px;">
+          💾 Guardar noms
+        </button>
+      </div>
+
+      <div style="margin-top:24px;background:#fef3c7;border:1.5px solid #fde68a;border-radius:10px;
+                  padding:14px 16px;font-size:12px;color:#92400e;max-width:580px;">
+        <strong>ℹ️ Nota:</strong> Els noms dels períodes s'apliquen globalment a tot el centre.
+        Tancar un període impedeix als professors enviar noves avaluacions per aquell trimestre,
+        però poden continuar veient el que ja han enviat.
+      </div>
+    `;
+
+    // ── Events tancar/obrir ────────────────────────────────────────
+    body.querySelectorAll('.btn-toggle-periode').forEach(btn => {
       btn.addEventListener('click', async () => {
-        const codi   = btn.dataset.codi;
-        const tancat = btn.dataset.tancat === 'true';
-        btn.disabled = true;
-        btn.textContent = '⏳';
+        const codi  = btn.dataset.codi;
+        const curr  = btn.dataset.tancat === 'true';
+        btn.disabled = true; btn.textContent = '⏳';
         try {
-          if (tancat) {
-            tancats = tancats.filter(c => c !== codi);
-          } else {
-            tancats = [...new Set([...tancats, codi])];
-          }
+          if (curr) tancats = tancats.filter(c => c !== codi);
+          else tancats = [...new Set([...tancats, codi])];
+
           await window.db.collection('_sistema').doc('periodes_tancats').set(
-            { tancats }, { merge: false }
+            { tancats, noms: nomsPersonalitzats }, { merge: false }
           );
-          window.mostrarToast(tancat ? `✅ "${btn.closest('div>div').querySelector('div').textContent.trim().replace('🔒','')} " obert` : `🔒 Període tancat`);
-          renderLlista();
+          window.mostrarToast(curr ? '✅ Període obert' : '🔒 Període tancat');
+          render(); // re-renderitzar
         } catch(e) {
           window.mostrarToast('❌ Error: ' + e.message);
           btn.disabled = false;
         }
       });
     });
+
+    // ── Event guardar noms ─────────────────────────────────────────
+    body.querySelector('#btnGuardarNomsPeriodes')?.addEventListener('click', async () => {
+      body.querySelectorAll('.inp-periode-nom').forEach(inp => {
+        const codi = inp.dataset.codi;
+        const nom  = inp.value.trim();
+        const orig = PERIODES.find(p=>p.codi===codi)?.nom;
+        if (nom && nom !== orig) nomsPersonalitzats[codi] = nom;
+        else delete nomsPersonalitzats[codi];
+      });
+      try {
+        await window.db.collection('_sistema').doc('periodes_tancats').set(
+          { tancats, noms: nomsPersonalitzats }, { merge: false }
+        );
+        window.mostrarToast('✅ Noms guardats');
+        render();
+      } catch(e) {
+        window.mostrarToast('❌ Error: ' + e.message);
+      }
+    });
+
+    // ── Enter en un nom → moure focus al següent ──────────────────
+    body.querySelectorAll('.inp-periode-nom').forEach((inp, i, all) => {
+      inp.addEventListener('keydown', e => {
+        if (e.key === 'Enter') { e.preventDefault(); all[i+1]?.focus(); }
+      });
+    });
   };
 
-  renderLlista();
+  render();
 }
+
 
 async function renderButlletins(body) {
   const [nivells, grups, cursActiu] = await Promise.all([
