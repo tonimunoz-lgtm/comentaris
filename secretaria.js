@@ -179,7 +179,6 @@ async function carregarTab(tab) {
    TAB ESTRUCTURA: Nivells → Grups/Matèries/Projectes → Alumnes
 ══════════════════════════════════════════════════════ */
 async function renderEstructura(body) {
-  // Carregar curs actiu
   const cursActiu = await carregarCursActiu();
 
   const [nivells, grups] = await Promise.all([
@@ -187,450 +186,452 @@ async function renderEstructura(body) {
     carregarGrupsCentre()
   ]);
 
-  // Agrupar grups per nivell
-  const grupsPer = {};
+  // Índexs
+  const grupsPer = {};   // grupsPer[nivellId] = [grups]
+  const materiesPer = {}; // materiesPer[grupId] = [matèries/projectes/optatives]
   grups.forEach(g => {
-    if (!grupsPer[g.nivellId]) grupsPer[g.nivellId] = [];
-    grupsPer[g.nivellId].push(g);
+    if (g.tipus === 'classe') {
+      if (!grupsPer[g.nivellId]) grupsPer[g.nivellId] = [];
+      grupsPer[g.nivellId].push(g);
+    } else {
+      // matèria/projecte/optativa: parentGrupId és el grup classe pare
+      const parentId = g.parentGrupId || g.nivellId;
+      if (!materiesPer[parentId]) materiesPer[parentId] = [];
+      materiesPer[parentId].push(g);
+    }
   });
 
   // Estat de selecció
-  let nivellActiu = null;
-  let grupActiu   = null;  // el grup "classe" actiu (tipus=classe)
-  let tipusActiu  = null;  // el grup "matèria/projecte/optativa" actiu
+  let nivellActiu  = null;
+  let grupActiu    = null;   // grup classe seleccionat
+  let materiaActiva = null;  // matèria/projecte/optativa seleccionada
+  // Quin panell mostra alumnes: 'grup' o 'materia'
+  let alumnesFont  = null;
 
   // ── Layout 4 columnes ──────────────────────────────
   body.innerHTML = `
-    <div style="display:flex;gap:0;height:100%;min-height:500px;overflow-x:auto;">
+    <div style="display:flex;gap:0;height:calc(100vh - 180px);min-height:400px;overflow-x:auto;">
 
       <!-- COL 1: NIVELLS -->
-      <div style="width:190px;flex-shrink:0;display:flex;flex-direction:column;padding-right:16px;border-right:1px solid #e5e7eb;">
+      <div style="width:175px;flex-shrink:0;display:flex;flex-direction:column;padding-right:14px;border-right:1px solid #e5e7eb;">
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
-          <span style="font-size:11px;font-weight:700;color:#7c3aed;letter-spacing:0.05em;">NIVELLS</span>
-          <button id="btnNouNivell" style="background:#7c3aed;color:#fff;border:none;border-radius:6px;padding:3px 9px;font-size:11px;font-weight:700;cursor:pointer;">+ Nou</button>
+          <span style="font-size:11px;font-weight:700;color:#7c3aed;letter-spacing:0.04em;">NIVELLS</span>
+          <button id="btnNouNivell" style="background:#7c3aed;color:#fff;border:none;border-radius:5px;padding:2px 8px;font-size:11px;font-weight:700;cursor:pointer;">+ Nou</button>
         </div>
-        <div id="llista-nivells" style="display:flex;flex-direction:column;gap:5px;overflow-y:auto;flex:1;"></div>
+        <div id="col-nivells" style="flex:1;overflow-y:auto;display:flex;flex-direction:column;gap:4px;"></div>
       </div>
 
-      <!-- COL 2: GRUPS CLASSE -->
-      <div style="width:190px;flex-shrink:0;display:flex;flex-direction:column;padding:0 16px;border-right:1px solid #e5e7eb;">
+      <!-- COL 2: GRUPS (A, B, C, Els Anecs...) -->
+      <div style="width:175px;flex-shrink:0;display:flex;flex-direction:column;padding:0 14px;border-right:1px solid #e5e7eb;">
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
-          <span style="font-size:11px;font-weight:700;color:#2563eb;letter-spacing:0.05em;">🏫 GRUPS CLASSE</span>
-          <button id="btnNouGrupClasse" disabled style="background:#2563eb;color:#fff;border:none;border-radius:6px;padding:3px 9px;font-size:11px;font-weight:700;cursor:pointer;opacity:0.5;">+ Nou</button>
+          <span style="font-size:11px;font-weight:700;color:#2563eb;letter-spacing:0.04em;">GRUPS</span>
+          <button id="btnNouGrup" disabled style="background:#2563eb;color:#fff;border:none;border-radius:5px;padding:2px 8px;font-size:11px;font-weight:700;cursor:pointer;opacity:0.4;">+ Nou</button>
         </div>
-        <div id="llista-grups-classe" style="display:flex;flex-direction:column;gap:5px;overflow-y:auto;flex:1;">
-          <p style="font-size:11px;color:#9ca3af;text-align:center;padding:16px 0;">Selecciona un nivell</p>
+        <div id="col-grups" style="flex:1;overflow-y:auto;display:flex;flex-direction:column;gap:4px;">
+          <p style="font-size:11px;color:#9ca3af;text-align:center;padding:20px 0;">← Tria un nivell</p>
         </div>
       </div>
 
-      <!-- COL 3: MATÈRIES / PROJECTES / OPTATIVES -->
-      <div style="width:210px;flex-shrink:0;display:flex;flex-direction:column;padding:0 16px;border-right:1px solid #e5e7eb;">
-        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;flex-wrap:wrap;gap:4px;">
-          <span style="font-size:11px;font-weight:700;color:#059669;letter-spacing:0.05em;">📚 MATÈRIES / PROJECTES</span>
-          <button id="btnNouTipus" disabled style="background:#059669;color:#fff;border:none;border-radius:6px;padding:3px 9px;font-size:11px;font-weight:700;cursor:pointer;opacity:0.5;">+ Nou</button>
+      <!-- COL 3: MATÈRIES del grup seleccionat -->
+      <div style="width:200px;flex-shrink:0;display:flex;flex-direction:column;padding:0 14px;border-right:1px solid #e5e7eb;">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
+          <span style="font-size:11px;font-weight:700;color:#059669;letter-spacing:0.04em;" id="titol-col-mat">MATÈRIES</span>
+          <button id="btnNouMateria" disabled style="background:#059669;color:#fff;border:none;border-radius:5px;padding:2px 8px;font-size:11px;font-weight:700;cursor:pointer;opacity:0.4;">+ Nova</button>
         </div>
-        <div id="llista-tipus" style="display:flex;flex-direction:column;gap:5px;overflow-y:auto;flex:1;">
-          <p style="font-size:11px;color:#9ca3af;text-align:center;padding:16px 0;">Selecciona un nivell</p>
+        <div id="col-materies" style="flex:1;overflow-y:auto;display:flex;flex-direction:column;gap:4px;">
+          <p style="font-size:11px;color:#9ca3af;text-align:center;padding:20px 0;">← Tria un grup</p>
         </div>
       </div>
 
       <!-- COL 4: ALUMNES -->
-      <div style="flex:1;min-width:220px;display:flex;flex-direction:column;padding-left:16px;">
-        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;flex-wrap:wrap;gap:6px;">
-          <span style="font-size:11px;font-weight:700;color:#d97706;letter-spacing:0.05em;" id="titol-alumnes-col">👥 ALUMNES</span>
-          <div style="display:flex;gap:5px;">
-            <button id="btnNouAlumne" disabled style="background:#d97706;color:#fff;border:none;border-radius:6px;padding:3px 9px;font-size:11px;font-weight:700;cursor:pointer;opacity:0.5;">+ Alumne</button>
-            <button id="btnImportarAlumnes" disabled style="background:#059669;color:#fff;border:none;border-radius:6px;padding:3px 9px;font-size:11px;font-weight:700;cursor:pointer;opacity:0.5;">📥 Excel</button>
+      <div style="flex:1;min-width:220px;display:flex;flex-direction:column;padding-left:14px;">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;flex-wrap:wrap;gap:5px;">
+          <span style="font-size:11px;font-weight:700;color:#d97706;letter-spacing:0.04em;" id="titol-col-alumnes">ALUMNES</span>
+          <div style="display:flex;gap:4px;">
+            <button id="btnNouAlumne" disabled style="background:#d97706;color:#fff;border:none;border-radius:5px;padding:2px 8px;font-size:11px;font-weight:700;cursor:pointer;opacity:0.4;">+ Alumne</button>
+            <button id="btnImportarAlumnes" disabled style="background:#059669;color:#fff;border:none;border-radius:5px;padding:2px 8px;font-size:11px;font-weight:700;cursor:pointer;opacity:0.4;">📥 Excel</button>
           </div>
         </div>
-        <div id="llista-alumnes-col" style="flex:1;overflow-y:auto;">
-          <p style="font-size:11px;color:#9ca3af;text-align:center;padding:16px 0;">Selecciona un grup o matèria</p>
+        <div id="col-alumnes" style="flex:1;overflow-y:auto;">
+          <p style="font-size:11px;color:#9ca3af;text-align:center;padding:20px 0;">← Tria un grup o matèria</p>
         </div>
       </div>
     </div>
   `;
 
-  // ── Helpers d'interfície ──────────────────────────────
+  // ── Helpers ──────────────────────────────────────────
 
-  function itemStyle(actiu, color) {
-    return `padding:8px 10px;border-radius:8px;cursor:pointer;
-      border:1.5px solid ${actiu ? color : '#e5e7eb'};
-      background:${actiu ? color+'15' : '#fff'};
+  const color = { nivell:'#7c3aed', grup:'#2563eb', materia:'#059669', alumne:'#d97706' };
+
+  function cardStyle(actiu, c) {
+    return `padding:7px 9px;border-radius:7px;cursor:pointer;user-select:none;
+      border:1.5px solid ${actiu ? c : '#e5e7eb'};
+      background:${actiu ? c+'18' : '#fff'};
       display:flex;justify-content:space-between;align-items:center;
-      transition:all 0.12s;font-size:12px;`;
+      font-size:12px;transition:border-color 0.1s;`;
   }
 
-  function botoAccio(emoji, title) {
-    return `<button style="background:none;border:none;font-size:13px;cursor:pointer;padding:1px;opacity:0.7;" title="${title}">${emoji}</button>`;
+  function botoEdit(c) { return `<button class="btn-ed" style="background:none;border:none;font-size:12px;cursor:pointer;opacity:0.6;padding:1px 2px;" title="Editar">✏️</button>`; }
+  function botoDel()   { return `<button class="btn-dl" style="background:none;border:none;font-size:12px;cursor:pointer;opacity:0.6;padding:1px 2px;" title="Eliminar">🗑️</button>`; }
+
+  function enableBtn(id) {
+    const btn = document.getElementById(id);
+    if (btn) { btn.disabled = false; btn.style.opacity = '1'; }
   }
 
-  // ── RENDER NIVELLS ───────────────────────────────────
+  // Drag & drop entre elements de la mateixa llista
+  function afegirDD(el, cont, arr, idx, onDrop) {
+    el.addEventListener('dragstart', e => {
+      e._ddIdx = idx; el.style.opacity='0.45';
+      e.dataTransfer.effectAllowed='move';
+      cont._ddFrom = idx;
+    });
+    el.addEventListener('dragend', () => { el.style.opacity='1'; });
+    el.addEventListener('dragover', e => { e.preventDefault(); el.style.outline='2px dashed #7c3aed'; });
+    el.addEventListener('dragleave', () => { el.style.outline=''; });
+    el.addEventListener('drop', e => {
+      e.preventDefault(); el.style.outline='';
+      const from = cont._ddFrom;
+      const to   = idx;
+      if (from === undefined || from === to) return;
+      const [item] = arr.splice(from, 1);
+      arr.splice(to, 0, item);
+      arr.forEach((x,i) => {
+        x.ordre = i+1;
+        onDrop(x, i+1);
+      });
+    });
+  }
+
+  // ── COL 1: NIVELLS ───────────────────────────────────
   function renderNivells() {
-    const cont = document.getElementById('llista-nivells');
+    const cont = document.getElementById('col-nivells');
     if (!cont) return;
-    if (!nivells.length) {
-      cont.innerHTML = `<p style="font-size:11px;color:#9ca3af;text-align:center;">Cap nivell</p>`;
-      return;
-    }
-    cont.innerHTML = nivells
-      .sort((a,b)=>(a.ordre||99)-(b.ordre||99))
-      .map(n => `
-        <div class="nivell-item" data-id="${n.id}" draggable="true" style="${itemStyle(nivellActiu===n.id,'#7c3aed')}">
-          <div style="flex:1;min-width:0;">
-            <div style="font-weight:700;color:#1e1b4b;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${esH(n.nom)}</div>
-            <div style="font-size:10px;color:#9ca3af;">${esH(n.curs||'')} · ${(grupsPer[n.id]||[]).length} grups</div>
-          </div>
-          <div style="display:flex;gap:1px;flex-shrink:0;">
-            ${botoAccio('✏️','Editar')} ${botoAccio('🗑️','Eliminar')}
-          </div>
-        </div>`).join('');
-
-    cont.querySelectorAll('.nivell-item').forEach(el => {
+    const sorted = [...nivells].sort((a,b)=>(a.ordre||99)-(b.ordre||99));
+    cont.innerHTML = sorted.length ? '' : '<p style="font-size:11px;color:#9ca3af;text-align:center;padding:16px 0;">Cap nivell</p>';
+    sorted.forEach((n, i) => {
+      const el = document.createElement('div');
+      el.className = 'dd-item'; el.draggable = true;
+      el.style.cssText = cardStyle(nivellActiu===n.id, color.nivell);
+      el.innerHTML = `
+        <div style="flex:1;min-width:0;">
+          <div style="font-weight:700;color:#1e1b4b;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esH(n.nom)}</div>
+          <div style="font-size:10px;color:#9ca3af;">${esH(n.curs||'')} · ${(grupsPer[n.id]||[]).length} grups</div>
+        </div>
+        <div>${botoEdit()}${botoDel()}</div>`;
+      el.querySelector('.btn-ed').addEventListener('click', e => { e.stopPropagation(); modalNivell(n); });
+      el.querySelector('.btn-dl').addEventListener('click', e => {
+        e.stopPropagation();
+        if (!confirm(`Eliminar "${n.nom}"?`)) return;
+        eliminarNivell(n.id);
+      });
       el.addEventListener('click', e => {
         if (e.target.closest('button')) return;
-        nivellActiu = el.dataset.id;
-        grupActiu = null; tipusActiu = null;
-        renderNivells();
-        renderGrupsClasse();
-        renderTipus();
-        renderAlumnes(null);
-        const btnGC = document.getElementById('btnNouGrupClasse');
-        const btnT  = document.getElementById('btnNouTipus');
-        if (btnGC) { btnGC.disabled=false; btnGC.style.opacity='1'; }
-        if (btnT)  { btnT.disabled=false;  btnT.style.opacity='1'; }
+        nivellActiu = n.id; grupActiu = null; materiaActiva = null;
+        renderNivells(); renderGrups(); renderMateries(); renderAlumnes(null);
+        enableBtn('btnNouGrup');
       });
-      // Edit
-      el.querySelector('button:first-of-type')?.addEventListener('click', e => {
-        e.stopPropagation();
-        modalNivell(nivells.find(n=>n.id===el.dataset.id));
-      });
-      // Delete
-      el.querySelector('button:last-of-type')?.addEventListener('click', e => {
-        e.stopPropagation();
-        const n = nivells.find(n=>n.id===el.dataset.id);
-        if (!confirm(`Eliminar "${n?.nom}" i tots els seus grups?`)) return;
-        eliminarNivell(el.dataset.id);
-      });
-      // Drag & drop per reordenar
-      afegirDragDrop(el, cont, nivells, () => {
-        nivells.forEach((n,i) => {
-          n.ordre = i+1;
-          window.db.collection('nivells_centre').doc(n.id).update({ordre:i+1}).catch(()=>{});
-        });
-        renderNivells();
-      });
+      afegirDD(el, cont, sorted, i, (x,o) => window.db.collection('nivells_centre').doc(x.id).update({ordre:o}).catch(()=>{}));
+      cont.appendChild(el);
     });
   }
 
-  // ── RENDER GRUPS CLASSE ──────────────────────────────
-  function renderGrupsClasse() {
-    const cont = document.getElementById('llista-grups-classe');
+  // ── COL 2: GRUPS (A, B, C, etc.) ─────────────────────
+  function renderGrups() {
+    const cont = document.getElementById('col-grups');
     if (!cont) return;
     if (!nivellActiu) {
-      cont.innerHTML = `<p style="font-size:11px;color:#9ca3af;text-align:center;padding:16px 0;">Selecciona un nivell</p>`;
+      cont.innerHTML = '<p style="font-size:11px;color:#9ca3af;text-align:center;padding:20px 0;">← Tria un nivell</p>';
       return;
     }
-    const gs = (grupsPer[nivellActiu]||[])
-      .filter(g=>g.tipus==='classe')
-      .sort((a,b)=>(a.ordre||99)-(b.ordre||99));
-
-    if (!gs.length) {
-      cont.innerHTML = `<p style="font-size:11px;color:#9ca3af;text-align:center;padding:16px 0;">Cap grup classe. Crea'n un!</p>`;
-      return;
-    }
-    cont.innerHTML = gs.map(g => `
-      <div class="gc-item" data-id="${g.id}" draggable="true" style="${itemStyle(grupActiu===g.id,'#2563eb')}">
+    const gs = [...(grupsPer[nivellActiu]||[])].sort((a,b)=>(a.ordre||99)-(b.ordre||99));
+    cont.innerHTML = gs.length ? '' : '<p style="font-size:11px;color:#9ca3af;text-align:center;padding:20px 0;">Cap grup. Crea\'n un!</p>';
+    gs.forEach((g, i) => {
+      const el = document.createElement('div');
+      el.className = 'dd-item'; el.draggable = true;
+      el.style.cssText = cardStyle(grupActiu===g.id, color.grup);
+      el.innerHTML = `
         <div style="flex:1;min-width:0;">
-          <div style="font-weight:700;color:#1e1b4b;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">🏫 ${esH(g.nom)}</div>
-          <div style="font-size:10px;color:#9ca3af;">${(g.alumnes||[]).length} alumnes</div>
+          <div style="font-weight:700;color:#1e1b4b;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">🏫 ${esH(g.nom)}</div>
+          <div style="font-size:10px;color:#9ca3af;">${(g.alumnes||[]).length} alumnes · ${(materiesPer[g.id]||[]).length} mat.</div>
         </div>
-        <div style="display:flex;gap:1px;flex-shrink:0;">
-          ${botoAccio('✏️','Editar')} ${botoAccio('🗑️','Eliminar')}
-        </div>
-      </div>`).join('');
-
-    cont.querySelectorAll('.gc-item').forEach(el => {
+        <div>${botoEdit()}${botoDel()}</div>`;
+      el.querySelector('.btn-ed').addEventListener('click', e => { e.stopPropagation(); modalGrup(g); });
+      el.querySelector('.btn-dl').addEventListener('click', e => {
+        e.stopPropagation();
+        if (!confirm(`Eliminar "${g.nom}" i totes les dades associades?`)) return;
+        eliminarGrupComplet(g.id, g.nom).then(() => recarregar());
+      });
       el.addEventListener('click', e => {
         if (e.target.closest('button')) return;
-        grupActiu = el.dataset.id;
-        tipusActiu = null;
-        renderGrupsClasse();
-        const g = grups.find(x=>x.id===grupActiu);
-        document.getElementById('titol-alumnes-col').textContent = `👥 ALUMNES — ${g?.nom||''}`;
-        activarBtnsAlumnes();
+        grupActiu = g.id; materiaActiva = null;
+        renderGrups(); renderMateries();
+        // Mostrar alumnes del grup classe
+        document.getElementById('titol-col-alumnes').textContent = `ALUMNES — ${g.nom}`;
+        alumnesFont = 'grup';
         renderAlumnes(g);
+        enableBtn('btnNouMateria');
+        enableBtn('btnNouAlumne');
+        enableBtn('btnImportarAlumnes');
+        document.getElementById('titol-col-mat').textContent = `MATÈRIES — ${g.nom}`;
       });
-      el.querySelector('button:first-of-type')?.addEventListener('click', e => {
-        e.stopPropagation();
-        modalGrup(grups.find(g=>g.id===el.dataset.id));
-      });
-      el.querySelector('button:last-of-type')?.addEventListener('click', e => {
-        e.stopPropagation();
-        const g = grups.find(g=>g.id===el.dataset.id);
-        if (!confirm(`Eliminar "${g?.nom}" i totes les dades associades?`)) return;
-        eliminarGrupComplet(el.dataset.id, g?.nom||'').then(() => recarregarGrups());
-      });
-      afegirDragDrop(el, cont, gs, () => {
-        gs.forEach((g,i) => {
-          g.ordre = i+1;
-          window.db.collection('grups_centre').doc(g.id).update({ordre:i+1}).catch(()=>{});
-        });
-        renderGrupsClasse();
-      });
+      afegirDD(el, cont, gs, i, (x,o) => window.db.collection('grups_centre').doc(x.id).update({ordre:o}).catch(()=>{}));
+      cont.appendChild(el);
     });
   }
 
-  // ── RENDER MATÈRIES/PROJECTES/OPTATIVES ─────────────
-  function renderTipus() {
-    const cont = document.getElementById('llista-tipus');
+  // ── COL 3: MATÈRIES del grup seleccionat ─────────────
+  function renderMateries() {
+    const cont = document.getElementById('col-materies');
     if (!cont) return;
-    if (!nivellActiu) {
-      cont.innerHTML = `<p style="font-size:11px;color:#9ca3af;text-align:center;padding:16px 0;">Selecciona un nivell</p>`;
+    if (!grupActiu) {
+      cont.innerHTML = '<p style="font-size:11px;color:#9ca3af;text-align:center;padding:20px 0;">← Tria un grup</p>';
       return;
     }
-    const gs = (grupsPer[nivellActiu]||[])
-      .filter(g=>g.tipus!=='classe')
-      .sort((a,b)=>(a.ordre||99)-(b.ordre||99));
-
-    if (!gs.length) {
-      cont.innerHTML = `<p style="font-size:11px;color:#9ca3af;text-align:center;padding:16px 0;">Cap matèria/projecte. Crea'n un!</p>`;
-      return;
-    }
-    const ICONA = {materia:'📚',projecte:'🔬',optativa:'🎨'};
-    cont.innerHTML = gs.map(g => `
-      <div class="tip-item" data-id="${g.id}" draggable="true" style="${itemStyle(tipusActiu===g.id,'#059669')}">
+    const ICONA = { materia:'📚', projecte:'🔬', optativa:'🎨', tutoria:'🧑‍🏫' };
+    const ms = [...(materiesPer[grupActiu]||[])].sort((a,b)=>(a.ordre||99)-(b.ordre||99));
+    cont.innerHTML = ms.length ? '' : '<p style="font-size:11px;color:#9ca3af;text-align:center;padding:20px 0;">Cap matèria. Crea\'n una!</p>';
+    ms.forEach((m, i) => {
+      const el = document.createElement('div');
+      el.className = 'dd-item'; el.draggable = true;
+      el.style.cssText = cardStyle(materiaActiva===m.id, color.materia);
+      el.innerHTML = `
         <div style="flex:1;min-width:0;">
-          <div style="font-size:10px;color:#9ca3af;">${ICONA[g.tipus]||'📁'} ${g.tipus}</div>
-          <div style="font-weight:700;color:#1e1b4b;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${esH(g.nom)}</div>
-          <div style="font-size:10px;color:#9ca3af;">${(g.alumnes||[]).length} alumnes</div>
+          <div style="font-size:10px;color:#9ca3af;">${ICONA[m.tipus]||'📁'} ${m.tipus}</div>
+          <div style="font-weight:700;color:#1e1b4b;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esH(m.nom)}</div>
+          <div style="font-size:10px;color:#9ca3af;">${(m.alumnes||[]).length} alumnes</div>
         </div>
-        <div style="display:flex;gap:1px;flex-shrink:0;">
-          ${botoAccio('✏️','Editar')} ${botoAccio('🗑️','Eliminar')}
-        </div>
-      </div>`).join('');
-
-    cont.querySelectorAll('.tip-item').forEach(el => {
+        <div>${botoEdit()}${botoDel()}</div>`;
+      el.querySelector('.btn-ed').addEventListener('click', e => { e.stopPropagation(); modalGrup(m); });
+      el.querySelector('.btn-dl').addEventListener('click', e => {
+        e.stopPropagation();
+        if (!confirm(`Eliminar "${m.nom}"?`)) return;
+        eliminarGrupComplet(m.id, m.nom).then(() => recarregar());
+      });
       el.addEventListener('click', e => {
         if (e.target.closest('button')) return;
-        tipusActiu = el.dataset.id;
-        grupActiu = null;
-        renderTipus();
-        const g = grups.find(x=>x.id===tipusActiu);
-        document.getElementById('titol-alumnes-col').textContent = `👥 ALUMNES — ${g?.nom||''}`;
-        activarBtnsAlumnes();
-        renderAlumnes(g);
+        materiaActiva = m.id;
+        renderMateries();
+        document.getElementById('titol-col-alumnes').textContent = `ALUMNES — ${m.nom}`;
+        alumnesFont = 'materia';
+        renderAlumnes(m);
       });
-      el.querySelector('button:first-of-type')?.addEventListener('click', e => {
-        e.stopPropagation();
-        modalGrup(grups.find(g=>g.id===el.dataset.id));
-      });
-      el.querySelector('button:last-of-type')?.addEventListener('click', e => {
-        e.stopPropagation();
-        const g = grups.find(g=>g.id===el.dataset.id);
-        if (!confirm(`Eliminar "${g?.nom}"?`)) return;
-        eliminarGrupComplet(el.dataset.id, g?.nom||'').then(() => recarregarGrups());
-      });
-      afegirDragDrop(el, cont, gs, () => {
-        gs.forEach((g,i) => {
-          g.ordre = i+1;
-          window.db.collection('grups_centre').doc(g.id).update({ordre:i+1}).catch(()=>{});
-        });
-        renderTipus();
-      });
+      afegirDD(el, cont, ms, i, (x,o) => window.db.collection('grups_centre').doc(x.id).update({ordre:o}).catch(()=>{}));
+      cont.appendChild(el);
     });
   }
 
-  // ── RENDER ALUMNES ───────────────────────────────────
+  // ── COL 4: ALUMNES ───────────────────────────────────
   function renderAlumnes(grup) {
-    const cont = document.getElementById('llista-alumnes-col');
+    const cont = document.getElementById('col-alumnes');
     if (!cont) return;
     if (!grup) {
-      cont.innerHTML = `<p style="font-size:11px;color:#9ca3af;text-align:center;padding:16px 0;">Selecciona un grup o matèria</p>`;
+      cont.innerHTML = '<p style="font-size:11px;color:#9ca3af;text-align:center;padding:20px 0;">← Tria un grup o matèria</p>';
       return;
     }
-    const alumnes = (grup.alumnes||[]).slice().sort((a,b)=>(a.cognoms||'').localeCompare(b.cognoms||'','ca'));
+    const alumnes = [...(grup.alumnes||[])].sort((a,b)=>(a.cognoms||'').localeCompare(b.cognoms||'','ca'));
     if (!alumnes.length) {
       cont.innerHTML = `
-        <div style="text-align:center;padding:20px;color:#9ca3af;">
+        <div style="text-align:center;padding:24px;color:#9ca3af;">
           <div style="font-size:28px;margin-bottom:6px;">👤</div>
           Cap alumne. Afegeix-ne o importa des d'Excel.
         </div>`;
       return;
     }
     cont.innerHTML = `
-      <table style="width:100%;border-collapse:collapse;font-size:11px;" id="taulaAlumnes">
-        <thead>
-          <tr style="background:#f3f4f6;">
-            <th style="padding:5px 8px;text-align:left;">#</th>
-            <th style="padding:5px 8px;text-align:left;">Cognoms, Nom</th>
-            <th style="padding:5px 8px;text-align:left;">RALC</th>
-            <th style="padding:5px 8px;text-align:center;">Accions</th>
-          </tr>
-        </thead>
-        <tbody id="tbodyAlumnes">
-          ${alumnes.map((a,i) => `
-            <tr draggable="true" data-idx="${grup.alumnes.indexOf(a)}" style="border-bottom:1px solid #f3f4f6;cursor:grab;">
-              <td style="padding:5px 8px;color:#9ca3af;">${i+1}</td>
-              <td style="padding:5px 8px;font-weight:600;color:#1e1b4b;">
-                ${esH(a.cognoms ? a.cognoms+', '+a.nom : a.nom)}
-              </td>
-              <td style="padding:5px 8px;color:#6b7280;">${esH(a.ralc||'—')}</td>
-              <td style="padding:5px 8px;text-align:center;">
-                <button class="btn-edit-al" data-idx="${grup.alumnes.indexOf(a)}"
-                  style="background:none;border:none;color:#2563eb;cursor:pointer;font-size:12px;padding:2px;">✏️</button>
-                <button class="btn-del-al" data-nom="${esH(a.nom)}" data-idx="${grup.alumnes.indexOf(a)}"
-                  style="background:none;border:none;color:#ef4444;cursor:pointer;font-size:12px;padding:2px;">🗑️</button>
+      <table style="width:100%;border-collapse:collapse;font-size:11px;" id="taulaAl">
+        <thead><tr style="background:#f3f4f6;">
+          <th style="padding:5px 7px;text-align:left;">#</th>
+          <th style="padding:5px 7px;text-align:left;">Cognoms, Nom</th>
+          <th style="padding:5px 7px;text-align:left;">RALC</th>
+          <th style="padding:5px 7px;text-align:center;">✎ 🗑</th>
+        </tr></thead>
+        <tbody id="tbAl">
+          ${alumnes.map((a,i)=>`
+            <tr draggable="true" data-idx="${grup.alumnes.indexOf(a)}" style="border-bottom:1px solid #f5f5f5;cursor:grab;">
+              <td style="padding:4px 7px;color:#9ca3af;">${i+1}</td>
+              <td style="padding:4px 7px;font-weight:600;color:#1e1b4b;">${esH(a.cognoms?a.cognoms+', '+a.nom:a.nom)}</td>
+              <td style="padding:4px 7px;color:#9ca3af;">${esH(a.ralc||'—')}</td>
+              <td style="padding:4px 7px;text-align:center;white-space:nowrap;">
+                <button class="btn-ed-al" data-idx="${grup.alumnes.indexOf(a)}"
+                  style="background:none;border:none;color:#2563eb;cursor:pointer;font-size:12px;padding:1px 3px;">✏️</button>
+                <button class="btn-dl-al" data-nom="${esH(a.nom)}" data-idx="${grup.alumnes.indexOf(a)}"
+                  style="background:none;border:none;color:#ef4444;cursor:pointer;font-size:12px;padding:1px 3px;">🗑️</button>
               </td>
             </tr>`).join('')}
         </tbody>
       </table>
-      <div style="padding:6px 8px;font-size:10px;color:#9ca3af;text-align:right;">Total: ${alumnes.length} alumnes</div>
+      <div style="padding:5px 7px;font-size:10px;color:#9ca3af;text-align:right;">Total: ${alumnes.length}</div>
     `;
 
-    // Events edit/delete
-    cont.querySelectorAll('.btn-edit-al').forEach(btn => {
-      btn.addEventListener('click', () => {
-        const idx = parseInt(btn.dataset.idx);
-        modalEditarAlumne(grup, idx, () => renderAlumnes(grup));
-      });
+    cont.querySelectorAll('.btn-ed-al').forEach(btn => {
+      btn.addEventListener('click', () => modalEditarAlumne(grup, parseInt(btn.dataset.idx), () => renderAlumnes(grup)));
     });
-    cont.querySelectorAll('.btn-del-al').forEach(btn => {
+    cont.querySelectorAll('.btn-dl-al').forEach(btn => {
       btn.addEventListener('click', async () => {
         if (!confirm(`Eliminar "${btn.dataset.nom}"?`)) return;
-        const idx = parseInt(btn.dataset.idx);
-        const nous = [...grup.alumnes];
-        nous.splice(idx,1);
+        const nous = [...grup.alumnes]; nous.splice(parseInt(btn.dataset.idx),1);
         await window.db.collection('grups_centre').doc(grup.id).update({alumnes:nous});
-        grup.alumnes = nous;
-        renderAlumnes(grup);
+        grup.alumnes = nous; renderAlumnes(grup);
         window.mostrarToast('🗑️ Alumne eliminat');
       });
     });
 
-    // Drag & drop files de la taula
-    const tbody = document.getElementById('tbodyAlumnes');
-    if (tbody) {
-      afegirDragDropFiles(tbody, async (from, to) => {
-        const nous = [...grup.alumnes];
-        const [item] = nous.splice(from,1);
-        nous.splice(to,0,item);
-        await window.db.collection('grups_centre').doc(grup.id).update({alumnes:nous});
-        grup.alumnes = nous;
-        renderAlumnes(grup);
-      });
-    }
-  }
-
-  // ── HELPERS DRAG & DROP ──────────────────────────────
-  function afegirDragDrop(el, container, arr, onReorder) {
-    let dragIdx = null;
-    el.addEventListener('dragstart', e => {
-      dragIdx = [...container.children].indexOf(el);
-      el.style.opacity = '0.5';
-      e.dataTransfer.effectAllowed = 'move';
-    });
-    el.addEventListener('dragend', () => { el.style.opacity='1'; });
-    el.addEventListener('dragover', e => {
-      e.preventDefault();
-      el.style.background = '#ede9fe';
-    });
-    el.addEventListener('dragleave', () => {
-      el.style.background = '';
-    });
-    el.addEventListener('drop', e => {
-      e.preventDefault();
-      el.style.background = '';
-      const toIdx = [...container.children].indexOf(el);
-      if (dragIdx === null || dragIdx === toIdx) return;
-      const [item] = arr.splice(dragIdx,1);
-      arr.splice(toIdx,0,item);
-      onReorder();
-    });
-  }
-
-  function afegirDragDropFiles(tbody, onSwap) {
-    let fromIdx = null;
-    tbody.querySelectorAll('tr').forEach(tr => {
-      tr.addEventListener('dragstart', e => {
-        fromIdx = parseInt(tr.dataset.idx);
-        tr.style.opacity = '0.5';
-        e.dataTransfer.effectAllowed = 'move';
-      });
-      tr.addEventListener('dragend', () => { tr.style.opacity='1'; });
+    // Drag & drop files de taula
+    const tbody = document.getElementById('tbAl');
+    let ddFrom = null;
+    tbody?.querySelectorAll('tr').forEach(tr => {
+      tr.addEventListener('dragstart', e => { ddFrom=parseInt(tr.dataset.idx); tr.style.opacity='0.45'; e.dataTransfer.effectAllowed='move'; });
+      tr.addEventListener('dragend', () => tr.style.opacity='1');
       tr.addEventListener('dragover', e => { e.preventDefault(); tr.style.background='#fef3c7'; });
-      tr.addEventListener('dragleave', () => { tr.style.background=''; });
-      tr.addEventListener('drop', e => {
+      tr.addEventListener('dragleave', () => tr.style.background='');
+      tr.addEventListener('drop', async e => {
         e.preventDefault(); tr.style.background='';
-        const toIdx = parseInt(tr.dataset.idx);
-        if (fromIdx === null || fromIdx === toIdx) return;
-        onSwap(fromIdx, toIdx);
+        const to = parseInt(tr.dataset.idx);
+        if (ddFrom===null||ddFrom===to) return;
+        const nous = [...grup.alumnes];
+        const [item] = nous.splice(ddFrom,1); nous.splice(to,0,item);
+        await window.db.collection('grups_centre').doc(grup.id).update({alumnes:nous});
+        grup.alumnes = nous; renderAlumnes(grup);
       });
     });
-  }
-
-  // ── ACTIVAR BOTONS ALUMNES ───────────────────────────
-  function activarBtnsAlumnes() {
-    ['btnNouAlumne','btnImportarAlumnes'].forEach(id => {
-      const btn = document.getElementById(id);
-      if (btn) { btn.disabled=false; btn.style.opacity='1'; }
-    });
-  }
-
-  // ── RECARREGAR GRUPS ──────────────────────────────────
-  async function recarregarGrups() {
-    const nousg = await carregarGrupsCentre();
-    grups.length=0; nousg.forEach(g=>grups.push(g));
-    Object.keys(grupsPer).forEach(k=>delete grupsPer[k]);
-    grups.forEach(g=>{
-      if(!grupsPer[g.nivellId]) grupsPer[g.nivellId]=[];
-      grupsPer[g.nivellId].push(g);
-    });
-    renderNivells();
-    renderGrupsClasse();
-    renderTipus();
-    renderAlumnes(null);
   }
 
   // ── BOTONS PRINCIPALS ────────────────────────────────
   document.getElementById('btnNouNivell').addEventListener('click', () => modalNivell());
-  document.getElementById('btnNouGrupClasse').addEventListener('click', () => {
+
+  document.getElementById('btnNouGrup').addEventListener('click', () => {
     if (!nivellActiu) return;
-    const n = nivells.find(n=>n.id===nivellActiu);
+    const n = nivells.find(x=>x.id===nivellActiu);
+    // Grups sempre tipus=classe
     modalGrup(null, nivellActiu, n, 'classe');
   });
-  document.getElementById('btnNouTipus').addEventListener('click', () => {
-    if (!nivellActiu) return;
-    const n = nivells.find(n=>n.id===nivellActiu);
-    modalGrup(null, nivellActiu, n, 'materia');
-  });
-  document.getElementById('btnNouAlumne').addEventListener('click', () => {
-    const gId = tipusActiu || grupActiu;
-    if (!gId) return;
-    const g = grups.find(g=>g.id===gId);
-    if (g) modalAlumne(g, () => renderAlumnes(g));
-  });
-  document.getElementById('btnImportarAlumnes').addEventListener('click', () => {
-    const gId = tipusActiu || grupActiu;
-    if (!gId) return;
-    const g = grups.find(g=>g.id===gId);
-    if (g) modalImportExcel(g, () => {
-      recarregarGrups().then(() => {
-        const gAct = grups.find(g=>g.id===gId);
-        if (gAct) renderAlumnes(gAct);
-      });
-    });
+
+  document.getElementById('btnNouMateria').addEventListener('click', () => {
+    if (!grupActiu) return;
+    const g = grups.find(x=>x.id===grupActiu);
+    const n = nivells.find(x=>x.id===nivellActiu);
+    // Matèries: el parentGrupId és el grup classe
+    modalGrupMateria(null, grupActiu, g, n);
   });
 
-  // Callbacks de modals
+  document.getElementById('btnNouAlumne').addEventListener('click', () => {
+    const gId = materiaActiva || grupActiu;
+    const g = grups.find(x=>x.id===gId);
+    if (g) modalAlumne(g, () => renderAlumnes(g));
+  });
+
+  document.getElementById('btnImportarAlumnes').addEventListener('click', () => {
+    const gId = materiaActiva || grupActiu;
+    const g = grups.find(x=>x.id===gId);
+    if (g) modalImportExcel(g, () => recarregar().then(() => {
+      const gAct = grups.find(x=>x.id===gId);
+      if (gAct) renderAlumnes(gAct);
+    }));
+  });
+
+  // ── RECARREGAR ──────────────────────────────────────
+  async function recarregar() {
+    const nousg = await carregarGrupsCentre();
+    grups.length=0; nousg.forEach(g=>grups.push(g));
+    Object.keys(grupsPer).forEach(k=>delete grupsPer[k]);
+    Object.keys(materiesPer).forEach(k=>delete materiesPer[k]);
+    grups.forEach(g=>{
+      if (g.tipus==='classe') {
+        if (!grupsPer[g.nivellId]) grupsPer[g.nivellId]=[];
+        grupsPer[g.nivellId].push(g);
+      } else {
+        const p = g.parentGrupId || g.nivellId;
+        if (!materiesPer[p]) materiesPer[p]=[];
+        materiesPer[p].push(g);
+      }
+    });
+    renderNivells(); renderGrups(); renderMateries();
+    const gAct = grups.find(g=>g.id===(materiaActiva||grupActiu));
+    renderAlumnes(gAct||null);
+  }
+
   window._secOnNivellCreat = async () => {
     const nous = await carregarNivells();
     nivells.length=0; nous.forEach(n=>nivells.push(n));
     renderNivells();
   };
-  window._secOnGrupCreat = async () => { await recarregarGrups(); };
+  window._secOnGrupCreat = recarregar;
 
   // ── RENDER INICIAL ───────────────────────────────────
   renderNivells();
+}
+
+/* ══════════════════════════════════════════════════════
+   MODAL GRUP MATÈRIA (nou tipus independent)
+   Diferent de modalGrup perquè permet triar entre
+   Matèria / Projecte / Optativa / Tutoria
+   i guarda parentGrupId = grup classe pare
+══════════════════════════════════════════════════════ */
+function modalGrupMateria(existent, parentGrupId, parentGrup, nivell) {
+  crearModal(`${existent?'✏️ Editar':'+ Nova'} matèria / projecte`, `
+    <div style="margin-bottom:12px;">
+      <label style="font-size:12px;font-weight:600;color:#374151;display:block;margin-bottom:5px;">Nom *</label>
+      <input id="inpMNom" type="text" value="${esH(existent?.nom||'')}"
+        placeholder="Ex: Matemàtiques, STEM, Tutoria..."
+        style="width:100%;box-sizing:border-box;padding:9px 11px;border:1.5px solid #e5e7eb;border-radius:9px;font-size:13px;outline:none;font-family:inherit;">
+    </div>
+    <div style="margin-bottom:12px;">
+      <label style="font-size:12px;font-weight:600;color:#374151;display:block;margin-bottom:8px;">Tipus *</label>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
+        ${[
+          {v:'materia',  i:'📚', l:'Matèria'},
+          {v:'projecte', i:'🔬', l:'Projecte'},
+          {v:'optativa', i:'🎨', l:'Optativa'},
+          {v:'tutoria',  i:'🧑‍🏫', l:'Tutoria'},
+        ].map(t=>`
+          <label style="display:flex;align-items:center;gap:8px;cursor:pointer;padding:9px 11px;
+                        border:1.5px solid #e5e7eb;border-radius:9px;font-size:13px;
+                        background:#f9fafb;transition:border-color 0.15s;"
+                 class="tipo-label" id="lbl-${t.v}">
+            <input type="radio" name="tipusM" value="${t.v}"
+              ${(existent?.tipus||'materia')===t.v?'checked':''}
+              style="accent-color:#059669;">
+            ${t.i} ${t.l}
+          </label>
+        `).join('')}
+      </div>
+    </div>
+    <div style="background:#f3f4f6;padding:9px 11px;border-radius:9px;font-size:12px;color:#6b7280;">
+      Grup: <strong>${esH(parentGrup?.nom||'')} — ${esH(nivell?.nom||'')} (${esH(nivell?.curs||'')})</strong>
+    </div>
+  `, async () => {
+    const nom   = document.getElementById('inpMNom').value.trim();
+    const tipus = document.querySelector('input[name="tipusM"]:checked')?.value || 'materia';
+    if (!nom) { window.mostrarToast('⚠️ El nom és obligatori'); return false; }
+
+    const data = {
+      nom, tipus,
+      parentGrupId: parentGrupId || existent?.parentGrupId,
+      nivellId: nivell?.id || existent?.nivellId,
+      nivellNom: nivell?.nom || existent?.nivellNom,
+      curs: nivell?.curs || existent?.curs,
+      ordre: existent?.ordre ?? 99,
+      alumnes: existent?.alumnes || [],
+    };
+    if (existent) await window.db.collection('grups_centre').doc(existent.id).update({nom, tipus});
+    else await window.db.collection('grups_centre').add(data);
+    window.mostrarToast(existent ? '✅ Actualitzat' : '✅ Creat');
+    await window._secOnGrupCreat?.();
+    return true;
+  }, 'Guardar');
+
+  setTimeout(() => {
+    document.getElementById('inpMNom')?.focus();
+    // Marcar estil de la label seleccionada
+    document.querySelectorAll('input[name="tipusM"]').forEach(r => {
+      r.addEventListener('change', () => {
+        document.querySelectorAll('.tipo-label').forEach(l => l.style.borderColor='#e5e7eb');
+        r.closest('.tipo-label').style.borderColor = '#059669';
+      });
+      if (r.checked) r.closest('.tipo-label').style.borderColor = '#059669';
+    });
+  }, 100);
 }
 
 
