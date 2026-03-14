@@ -112,7 +112,7 @@ async function obrirPanellTutoria() {
           <!-- Selector grup -->
           <select id="selGrupTutoria" style="
             padding:7px 12px;border-radius:8px;border:none;
-            font-size:13px;background:rgba(255,255,255,0.2);color:#fff;
+            font-size:13px;background:#fff;color:#1e1b4b;
             cursor:pointer;outline:none;min-width:180px;
           ">
             <option value="">— Primer tria un curs —</option>
@@ -401,13 +401,18 @@ async function mostrarDetallAlumne(alumne, materies) {
     id, nom: data.nom || id, ...data
   }));
 
-  const COLORS = {
-    'Assoliment Excel·lent':   { bg: '#22c55e', text: '#fff' },
-    'Assoliment Notable':      { bg: '#84cc16', text: '#fff' },
-    'Assoliment Satisfactori': { bg: '#f59e0b', text: '#fff' },
-    'No Assoliment':           { bg: '#ef4444', text: '#fff' },
-    'No avaluat':              { bg: '#9ca3af', text: '#fff' }
+  const _normA = s => (s||'').toLowerCase().normalize('NFD')
+    .replace(/[̀-ͯ·]/g,'').trim();
+  const colorAssT = s => {
+    const n = _normA(s);
+    if (n.includes('excel')) return { bg: '#22c55e', text: '#fff' };
+    if (n.includes('notable')) return { bg: '#84cc16', text: '#fff' };
+    if (n.includes('satisfactori')) return { bg: '#f59e0b', text: '#fff' };
+    if (n.includes('no ass')) return { bg: '#ef4444', text: '#fff' };
+    return { bg: '#9ca3af', text: '#fff' };
   };
+  // Compatibilitat amb codi existent que usa COLORS[x]
+  const COLORS = new Proxy({}, { get: (_, k) => colorAssT(k) });
 
   detallEl.innerHTML = `
     <!-- CAPÇALERA ALUMNE -->
