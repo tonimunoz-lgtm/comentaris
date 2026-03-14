@@ -222,17 +222,15 @@ async function obrirPanellTutoria() {
       selGrup.innerHTML = '<option value="">— Primer tria un curs —</option>';
       return;
     }
-    // Filtrar: grups de tipus 'tutoria' del curs seleccionat
-    let tutories = grups.filter(g =>
-      g.tipus === 'tutoria' && (g.curs === curs || !g.curs)
+    // Mostrar grups classe del curs (A, B, C, D...)
+    // El tutor/pedagog selecciona el grup classe per veure els alumnes
+    let grupsCurs = grups.filter(g =>
+      g.tipus === 'classe' && (g.curs === curs || !g.curs)
     );
     // Si és tutor amb grups assignats (no pedagog/admin), filtrar per grups permesos
     if (!potVeureTots && tutoriaGrups.length > 0) {
-      tutories = tutories.filter(g => tutoriaGrups.includes(g.id));
+      grupsCurs = grupsCurs.filter(g => tutoriaGrups.includes(g.id));
     }
-    const grupsCurs = tutories.length > 0
-      ? tutories
-      : grups.filter(g => g.tipus === 'classe' && (g.curs === curs || !g.curs));
 
     if (grupsCurs.length === 0) {
       selGrup.innerHTML = '<option value="">Cap grup de tutoria per a aquest curs</option>';
@@ -1022,15 +1020,23 @@ async function llegirAlumnesGrupCentre(curs, grupId, _materiesLlegat) {
   // 3. Llegir dades d'avaluació de cada matèria per als alumnes del grup
   for (const mat of candidatsMat) {
     try {
-      // Buscar per grupId = grupClasId (el professor envia al grup classe)
-      const snap = await db.collection('avaluacio_centre')
+      // Filtrar per grupClasseId (nou) o grupId (llegat) per no barrejar grups
+      let snap = await db.collection('avaluacio_centre')
         .doc(curs)
         .collection(mat.id)
-        .get(); // llegir tot i filtrar en memòria
+        .where('grupClasseId', '==', grupClasId)
+        .get();
+      // Fallback llegat: filtrar per grupId
+      if (snap.empty) {
+        snap = await db.collection('avaluacio_centre')
+          .doc(curs)
+          .collection(mat.id)
+          .where('grupId', '==', grupClasId)
+          .get();
+      }
 
       snap.docs.forEach(d => {
         const data = d.data();
-        // Trobar l'alumne per RALC o nom
         const key = data.ralc || `alumne_${Object.keys(resultat).length}_${data.nom}`;
         const alumneKey = Object.keys(resultat).find(k =>
           (data.ralc && resultat[k].ralc === data.ralc) ||
