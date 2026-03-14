@@ -1721,11 +1721,11 @@ async function carregarDadesButlletins(grups) {
           </tr>
         </thead>
         <tbody>
-          ${alumnes.map(a => {
+          ${alumnes.map((a, idx) => {
             const nMat = Object.keys(a.materies).length;
             const nItems = Object.values(a.materies).reduce((s,m)=>s+(m.items?.length||0),0);
             return `
-              <tr style="border-bottom:1px solid #f3f4f6;" data-alumne='${JSON.stringify({nom:a.nom,cognoms:a.cognoms,ralc:a.ralc,materies:a.materies})}'>
+              <tr style="border-bottom:1px solid #f3f4f6;" data-idx="${idx}">
                 <td style="padding:7px 10px;font-weight:600;color:#1e1b4b;">${esH(a.nomComplet)}</td>
                 <td style="padding:7px 10px;text-align:center;">
                   ${nMat > 0
@@ -1735,7 +1735,7 @@ async function carregarDadesButlletins(grups) {
                 <td style="padding:7px 10px;text-align:center;color:#6b7280;">${nItems||'—'}</td>
                 <td style="padding:7px 10px;text-align:center;">
                   ${nMat > 0
-                    ? `<button class="btn-gen-butlleti" style="padding:4px 10px;background:#4f46e5;color:#fff;border:none;border-radius:6px;font-size:11px;font-weight:600;cursor:pointer;">
+                    ? `<button class="btn-gen-butlleti" data-idx="${idx}" style="padding:4px 10px;background:#4f46e5;color:#fff;border:none;border-radius:6px;font-size:11px;font-weight:600;cursor:pointer;">
                         📄 Butlletí
                       </button>`
                     : '<span style="color:#9ca3af;font-size:11px;">sense dades</span>'}
@@ -1770,11 +1770,14 @@ async function carregarDadesButlletins(grups) {
       ambDades.forEach(a => generarButlleti(a, curs, grupDoc?.nom||''));
     });
 
+    // Guardar alumnes en window per accés des dels botons (evita JSON en atributs HTML)
+    window._butlletinsAlumnes = alumnes;
+
     document.querySelectorAll('.btn-gen-butlleti').forEach(btn => {
       btn.addEventListener('click', () => {
-        const tr = btn.closest('tr');
-        const alumne = JSON.parse(tr.dataset.alumne);
-        generarButlleti(alumne, curs, grupDoc?.nom||'');
+        const idx = parseInt(btn.dataset.idx);
+        const alumne = window._butlletinsAlumnes?.[idx];
+        if (alumne) generarButlleti(alumne, curs, grupDoc?.nom||'');
       });
     });
 
