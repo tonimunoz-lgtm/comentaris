@@ -249,9 +249,10 @@ async function renderEstructura(body) {
       <div style="flex:1;min-width:220px;display:flex;flex-direction:column;padding-left:14px;">
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;flex-wrap:wrap;gap:5px;">
           <span style="font-size:11px;font-weight:700;color:#d97706;letter-spacing:0.04em;" id="titol-col-alumnes">ALUMNES</span>
-          <div style="display:flex;gap:4px;">
+          <div style="display:flex;gap:4px;flex-wrap:wrap;">
             <button id="btnNouAlumne" disabled style="background:#d97706;color:#fff;border:none;border-radius:5px;padding:2px 8px;font-size:11px;font-weight:700;cursor:pointer;opacity:0.4;">+ Alumne</button>
             <button id="btnImportarAlumnes" disabled style="background:#059669;color:#fff;border:none;border-radius:5px;padding:2px 8px;font-size:11px;font-weight:700;cursor:pointer;opacity:0.4;">📥 Excel</button>
+            <button id="btnCopiarDe" disabled style="background:#4f46e5;color:#fff;border:none;border-radius:5px;padding:2px 8px;font-size:11px;font-weight:700;cursor:pointer;opacity:0.4;">📋 Copiar de...</button>
           </div>
         </div>
         <div id="col-alumnes" style="flex:1;overflow-y:auto;">
@@ -302,6 +303,8 @@ async function renderEstructura(body) {
         x.ordre = i+1;
         onDrop(x, i+1);
       });
+      // Re-renderitzar la columna immediatament
+      if (typeof onDrop._rerender === 'function') onDrop._rerender();
     });
   }
 
@@ -333,7 +336,9 @@ async function renderEstructura(body) {
         renderNivells(); renderGrups(); renderMateries(); renderAlumnes(null);
         enableBtn('btnNouGrup');
       });
-      afegirDD(el, cont, sorted, i, (x,o) => window.db.collection('nivells_centre').doc(x.id).update({ordre:o}).catch(()=>{}));
+      const _cbNivell = (x,o) => window.db.collection('nivells_centre').doc(x.id).update({ordre:o}).catch(()=>{});
+      _cbNivell._rerender = renderNivells;
+      afegirDD(el, cont, sorted, i, _cbNivell);
       cont.appendChild(el);
     });
   }
@@ -382,7 +387,9 @@ async function renderEstructura(body) {
         enableBtn('btnNouMateria');
         document.getElementById('titol-col-mat').textContent = `MATÈRIES — ${g.nom}`;
       });
-      afegirDD(el, cont, gs, i, (x,o) => window.db.collection('grups_centre').doc(x.id).update({ordre:o}).catch(()=>{}));
+      const _cbGrup = (x,o) => window.db.collection('grups_centre').doc(x.id).update({ordre:o}).catch(()=>{});
+      _cbGrup._rerender = renderGrups;
+      afegirDD(el, cont, gs, i, _cbGrup);
       cont.appendChild(el);
     });
   }
@@ -424,8 +431,11 @@ async function renderEstructura(body) {
         renderAlumnes(m);
         enableBtn('btnNouAlumne');
         enableBtn('btnImportarAlumnes');
+        enableBtn('btnCopiarDe');
       });
-      afegirDD(el, cont, ms, i, (x,o) => window.db.collection('grups_centre').doc(x.id).update({ordre:o}).catch(()=>{}));
+      const _cbMat = (x,o) => window.db.collection('grups_centre').doc(x.id).update({ordre:o}).catch(()=>{});
+      _cbMat._rerender = renderMateries;
+      afegirDD(el, cont, ms, i, _cbMat);
       cont.appendChild(el);
     });
   }
@@ -534,6 +544,21 @@ async function renderEstructura(body) {
     const gId = materiaActiva || grupActiu;
     const g = grups.find(x=>x.id===gId);
     if (g) modalImportExcel(g, () => recarregar().then(() => {
+      const gAct = grups.find(x=>x.id===gId);
+      if (gAct) renderAlumnes(gAct);
+    }));
+  });
+
+  document.getElementById('btnCopiarDe').addEventListener('click', () => {
+    const gId = materiaActiva || grupActiu;
+    const g = grups.find(x=>x.id===gId);
+    if (!g) return;
+    // Candidats: materies del mateix grup pare o del mateix nivell, que tinguin alumnes
+    const candidates = grups.filter(x =>
+      x.id !== gId && (x.alumnes||[]).length > 0 &&
+      (x.parentGrupId === g.parentGrupId || x.parentGrupId === grupActiu || x.nivellId === nivellActiu)
+    );
+    modalCopiarAlumnesDe(g, candidates, () => recarregar().then(() => {
       const gAct = grups.find(x=>x.id===gId);
       if (gAct) renderAlumnes(gAct);
     }));
@@ -799,6 +824,77 @@ function modalGrup(existent, nivellIdFix, nivellFix) {
   }, 80);
 }
 
+
+/* ══════════════════════════════════════════════════════
+   MODAL COPIAR ALUMNES D'ALTRA MATÈRIA
+══════════════════════════════════════════════════════ */
+function modalCopiarAlumnesDe(grupDesti, candidates, onRefresh) {
+  if (!candidates.length) {
+    window.mostrarToast('⚠️ No hi ha altres matèries amb alumnes al mateix grup', 3000);
+    return;
+  }
+
+  crearModal('📋 Copiar alumnes de...', `
+    <p style="font-size:13px;color:#6b7280;margin-bottom:14px;">
+      Selecciona la matèria d'on vols copiar els alumnes a
+      <strong>"${esH(grupDesti.nom)}"</strong>.
+    </p>
+    <div style="display:flex;flex-direction:column;gap:7px;">
+      ${candidates.map(c => `
+        <button class="btn-copiar-font" data-id="${c.id}"
+          style="padding:11px 14px;border:1.5px solid #e5e7eb;border-radius:9px;
+                 background:#fff;cursor:pointer;text-align:left;font-family:inherit;
+                 display:flex;align-items:center;justify-content:space-between;
+                 font-size:13px;font-weight:600;color:#1e1b4b;
+                 transition:border-color 0.15s,background 0.15s;">
+          <span>${esH(c.nom)}</span>
+          <span style="font-size:11px;color:#9ca3af;font-weight:400;">${(c.alumnes||[]).length} alumnes</span>
+        </button>`).join('')}
+    </div>
+    <p style="font-size:11px;color:#9ca3af;margin-top:12px;">
+      Es copiaran nom, cognoms i RALC. Els alumnes ja existents (per RALC) no es duplicaran.
+    </p>
+  `, () => false, '');
+
+  setTimeout(() => {
+    // Amagar botó OK, canviar Cancel·lar per Tancar
+    document.getElementById('_btnOkModal')?.style.setProperty('display','none');
+    const cancel = document.getElementById('_btnCancelModal');
+    if (cancel) cancel.textContent = 'Tancar';
+
+    document.querySelectorAll('.btn-copiar-font').forEach(btn => {
+      btn.addEventListener('mouseenter', () => { btn.style.borderColor='#4f46e5'; btn.style.background='#eef2ff'; });
+      btn.addEventListener('mouseleave', () => { btn.style.borderColor='#e5e7eb'; btn.style.background='#fff'; });
+      btn.addEventListener('click', async () => {
+        const font = candidates.find(c=>c.id===btn.dataset.id);
+        if (!font) return;
+        btn.disabled = true; btn.textContent = '⏳ Copiant...';
+        try {
+          const actuals = grupDesti.alumnes || [];
+          const ralcsActuals = new Set(actuals.map(a=>a.ralc).filter(Boolean));
+          const nomsActuals  = new Set(actuals.map(a=>`${a.nom}_${a.cognoms}`));
+
+          const nous = (font.alumnes||[]).filter(a => {
+            if (a.ralc && ralcsActuals.has(a.ralc)) return false;
+            if (nomsActuals.has(`${a.nom}_${a.cognoms}`)) return false;
+            return true;
+          });
+
+          const total = [...actuals, ...nous];
+          await window.db.collection('grups_centre').doc(grupDesti.id).update({ alumnes: total });
+          grupDesti.alumnes = total;
+
+          document.getElementById('_modalSec')?.remove();
+          window.mostrarToast(`✅ ${nous.length} alumnes copiats (${(font.alumnes||[]).length - nous.length} duplicats ignorats)`);
+          onRefresh?.();
+        } catch(e) {
+          window.mostrarToast('❌ Error: ' + e.message);
+          btn.disabled = false;
+        }
+      });
+    });
+  }, 100);
+}
 
 /* ══════════════════════════════════════════════════════
    MODAL AFEGIR ALUMNE
@@ -1510,134 +1606,243 @@ async function renderPeriodes(body) {
     { codi: 'final', nom: 'Final de curs', ordre: 4 },
   ];
 
-  // Llegir estat actual de Firestore
   let tancats = [];
-  let nomsPersonalitzats = {}; // codi → nom personalitzat
-  try {
-    const doc = await window.db.collection('_sistema').doc('periodes_tancats').get();
-    if (doc.exists) {
-      tancats = doc.data()?.tancats || [];
-      nomsPersonalitzats = doc.data()?.noms || {};
-    }
-  } catch(e) {}
+  let nomsPersonalitzats = {};
+  let ordre = PERIODES.map(p=>p.codi); // ordre arrossegable
 
-  // Aplicar noms personalitzats
-  const periodes = PERIODES.map(p => ({
-    ...p,
-    nomMostrat: nomsPersonalitzats[p.codi] || p.nom
-  }));
+  const llegirConfig = async () => {
+    try {
+      const doc = await window.db.collection('_sistema').doc('periodes_tancats').get();
+      if (doc.exists) {
+        tancats = doc.data()?.tancats || [];
+        nomsPersonalitzats = doc.data()?.noms || {};
+        if (doc.data()?.ordre?.length) ordre = doc.data().ordre;
+      }
+    } catch(e) {}
+  };
+
+  const guardarConfig = async () => {
+    // Processar canvis de nom pendents
+    if (window._tempNomPeriode) {
+      const { codi, nom } = window._tempNomPeriode;
+      nomsPersonalitzats[codi] = nom;
+      delete window._tempNomPeriode;
+    }
+    // Processar eliminació de periode pendent
+    if (window._tempEliminarPeriode) {
+      const codi = window._tempEliminarPeriode;
+      ordre = ordre.filter(c => c !== codi);
+      tancats = tancats.filter(c => c !== codi);
+      delete nomsPersonalitzats[codi];
+      delete window._tempEliminarPeriode;
+    }
+    await window.db.collection('_sistema').doc('periodes_tancats').set(
+      { tancats, noms: nomsPersonalitzats, ordre }, { merge: false }
+    );
+  };
+
+  await llegirConfig();
+
+  const periodes = () => ordre.map(codi => {
+    const base = PERIODES.find(p=>p.codi===codi) || { codi, nom: codi, ordre: 99 };
+    return { ...base, nomMostrat: nomsPersonalitzats[codi] || base.nom };
+  });
 
   const render = () => {
+    const ps = periodes();
     body.innerHTML = `
-      <h3 style="font-size:16px;font-weight:700;color:#1e1b4b;margin-bottom:6px;">📅 Gestió de períodes</h3>
-      <p style="font-size:13px;color:#6b7280;margin-bottom:20px;">
-        Defineix els períodes d'avaluació del curs. Pots canviar-ne el nom, tancar-los
-        (impedeix que els professors hi enviïn avaluacions) o obrir-los de nou.
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
+        <h3 style="font-size:16px;font-weight:700;color:#1e1b4b;margin:0;">📅 Períodes d'avaluació</h3>
+        <button id="btnNouPeriode" style="padding:7px 16px;background:#7c3aed;color:#fff;border:none;
+          border-radius:8px;font-weight:700;cursor:pointer;font-size:13px;">+ Crear nou</button>
+      </div>
+      <p style="font-size:12px;color:#6b7280;margin-bottom:16px;">
+        Arrossega per canviar l'ordre. Tanca un període per bloquejar l'enviament d'avaluacions.
       </p>
 
-      <div style="display:flex;flex-direction:column;gap:10px;max-width:580px;" id="llista-periodes">
-        ${periodes.map(p => {
-          const tancat = tancats.includes(p.codi);
-          return `
-            <div style="display:flex;align-items:center;gap:12px;padding:14px 18px;
-                        border-radius:12px;border:2px solid ${tancat?'#fca5a5':'#e5e7eb'};
-                        background:${tancat?'#fef2f2':'#f9fafb'};"
-                 id="row-periode-${p.codi}">
-              <!-- Ordre drag handle -->
-              <span style="color:#d1d5db;font-size:18px;cursor:grab;flex-shrink:0;">⠿</span>
-
-              <!-- Nom editable inline -->
-              <div style="flex:1;min-width:0;">
-                <input class="inp-periode-nom" data-codi="${p.codi}"
-                  value="${esH(p.nomMostrat)}"
-                  style="font-weight:700;font-size:14px;color:${tancat?'#dc2626':'#1e1b4b'};
-                         border:none;background:transparent;outline:none;font-family:inherit;
-                         width:100%;cursor:text;padding:0;">
-                <div style="font-size:11px;color:#9ca3af;margin-top:3px;">
-                  ${tancat
-                    ? '🔒 Tancat — professors no poden enviar avaluacions'
-                    : '✅ Obert — professors poden enviar avaluacions'}
-                </div>
-              </div>
-
-              <!-- Botó tancar/obrir -->
-              <button class="btn-toggle-periode" data-codi="${p.codi}" data-tancat="${tancat}"
-                style="padding:7px 16px;border:none;border-radius:8px;font-weight:700;
-                       cursor:pointer;font-size:12px;white-space:nowrap;flex-shrink:0;
-                       background:${tancat?'#059669':'#dc2626'};color:#fff;">
-                ${tancat ? '🔓 Obrir' : '🔒 Tancar'}
-              </button>
-            </div>
-          `;
-        }).join('')}
-      </div>
-
-      <div style="margin-top:16px;max-width:580px;">
-        <button id="btnGuardarNomsPeriodes" style="padding:9px 20px;background:#7c3aed;color:#fff;
-          border:none;border-radius:9px;font-weight:700;cursor:pointer;font-size:13px;">
-          💾 Guardar noms
-        </button>
-      </div>
+      <div id="llista-periodes-ctrl" style="display:flex;flex-direction:column;gap:8px;max-width:600px;"></div>
 
       <div style="margin-top:24px;background:#fef3c7;border:1.5px solid #fde68a;border-radius:10px;
-                  padding:14px 16px;font-size:12px;color:#92400e;max-width:580px;">
-        <strong>ℹ️ Nota:</strong> Els noms dels períodes s'apliquen globalment a tot el centre.
-        Tancar un període impedeix als professors enviar noves avaluacions per aquell trimestre,
-        però poden continuar veient el que ja han enviat.
+                  padding:12px 16px;font-size:12px;color:#92400e;max-width:600px;">
+        <strong>⚠️</strong> Tancar un període impedeix als professors enviar noves avaluacions.
+        Poden continuar veient els comentaris però no modificar-los.
       </div>
     `;
 
-    // ── Events tancar/obrir ────────────────────────────────────────
-    body.querySelectorAll('.btn-toggle-periode').forEach(btn => {
-      btn.addEventListener('click', async () => {
-        const codi  = btn.dataset.codi;
-        const curr  = btn.dataset.tancat === 'true';
-        btn.disabled = true; btn.textContent = '⏳';
-        try {
-          if (curr) tancats = tancats.filter(c => c !== codi);
-          else tancats = [...new Set([...tancats, codi])];
+    const cont = document.getElementById('llista-periodes-ctrl');
+    let ddFrom = null;
 
-          await window.db.collection('_sistema').doc('periodes_tancats').set(
-            { tancats, noms: nomsPersonalitzats }, { merge: false }
-          );
-          window.mostrarToast(curr ? '✅ Període obert' : '🔒 Període tancat');
-          render(); // re-renderitzar
-        } catch(e) {
-          window.mostrarToast('❌ Error: ' + e.message);
-          btn.disabled = false;
-        }
-      });
-    });
+    ps.forEach((p, i) => {
+      const tancat = tancats.includes(p.codi);
+      const el = document.createElement('div');
+      el.draggable = true;
+      el.dataset.codi = p.codi;
+      el.style.cssText = `display:flex;align-items:center;gap:10px;padding:12px 16px;
+        border-radius:11px;border:2px solid ${tancat?'#fca5a5':'#e5e7eb'};
+        background:${tancat?'#fef2f2':'#f9fafb'};transition:border-color 0.15s;cursor:default;`;
 
-    // ── Event guardar noms ─────────────────────────────────────────
-    body.querySelector('#btnGuardarNomsPeriodes')?.addEventListener('click', async () => {
-      body.querySelectorAll('.inp-periode-nom').forEach(inp => {
-        const codi = inp.dataset.codi;
-        const nom  = inp.value.trim();
-        const orig = PERIODES.find(p=>p.codi===codi)?.nom;
-        if (nom && nom !== orig) nomsPersonalitzats[codi] = nom;
-        else delete nomsPersonalitzats[codi];
+      el.innerHTML = `
+        <!-- Drag handle -->
+        <span class="drag-handle" style="color:#d1d5db;font-size:18px;cursor:grab;flex-shrink:0;user-select:none;"
+          title="Arrossega per canviar l'ordre">⠿</span>
+
+        <!-- Nom -->
+        <div style="flex:1;min-width:0;">
+          <div style="font-weight:700;font-size:14px;color:${tancat?'#dc2626':'#1e1b4b'};">
+            ${tancat?'🔒 ':''}${esH(p.nomMostrat)}
+          </div>
+          <div style="font-size:11px;color:#9ca3af;">
+            ${tancat ? 'Tancat — professors no poden enviar avaluacions' : 'Obert — professors poden enviar avaluacions'}
+          </div>
+        </div>
+
+        <!-- Botons accions -->
+        <div style="display:flex;gap:6px;flex-shrink:0;">
+          <button class="btn-editar-periode" data-codi="${p.codi}"
+            style="padding:6px 12px;background:#e0e7ff;color:#4338ca;border:none;
+                   border-radius:7px;font-size:12px;font-weight:600;cursor:pointer;">✏️ Editar</button>
+          <button class="btn-toggle-periode" data-codi="${p.codi}" data-tancat="${tancat}"
+            style="padding:6px 12px;border:none;border-radius:7px;font-size:12px;font-weight:600;
+                   cursor:pointer;background:${tancat?'#d1fae5':'#fee2e2'};
+                   color:${tancat?'#065f46':'#991b1b'};">
+            ${tancat?'🔓 Obrir':'🔒 Tancar'}
+          </button>
+        </div>
+      `;
+
+      // Drag & drop per reordenar
+      el.addEventListener('dragstart', e => {
+        ddFrom = i; el.style.opacity='0.5';
+        e.dataTransfer.effectAllowed='move';
       });
-      try {
-        await window.db.collection('_sistema').doc('periodes_tancats').set(
-          { tancats, noms: nomsPersonalitzats }, { merge: false }
-        );
-        window.mostrarToast('✅ Noms guardats');
+      el.addEventListener('dragend', () => { el.style.opacity='1'; });
+      el.addEventListener('dragover', e => {
+        e.preventDefault(); el.style.borderColor='#7c3aed';
+      });
+      el.addEventListener('dragleave', () => {
+        el.style.borderColor = tancats.includes(p.codi) ? '#fca5a5' : '#e5e7eb';
+      });
+      el.addEventListener('drop', async e => {
+        e.preventDefault();
+        el.style.borderColor = tancats.includes(p.codi) ? '#fca5a5' : '#e5e7eb';
+        if (ddFrom === null || ddFrom === i) return;
+        const [item] = ordre.splice(ddFrom, 1);
+        ordre.splice(i, 0, item);
+        await guardarConfig();
         render();
-      } catch(e) {
-        window.mostrarToast('❌ Error: ' + e.message);
-      }
+      });
+
+      // Botons
+      el.querySelector('.btn-toggle-periode').addEventListener('click', async () => {
+        const t = tancats.includes(p.codi);
+        if (t) tancats = tancats.filter(c=>c!==p.codi);
+        else tancats.push(p.codi);
+        await guardarConfig();
+        render();
+        window.mostrarToast(t ? '✅ Període obert' : '🔒 Període tancat');
+      });
+
+      el.querySelector('.btn-editar-periode').addEventListener('click', () => {
+        modalEditarPeriode(p, guardarConfig, render);
+      });
+
+      cont.appendChild(el);
     });
 
-    // ── Enter en un nom → moure focus al següent ──────────────────
-    body.querySelectorAll('.inp-periode-nom').forEach((inp, i, all) => {
-      inp.addEventListener('keydown', e => {
-        if (e.key === 'Enter') { e.preventDefault(); all[i+1]?.focus(); }
-      });
+    // Botó crear nou
+    document.getElementById('btnNouPeriode').addEventListener('click', () => {
+      modalCrearPeriode(ordre, PERIODES, nomsPersonalitzats, guardarConfig, render);
     });
   };
 
   render();
+}
+
+function modalEditarPeriode(periode, guardarConfig, onOk) {
+  crearModal(`✏️ Editar — ${esH(periode.nomMostrat)}`, `
+    <div style="margin-bottom:14px;">
+      <label style="font-size:13px;font-weight:600;color:#374151;display:block;margin-bottom:6px;">Nom del període</label>
+      <input id="inpNomPeriode" type="text" value="${esH(periode.nomMostrat)}"
+        style="width:100%;box-sizing:border-box;padding:10px 12px;border:1.5px solid #e5e7eb;
+               border-radius:9px;font-size:14px;outline:none;font-family:inherit;">
+    </div>
+    <div style="background:#fef2f2;border:1.5px solid #fca5a5;border-radius:9px;padding:10px 14px;">
+      <p style="font-size:12px;color:#dc2626;margin:0 0 8px;font-weight:600;">⚠️ Zona de perill</p>
+      <button id="btnEliminarPeriode" style="padding:7px 14px;background:#dc2626;color:#fff;border:none;
+        border-radius:7px;font-size:12px;font-weight:700;cursor:pointer;">🗑️ Eliminar aquest període</button>
+    </div>
+  `, async () => {
+    const nou = document.getElementById('inpNomPeriode').value.trim();
+    if (!nou) { window.mostrarToast('⚠️ El nom no pot estar buit'); return false; }
+    // Guardar nom personalitzat
+    const base = { preav:'Pre-avaluació', T1:'1r Trimestre', T2:'2n Trimestre', T3:'3r Trimestre', final:'Final de curs' };
+    if (nou !== base[periode.codi]) {
+      // Accedir a nomsPersonalitzats via closure (guardarConfig té accés)
+      window._tempNomPeriode = { codi: periode.codi, nom: nou };
+    }
+    await guardarConfig();
+    window.mostrarToast('✅ Nom actualitzat');
+    onOk();
+    return true;
+  }, 'Guardar');
+
+  setTimeout(() => {
+    document.getElementById('btnEliminarPeriode')?.addEventListener('click', async () => {
+      if (!confirm(`Eliminar el període "${periode.nomMostrat}"?\nAquesta acció no es pot desfer.`)) return;
+      // Eliminar de l'ordre
+      window._tempEliminarPeriode = periode.codi;
+      await guardarConfig();
+      document.getElementById('_modalSec')?.remove();
+      onOk();
+      window.mostrarToast('🗑️ Període eliminat');
+    });
+    document.getElementById('inpNomPeriode')?.focus();
+    document.getElementById('inpNomPeriode')?.select();
+  }, 100);
+}
+
+function modalCrearPeriode(ordre, PERIODES, nomsPersonalitzats, guardarConfig, onOk) {
+  const jaCreats = ordre;
+  const disponibles = PERIODES.filter(p => !jaCreats.includes(p.codi));
+
+  if (disponibles.length === 0) {
+    window.mostrarToast('Tots els períodes predefinits ja estan creats', 3000);
+    return;
+  }
+
+  crearModal('+ Nou període', `
+    <div style="display:flex;flex-direction:column;gap:8px;">
+      ${disponibles.map(p => `
+        <button class="btn-crear-periode" data-codi="${p.codi}" style="
+          padding:11px 16px;border:1.5px solid #e5e7eb;border-radius:10px;
+          background:#fff;cursor:pointer;text-align:left;font-family:inherit;
+          font-size:13px;font-weight:600;color:#1e1b4b;
+          display:flex;align-items:center;justify-content:space-between;
+          transition:border-color 0.15s,background 0.15s;">
+          ${esH(nomsPersonalitzats[p.codi] || p.nom)}
+          <span style="font-size:11px;color:#9ca3af;font-weight:400;">clic per crear</span>
+        </button>`).join('')}
+    </div>
+  `, async () => { return false; }, ''); // no ok button, uses individual buttons
+
+  setTimeout(() => {
+    document.querySelectorAll('.btn-crear-periode').forEach(btn => {
+      btn.addEventListener('mouseenter', () => { btn.style.borderColor='#7c3aed'; btn.style.background='#f5f3ff'; });
+      btn.addEventListener('mouseleave', () => { btn.style.borderColor='#e5e7eb'; btn.style.background='#fff'; });
+      btn.addEventListener('click', async () => {
+        ordre.push(btn.dataset.codi);
+        await guardarConfig();
+        document.getElementById('_modalSec')?.remove();
+        onOk();
+        window.mostrarToast(`✅ Període creat`);
+      });
+    });
+    // Ocultar el botó Cancel·lar i canviar el títol del modal
+    const cancelBtn = document.getElementById('_btnCancelModal');
+    const okBtn = document.getElementById('_btnOkModal');
+    if (cancelBtn) cancelBtn.textContent = 'Tancar';
+    if (okBtn) okBtn.style.display = 'none';
+  }, 100);
 }
 
 
