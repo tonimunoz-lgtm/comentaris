@@ -32,6 +32,18 @@ let currentPeriodes  = {};        // { periodeId: { nom, ordre } }
 
 window.currentClassId = null;
 
+// Exportar variables de períodes per a app-patch.js
+Object.defineProperty(window, 'currentPeriodes', {
+  get: () => currentPeriodes,
+  set: v  => { currentPeriodes = v; },
+  configurable: true
+});
+Object.defineProperty(window, 'currentPeriodeId', {
+  get: () => currentPeriodeId,
+  set: v  => { currentPeriodeId = v; window._tcClassId = v; },
+  configurable: true
+});
+
 /* ─── DOM REFS ─── */
 const loginScreen  = document.getElementById('loginScreen');
 const appRoot      = document.getElementById('appRoot');
@@ -1284,6 +1296,11 @@ function _renderCommentPanel(nom, comentari, assolamentsHTML, studentId, histori
 }
 
 // Guarda comentari preservant historial de les últimes 3 versions
+// Exportar funcions de períodes per a app-patch.js
+window.renderPeriodesTabs = p => renderPeriodesTabs(p);
+window.renderStudentsList = () => renderStudentsList();
+window.showCommentsEmpty  = () => showCommentsEmpty();
+
 window._saveComentariWithHistory =
 async function _saveComentariWithHistory(studentId, nouText, metadades = null) {
   const docRef = db.collection('alumnes').doc(studentId);
