@@ -1554,7 +1554,8 @@ async function modalEditarRols(usuari, onGuardat) {
                       (usuari.isAdmin ? ['admin'] : ['professor']);
   const descrip = {
     professor:  'Genera comentaris i avaluació',
-    tutor:      'Panell tutoria + semàfor alumnes',
+    tutor:      'Panell tutoria — grup assignat',
+    pedagog:    'Panell tutoria — tots els grups',
     secretaria: 'Gestió estructura i butlletins',
     revisor:    'Lectura/edició cursos assignats',
     admin:      'Accés total a la plataforma',
@@ -1569,9 +1570,18 @@ async function modalEditarRols(usuari, onGuardat) {
 
   const revisorNivells = Array.isArray(usuari.revisio_nivells) ? usuari.revisio_nivells : [];
 
+  // Carregar grups de tutoria per assignar al tutor
+  let grupsTutoria = [];
+  try {
+    const snapT = await window.db.collection('grups_centre')
+      .where('tipus','==','tutoria').get();
+    grupsTutoria = snapT.docs.map(d=>({id:d.id,...d.data()}));
+  } catch(e){}
+  const tutorGrups = Array.isArray(usuari.tutoria_grups) ? usuari.tutoria_grups : [];
+
   crearModal(`🎭 Rols — ${usuari.nom||usuari.email}`, `
     <div style="display:flex;flex-direction:column;gap:10px;">
-      ${['professor','tutor','secretaria','revisor','admin'].map(r=>`
+      ${['professor','tutor','pedagog','secretaria','revisor','admin'].map(r=>`
         <label style="display:flex;align-items:center;gap:12px;cursor:pointer;
                       padding:12px 14px;border-radius:10px;background:#f9fafb;
                       border:2px solid ${rolsActuals.includes(r)?rolColor(r):'#e5e7eb'};
@@ -1616,6 +1626,36 @@ async function modalEditarRols(usuari, onGuardat) {
           </div>`
       }
     </div>
+
+    <!-- Secció tutor: assignar grups de tutoria -->
+    <div id="secTutorGrups" style="margin-top:14px;padding:14px;background:#eff6ff;
+         border:1.5px solid #bfdbfe;border-radius:10px;
+         display:${rolsActuals.includes('tutor')?'block':'none'};">
+      <div style="font-size:13px;font-weight:700;color:#1d4ed8;margin-bottom:10px;">
+        🧑‍🏫 Grups de tutoria assignats
+      </div>
+      ${grupsTutoria.length === 0
+        ? `<p style="font-size:12px;color:#9ca3af;">Cap grup de tutoria creat. Crea'n des de la pestanya Estructura.</p>`
+        : `<div style="display:flex;flex-direction:column;gap:6px;">
+            <label style="font-size:12px;display:flex;align-items:center;gap:8px;cursor:pointer;">
+              <input type="checkbox" id="chkTutorTot" ${tutorGrups.includes('_tot')?'checked':''}
+                style="width:15px;height:15px;accent-color:#2563eb;"> Tots els grups de tutoria
+            </label>
+            <div id="selGrupsTutor" style="padding-left:20px;display:flex;flex-direction:column;gap:4px;
+                 ${tutorGrups.includes('_tot')?'opacity:0.4;pointer-events:none':''}">
+              ${grupsTutoria.map(g=>`
+                <label style="font-size:12px;display:flex;align-items:center;gap:8px;cursor:pointer;">
+                  <input type="checkbox" class="chk-grup-tutor" value="${g.id}"
+                    ${tutorGrups.includes(g.id)?'checked':''}
+                    style="width:15px;height:15px;accent-color:#2563eb;">
+                  🧑‍🏫 ${esH(g.nom)}
+                  <span style="color:#9ca3af;">${esH(g.nivellNom||'')} ${esH(g.curs||'')}</span>
+                </label>
+              `).join('')}
+            </div>
+          </div>`
+      }
+    </div>
   `, async () => {
     const rols = [...document.querySelectorAll('.chk-rol-edit:checked')].map(c=>c.value);
 
@@ -1629,11 +1669,22 @@ async function modalEditarRols(usuari, onGuardat) {
       }
     }
 
+    // Recollir grups assignats al tutor
+    let tutoriaGrups = [];
+    if (rols.includes('tutor')) {
+      if (document.getElementById('chkTutorTot')?.checked) {
+        tutoriaGrups = ['_tot'];
+      } else {
+        tutoriaGrups = [...document.querySelectorAll('.chk-grup-tutor:checked')].map(c=>c.value);
+      }
+    }
+
     await window.db.collection('professors').doc(usuari.id).update({
       rols: rols.length>0?rols:['professor'],
       isAdmin: rols.includes('admin'),
       revisio_nivells: revisioNivells,
       revisio_tot: revisioNivells.includes('_tot'),
+      tutoria_grups: tutoriaGrups,
     });
     window.mostrarToast('✅ Rols actualitzats');
     onGuardat?.();
@@ -1646,6 +1697,11 @@ async function modalEditarRols(usuari, onGuardat) {
       chk.addEventListener('change', ()=>{
         const row = document.getElementById(`row-rol-${chk.value}`);
         if (row) row.style.borderColor = chk.checked ? rolColor(chk.value) : '#e5e7eb';
+        // Mostrar/ocultar secció grups tutor
+        if (chk.value === 'tutor') {
+          const sec = document.getElementById('secTutorGrups');
+          if (sec) sec.style.display = chk.checked ? 'block' : 'none';
+        }
         // Mostrar/ocultar secció nivells revisor
         if (chk.value === 'revisor') {
           const sec = document.getElementById('secRevisorNivells');
@@ -1656,6 +1712,11 @@ async function modalEditarRols(usuari, onGuardat) {
     // Tot el centre toggle
     document.getElementById('chkRevisorTot')?.addEventListener('change', (e)=>{
       const sel = document.getElementById('selNivellsRevisor');
+      if (sel) { sel.style.opacity = e.target.checked ? '0.4' : '1';
+                 sel.style.pointerEvents = e.target.checked ? 'none' : ''; }
+    });
+    document.getElementById('chkTutorTot')?.addEventListener('change', (e)=>{
+      const sel = document.getElementById('selGrupsTutor');
       if (sel) { sel.style.opacity = e.target.checked ? '0.4' : '1';
                  sel.style.pointerEvents = e.target.checked ? 'none' : ''; }
     });
