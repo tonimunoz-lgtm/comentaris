@@ -1230,15 +1230,44 @@ async function eliminarGrupComplet(grupId, nomGrup) {
     }
 
     // 3. Eliminar dades d'avaluació centre per aquest grup
+    //    Estructura: avaluacio_centre/{curs}/{subColId}/{alumneId}
+    //    El grupId pot ser el ID de la subcolecció (materiaId)
     try {
-      const avalSnap = await db.collectionGroup('avaluacio_centre_grup')
-        .where('grupCentreId', '==', grupId).get();
-      if (!avalSnap.empty) {
-        const batchAv = db.batch();
-        avalSnap.docs.forEach(d => batchAv.delete(d.ref));
-        await batchAv.commit();
+      // Llegir tots els cursos que existeixen a avaluacio_centre
+      const cursosSnap = await db.collection('avaluacio_centre').get();
+      for (const cursDoc of cursosSnap.docs) {
+        // Intentar llegir la subcolecció amb el grupId
+        try {
+          const subSnap = await db.collection('avaluacio_centre')
+            .doc(cursDoc.id)
+            .collection(grupId)
+            .get();
+          if (!subSnap.empty) {
+            const batchAv = db.batch();
+            subSnap.docs.forEach(d => batchAv.delete(d.ref));
+            await batchAv.commit();
+          }
+        } catch(e2) {}
+
+        // També buscar per grupId dins de qualsevol subcolecció
+        // (per si el professor va enviar amb el grup classe com a referència)
+        try {
+          const totsGrups = await db.collection('grups_centre').get();
+          for (const g of totsGrups.docs) {
+            const snap3 = await db.collection('avaluacio_centre')
+              .doc(cursDoc.id)
+              .collection(g.id)
+              .where('grupId', '==', grupId)
+              .get();
+            if (!snap3.empty) {
+              const b3 = db.batch();
+              snap3.docs.forEach(d => b3.delete(d.ref));
+              await b3.commit();
+            }
+          }
+        } catch(e3) {}
       }
-    } catch(e) { /* avaluació pot no tenir index, no és crític */ }
+    } catch(e) { console.warn('eliminar avaluacio_centre:', e.message); }
 
     window.mostrarToast(`✅ "${nomGrup}" eliminat correctament`);
   } catch(e) {
@@ -1252,13 +1281,16 @@ async function eliminarGrupComplet(grupId, nomGrup) {
 ══════════════════════════════════════════════════════ */
 async function eliminarNivell(nivellId) {
   const db = window.db;
-  // Eliminar tots els grups del nivell
+  window.mostrarToast('⏳ Eliminant nivell...', 2000);
+  // Eliminar tots els grups del nivell (classes i matèries)
   const snap = await db.collection('grups_centre').where('nivellId','==',nivellId).get();
-  const batch = db.batch();
-  snap.docs.forEach(d => batch.delete(d.ref));
-  batch.delete(db.collection('nivells_centre').doc(nivellId));
-  await batch.commit();
-  window.mostrarToast('🗑️ Nivell i grups eliminats');
+  // Per a cada grup, fer eliminació completa en cascada
+  for (const d of snap.docs) {
+    await eliminarGrupComplet(d.id, d.data().nom);
+  }
+  // Eliminar el nivell
+  await db.collection('nivells_centre').doc(nivellId).delete();
+  window.mostrarToast('🗑️ Nivell i tots els grups eliminats');
   await window._secOnNivellCreat?.();
 }
 
