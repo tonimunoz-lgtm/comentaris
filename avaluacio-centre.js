@@ -578,6 +578,14 @@ async function enviarAvaluacioCentre() {
   // Usem grupId com a materiaId — el grup ja identifica la matèria/classe/projecte
   const materiaId  = grupId;
   const materiaNom = grupNom;
+  // Llegir el grupClasseId (parentGrupId) per poder filtrar a secretaria
+  let grupClasseId = grupId; // per defecte, si és un grup classe
+  try {
+    const gDoc = await window.db.collection('grups_centre').doc(grupId).get();
+    if (gDoc.exists && gDoc.data().parentGrupId) {
+      grupClasseId = gDoc.data().parentGrupId;
+    }
+  } catch(e) {}
   const periodeId  = window._tcClassId || window.currentPeriodeId || 'general';
   const profUid    = firebase.auth().currentUser?.uid || '';
   const profEmail  = firebase.auth().currentUser?.email || '';
@@ -628,6 +636,7 @@ async function enviarAvaluacioCentre() {
           ralc:            alumne.ralc,
           grup:            grupNom,
           grupId,
+          grupClasseId,    // ID del grup classe pare (per filtrar a secretaria)
           materiaNom,
           materiaId,
           curs,
