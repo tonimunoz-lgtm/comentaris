@@ -334,10 +334,14 @@ async function crearClasseDesDeGrupCentre() {
       // Cridem a l'event de tecla Escape per tancar el modal
     }
 
-    // Recarregar la vista de classes (app.js ho exposa com a global)
+    // Recarregar la vista de classes immediatament
     setTimeout(() => {
-      // app.js no exposa loadClassesScreen, però podem fer servir el botó "Grups"
-      document.getElementById('navClasses')?.click();
+      if (typeof window.loadClassesScreen === 'function') {
+        window.loadClassesScreen();
+      } else {
+        // Fallback: click al botó de navegació
+        document.getElementById('navClasses')?.click();
+      }
     }, 300);
 
   } catch(e) {
@@ -539,7 +543,12 @@ function iniciarEscoltaCanvisGrup() {
               const ralcsCentre = alumnesCentre.map(a=>a.ralc).filter(Boolean);
               const novsRalcs = ralcsCentre.filter(r => r && !ralcsClasse.has(r));
               if (novsRalcs.length > 0 && !document.getElementById('_bannerActualitzacio')) {
-                mostrarBannerActualitzacio(alumnesCentre.length, alumnesIds.length, grupCentreId);
+                // Verificar que no s'hagi ja resolt per a aquest grup+classe
+                const resolKey = `_bannerResolt_${window.currentClassId}_${grupCentreId}`;
+                const jaResolt = sessionStorage.getItem(resolKey);
+                if (!jaResolt) {
+                  mostrarBannerActualitzacio(alumnesCentre.length, alumnesIds.length, grupCentreId);
+                }
               }
             } catch(e) {}
           })();
@@ -586,7 +595,11 @@ function mostrarBannerActualitzacio(nCentre, nClasse, grupCentreId) {
   `;
   document.body.appendChild(banner);
 
-  document.getElementById('_btnTancarBanner').addEventListener('click', () => banner.remove());
+  document.getElementById('_btnTancarBanner').addEventListener('click', () => {
+    // Marcar com ignorat per a aquesta sessió
+    sessionStorage.setItem(`_bannerResolt_${window.currentClassId}_${grupCentreId}`, '1');
+    banner.remove();
+  });
 
   document.getElementById('_btnActualitzarClasse').addEventListener('click', async () => {
     banner.innerHTML = '<div style="padding:4px 20px;">⏳ Actualitzant alumnes...</div>';
@@ -623,6 +636,8 @@ function mostrarBannerActualitzacio(nCentre, nClasse, grupCentreId) {
       nousBatch.update(window.db.collection('classes').doc(classId), { alumnes: nousIds });
       await nousBatch.commit();
 
+      // Marcar com resolt per a aquesta sessió
+      sessionStorage.setItem(`_bannerResolt_${window.currentClassId}_${grupCentreId}`, '1');
       banner.remove();
       const nouCount = nousIds.length - alumnesActuals.length;
       window.mostrarToast?.(`✅ ${nouCount} alumnes nous afegits`);
@@ -776,7 +791,9 @@ function ocultarBotonsAlumnesProfesor() {
     #btnImportAL,
     #btnDeleteMode,
     #btnCancelDeleteStudents,
-    #confirmDeleteStudentsBtn {
+    #confirmDeleteStudentsBtn,
+    #btnImportClassroom,
+    #modalClassroomImport {
       display: none !important;
     }
   `;
@@ -786,6 +803,33 @@ function ocultarBotonsAlumnesProfesor() {
 // Activar immediatament
 document.addEventListener('DOMContentLoaded', ocultarBotonsAlumnesProfesor);
 if (document.readyState !== 'loading') ocultarBotonsAlumnesProfesor();
+
+
+/* Forçar refresc del badge 🏫 de l'alumne actiu després d'enviar */
+window._refrescarBadgeAlumneActiu = function() {
+  const li = document.querySelector('#studentsList li.active[data-id]');
+  if (!li) return;
+  li.querySelector('.badge-avc')?.remove();
+  const alumneId = li.dataset.id;
+  window.db?.collection('alumnes').doc(alumneId).get().then(doc => {
+    if (doc?.exists) {
+      const d = doc.data();
+      if (d.grupCentreId) {
+        verificarEnviamentAvaluacio(alumneId, d, li);
+      }
+    }
+  }).catch(()=>{});
+  // Refresc de tots els alumnes visibles
+  document.querySelectorAll('#studentsList li[data-id]').forEach(li2 => {
+    li2.querySelector('.badge-avc')?.remove();
+    window.db?.collection('alumnes').doc(li2.dataset.id).get().then(doc => {
+      if (doc?.exists) {
+        const d = doc.data();
+        if (d.grupCentreId) verificarEnviamentAvaluacio(li2.dataset.id, d, li2);
+      }
+    }).catch(()=>{});
+  });
+};
 
 
 console.log('✅ app-patch.js v2: integració completada');
