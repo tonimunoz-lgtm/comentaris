@@ -298,6 +298,15 @@ async function carregarComentarisClasse() {
   btn.disabled = true;
 
   try {
+    // Llegir el nom del periode actual
+    let periodeNomActual = 'Trimestre';
+    try {
+      const clDoc = await window.db.collection('classes').doc(classId).get();
+      const pData = clDoc.data()?.periodes?.[periodeId];
+      if (pData?.nom) periodeNomActual = pData.nom;
+    } catch(e){}
+    window._periodeNomActual = periodeNomActual;
+
     // Llegir tots els alumnes via IDs de la classe (com fa app.js)
     const classeDoc = await window.db.collection('classes').doc(classId).get();
     if (!classeDoc.exists) throw new Error('Classe no trobada');
@@ -520,6 +529,9 @@ async function enviarAvaluacioCentre() {
           .collection(materiaId)
           .doc(alumne.id);
 
+        // Obtenir el nom del periode (T1, T2, etc.) des de la classe actual
+        const periodeNom = window.currentPeriodes?.[periodeId]?.nom || periodeId || 'General';
+
         batch.set(ref, {
           nom:             alumne.nom,
           cognoms:         alumne.cognoms,
@@ -531,12 +543,13 @@ async function enviarAvaluacioCentre() {
           materiaId,
           curs,
           periodeId,
+          periodeNom,
           descripcioComuna: descComuna,
           items,
           professorUid:    profUid,
           professorEmail:  profEmail,
           updatedAt:       firebase.firestore.FieldValue.serverTimestamp(),
-        }, { merge: true });
+        }, { merge: false }); // merge:false per sobreescriure sempre l'anterior
 
         count++;
       });
