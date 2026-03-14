@@ -420,6 +420,8 @@ async function renderEstructura(body) {
         document.getElementById('titol-col-alumnes').textContent = `ALUMNES — ${m.nom}`;
         alumnesFont = 'materia';
         renderAlumnes(m);
+        enableBtn('btnNouAlumne');
+        enableBtn('btnImportarAlumnes');
       });
       afegirDD(el, cont, ms, i, (x,o) => window.db.collection('grups_centre').doc(x.id).update({ordre:o}).catch(()=>{}));
       cont.appendChild(el);
