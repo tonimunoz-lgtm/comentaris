@@ -124,6 +124,7 @@ async function obrirPanellSecretaria() {
           ${[
             {id:'estructura', icon:'🏗️', label:'Estructura'},
             {id:'usuaris',    icon:'👥', label:'Usuaris'},
+            {id:'periodes',   icon:'🔒', label:'Períodes'},
             {id:'butlletins', icon:'📄', label:'Butlletins'},
             {id:'quadre',     icon:'📊', label:'Quadre dades'},
           ].map(t => `
@@ -170,6 +171,7 @@ async function carregarTab(tab) {
   switch(tab) {
     case 'estructura': await renderEstructura(body); break;
     case 'usuaris':    await renderUsuaris(body);    break;
+    case 'periodes':   await renderPeriodes(body);   break;
     case 'butlletins': await renderButlletins(body); break;
     case 'quadre':     await renderQuadreDades(body);break;
   }
@@ -1494,6 +1496,101 @@ async function modalEditarRols(usuari, onGuardat) {
 /* ══════════════════════════════════════════════════════
    TAB BUTLLETINS i QUADRE DADES (simplificats)
 ══════════════════════════════════════════════════════ */
+/* ══════════════════════════════════════════════════════
+   TAB PERÍODES — Bloqueig de trimestres
+   Secretaria pot bloquejar un trimestre perquè els
+   professors no puguin modificar aquella avaluació
+══════════════════════════════════════════════════════ */
+async function renderPeriodes(body) {
+  const PERIODES_FIXES = [
+    { codi: 'preav', nom: 'Pre-avaluació',  ordre: 0 },
+    { codi: 'T1',    nom: '1r Trimestre',   ordre: 1 },
+    { codi: 'T2',    nom: '2n Trimestre',   ordre: 2 },
+    { codi: 'T3',    nom: '3r Trimestre',   ordre: 3 },
+    { codi: 'final', nom: 'Final de curs',  ordre: 4 },
+  ];
+
+  // Llegir estat actual
+  let tancats = [];
+  try {
+    const doc = await window.db.collection('_sistema').doc('periodes_tancats').get();
+    tancats = doc.data()?.tancats || [];
+  } catch(e) {}
+
+  body.innerHTML = `
+    <h3 style="font-size:16px;font-weight:700;color:#1e1b4b;margin-bottom:6px;">🔒 Control de períodes</h3>
+    <p style="font-size:13px;color:#6b7280;margin-bottom:20px;">
+      Tanca un període per impedir que els professors modifiquin les avaluacions d'aquell trimestre.
+      Els professors podran consultar els comentaris però no crear-ne de nous ni modificar-los.
+    </p>
+
+    <div style="display:flex;flex-direction:column;gap:10px;max-width:500px;" id="llista-periodes-ctrl"></div>
+
+    <div style="margin-top:24px;background:#fef3c7;border:1.5px solid #fde68a;border-radius:10px;
+                padding:14px 16px;font-size:12px;color:#92400e;max-width:500px;">
+      <strong>⚠️ Nota:</strong> Un cop tancat un període, els professors veiran el missatge
+      "🔒 Avaluació tancada" i no podran enviar noves avaluacions per a aquell trimestre.
+      Pots tornar a obrir-lo en qualsevol moment.
+    </div>
+  `;
+
+  const renderLlista = () => {
+    const cont = document.getElementById('llista-periodes-ctrl');
+    if (!cont) return;
+    cont.innerHTML = PERIODES_FIXES.map(p => {
+      const tancat = tancats.includes(p.codi);
+      return `
+        <div style="display:flex;align-items:center;justify-content:space-between;
+                    padding:14px 18px;border-radius:12px;border:2px solid ${tancat?'#fca5a5':'#e5e7eb'};
+                    background:${tancat?'#fef2f2':'#f9fafb'};">
+          <div>
+            <div style="font-weight:700;font-size:14px;color:${tancat?'#dc2626':'#1e1b4b'};">
+              ${tancat?'🔒 ':''} ${esH(p.nom)}
+            </div>
+            <div style="font-size:11px;color:#9ca3af;margin-top:2px;">
+              ${tancat
+                ? 'Tancat — els professors no poden enviar avaluacions'
+                : 'Obert — els professors poden enviar avaluacions'}
+            </div>
+          </div>
+          <button class="btn-toggle-periode" data-codi="${p.codi}" data-tancat="${tancat}"
+            style="padding:8px 18px;border:none;border-radius:9px;font-weight:700;
+                   cursor:pointer;font-size:13px;white-space:nowrap;
+                   background:${tancat?'#059669':'#dc2626'};color:#fff;">
+            ${tancat ? '🔓 Obrir' : '🔒 Tancar'}
+          </button>
+        </div>
+      `;
+    }).join('');
+
+    cont.querySelectorAll('.btn-toggle-periode').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        const codi   = btn.dataset.codi;
+        const tancat = btn.dataset.tancat === 'true';
+        btn.disabled = true;
+        btn.textContent = '⏳';
+        try {
+          if (tancat) {
+            tancats = tancats.filter(c => c !== codi);
+          } else {
+            tancats = [...new Set([...tancats, codi])];
+          }
+          await window.db.collection('_sistema').doc('periodes_tancats').set(
+            { tancats }, { merge: false }
+          );
+          window.mostrarToast(tancat ? `✅ "${btn.closest('div>div').querySelector('div').textContent.trim().replace('🔒','')} " obert` : `🔒 Període tancat`);
+          renderLlista();
+        } catch(e) {
+          window.mostrarToast('❌ Error: ' + e.message);
+          btn.disabled = false;
+        }
+      });
+    });
+  };
+
+  renderLlista();
+}
+
 async function renderButlletins(body) {
   const [nivells, grups, cursActiu] = await Promise.all([
     carregarNivells(), carregarGrupsCentre(), carregarCursActiu()
@@ -1504,13 +1601,24 @@ async function renderButlletins(body) {
 
     <!-- Filtres -->
     <div style="background:#f9fafb;border:1.5px solid #e5e7eb;border-radius:12px;padding:16px;margin-bottom:16px;">
-      <div style="display:grid;grid-template-columns:1fr 1fr 1fr auto;gap:12px;align-items:end;">
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr auto;gap:12px;align-items:end;">
         <div>
           <label style="font-size:12px;font-weight:600;color:#374151;display:block;margin-bottom:5px;">Curs</label>
           <select id="bCurs" style="width:100%;padding:8px 10px;border:1.5px solid #e5e7eb;border-radius:8px;font-size:13px;outline:none;">
             <option value="">— Tria curs —</option>
             ${[...new Set(grups.map(g=>g.curs).filter(Boolean))].sort().reverse()
               .map(c=>`<option value="${c}" ${c===cursActiu?'selected':''}>${c}</option>`).join('')}
+          </select>
+        </div>
+        <div>
+          <label style="font-size:12px;font-weight:600;color:#374151;display:block;margin-bottom:5px;">Trimestre</label>
+          <select id="bTrimestre" style="width:100%;padding:8px 10px;border:1.5px solid #e5e7eb;border-radius:8px;font-size:13px;outline:none;">
+            <option value="">— Tots —</option>
+            <option value="Pre-avaluació">Pre-avaluació</option>
+            <option value="1r Trimestre">1r Trimestre</option>
+            <option value="2n Trimestre">2n Trimestre</option>
+            <option value="3r Trimestre">3r Trimestre</option>
+            <option value="Final de curs">Final de curs</option>
           </select>
         </div>
         <div>
@@ -1559,11 +1667,14 @@ async function renderButlletins(body) {
   document.getElementById('bCurs').addEventListener('change', actualitzarGrups);
   document.getElementById('bNivell').addEventListener('change', actualitzarGrups);
   document.getElementById('bCarregar').addEventListener('click', () => carregarDadesButlletins(grups));
+  // Preseleccionar T1 per defecte
+  document.getElementById('bTrimestre').value = '1r Trimestre';
 }
 
 async function carregarDadesButlletins(grups) {
-  const grupId = document.getElementById('bGrup')?.value;
-  const curs   = document.getElementById('bCurs')?.value;
+  const grupId    = document.getElementById('bGrup')?.value;
+  const curs      = document.getElementById('bCurs')?.value;
+  const trimestre = document.getElementById('bTrimestre')?.value || '';
   if (!grupId || !curs) {
     window.mostrarToast('⚠️ Tria el curs i el grup classe', 3000);
     return;
@@ -1615,9 +1726,10 @@ async function carregarDadesButlletins(grups) {
 
           snap.docs.forEach(doc => {
             const d = doc.data();
+            // Filtrar per trimestre si s'ha seleccionat
+            if (trimestre && d.periodeNom && d.periodeNom !== trimestre) return;
             const key = d.ralc || `${d.cognoms}_${d.nom}`;
             if (!alumnesAmbDades[key]) {
-              // Alumne trobat a avaluacio_centre però no al grup — afegir-lo
               alumnesAmbDades[key] = {
                 nom: d.nom||'', cognoms: d.cognoms||'', ralc: d.ralc||'',
                 nomComplet: d.cognoms ? `${d.cognoms}, ${d.nom}` : (d.nom||'Desconegut'),
@@ -1626,6 +1738,7 @@ async function carregarDadesButlletins(grups) {
             }
             alumnesAmbDades[key].materies[cand.id] = {
               nom: nomMat,
+              periodeNom: d.periodeNom || '',
               items: d.items || [],
               descripcioComuna: d.descripcioComuna || '',
             };
