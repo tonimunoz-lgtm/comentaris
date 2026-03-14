@@ -1230,14 +1230,373 @@ async function modalEditarRols(usuari, onGuardat) {
    TAB BUTLLETINS i QUADRE DADES (simplificats)
 ══════════════════════════════════════════════════════ */
 async function renderButlletins(body) {
+  const [nivells, grups] = await Promise.all([carregarNivells(), carregarGrupsCentre()]);
+
   body.innerHTML = `
-    <div style="text-align:center;padding:60px;color:#9ca3af;">
-      <div style="font-size:48px;margin-bottom:12px;">📄</div>
-      <h3 style="margin-bottom:8px;color:#374151;">Butlletins</h3>
-      <p style="font-size:13px;">Per generar butlletins, primer els professors han d'afegir les avaluacions.<br>
-      Disponible quan hi hagi dades a l'Avaluació Centre.</p>
+    <h3 style="font-size:16px;font-weight:700;color:#1e1b4b;margin-bottom:16px;">📄 Butlletins</h3>
+
+    <!-- Filtres -->
+    <div style="background:#f9fafb;border:1.5px solid #e5e7eb;border-radius:12px;padding:16px;margin-bottom:16px;">
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr auto;gap:12px;align-items:end;">
+        <div>
+          <label style="font-size:12px;font-weight:600;color:#374151;display:block;margin-bottom:5px;">Curs</label>
+          <select id="bCurs" style="width:100%;padding:8px 10px;border:1.5px solid #e5e7eb;border-radius:8px;font-size:13px;outline:none;">
+            <option value="">— Tria curs —</option>
+            ${[...new Set(grups.map(g=>g.curs).filter(Boolean))].sort().reverse()
+              .map(c=>`<option value="${c}">${c}</option>`).join('')}
+          </select>
+        </div>
+        <div>
+          <label style="font-size:12px;font-weight:600;color:#374151;display:block;margin-bottom:5px;">Nivell</label>
+          <select id="bNivell" style="width:100%;padding:8px 10px;border:1.5px solid #e5e7eb;border-radius:8px;font-size:13px;outline:none;">
+            <option value="">— Tots —</option>
+            ${nivells.map(n=>`<option value="${n.id}">${esH(n.nom)}</option>`).join('')}
+          </select>
+        </div>
+        <div>
+          <label style="font-size:12px;font-weight:600;color:#374151;display:block;margin-bottom:5px;">Grup classe</label>
+          <select id="bGrup" style="width:100%;padding:8px 10px;border:1.5px solid #e5e7eb;border-radius:8px;font-size:13px;outline:none;">
+            <option value="">— Tria grup —</option>
+          </select>
+        </div>
+        <button id="bCarregar" style="padding:8px 18px;background:#7c3aed;color:#fff;border:none;border-radius:8px;font-weight:600;cursor:pointer;white-space:nowrap;">
+          🔍 Carregar
+        </button>
+      </div>
     </div>
+
+    <!-- Resum matèries disponibles -->
+    <div id="bResumMateries" style="margin-bottom:16px;display:none;">
+      <h4 style="font-size:13px;font-weight:700;color:#374151;margin-bottom:8px;">Matèries amb dades d'avaluació:</h4>
+      <div id="bLlistaMateries" style="display:flex;gap:8px;flex-wrap:wrap;"></div>
+    </div>
+
+    <!-- Llista alumnes + generar -->
+    <div id="bLlistaAlumnes" style=""></div>
   `;
+
+  // Quan canvia curs o nivell, actualitzar grups classe
+  const actualitzarGrups = () => {
+    const curs = document.getElementById('bCurs').value;
+    const nivellId = document.getElementById('bNivell').value;
+    const selGrup = document.getElementById('bGrup');
+    const grGrup = grups.filter(g =>
+      g.tipus === 'classe' &&
+      (!curs || g.curs === curs) &&
+      (!nivellId || g.nivellId === nivellId)
+    );
+    selGrup.innerHTML = '<option value="">— Tria grup —</option>' +
+      grGrup.map(g=>`<option value="${g.id}" data-curs="${g.curs||''}">${esH(g.nom)} (${esH(g.nivellNom||'')})</option>`).join('');
+  };
+
+  document.getElementById('bCurs').addEventListener('change', actualitzarGrups);
+  document.getElementById('bNivell').addEventListener('change', actualitzarGrups);
+  document.getElementById('bCarregar').addEventListener('click', () => carregarDadesButlletins(grups));
+}
+
+async function carregarDadesButlletins(grups) {
+  const grupId = document.getElementById('bGrup')?.value;
+  const curs   = document.getElementById('bCurs')?.value;
+  if (!grupId || !curs) {
+    window.mostrarToast('⚠️ Tria el curs i el grup classe', 3000);
+    return;
+  }
+
+  const resDiv = document.getElementById('bLlistaAlumnes');
+  const matDiv = document.getElementById('bResumMateries');
+  const matLlista = document.getElementById('bLlistaMateries');
+  resDiv.innerHTML = '<p style="color:#9ca3af;padding:20px;">⏳ Carregant dades...</p>';
+  matDiv.style.display = 'none';
+
+  try {
+    // Llegir totes les subcoleccions de avaluacio_centre/{curs}
+    // No podem fer collectionGroup sense índex — llegim el grup directament
+    const grupDoc = grups.find(g=>g.id===grupId);
+    const alumnesCentre = grupDoc?.alumnes || [];
+
+    if (alumnesCentre.length === 0) {
+      resDiv.innerHTML = '<p style="color:#9ca3af;text-align:center;padding:30px;">Cap alumne en aquest grup. Afegeix alumnes des de la pestanya Estructura.</p>';
+      return;
+    }
+
+    // Llegir totes les matèries (col·leccions fills) de avaluacio_centre/{curs}
+    // Busquem per grupId dins de cada col·lecció
+    const db = window.db;
+
+    // Obtenir llista de grups del centre per trobar les matèries possibles
+    const totsGrups = await carregarGrupsCentre();
+    const materies = totsGrups.filter(g =>
+      g.tipus !== 'classe' && g.curs === curs
+    );
+
+    // Per cada matèria, intentar llegir dades del grup
+    const materiesAmbDades = [];
+    for (const mat of materies) {
+      try {
+        // Provar llegir un doc d'un alumne del grup
+        const snap = await db.collection('avaluacio_centre')
+          .doc(curs)
+          .collection(grupId) // el grup és el materiaId
+          .limit(1)
+          .get();
+        if (!snap.empty) {
+          materiesAmbDades.push({ id: grupId, nom: grupDoc?.nom || grupId, docs: snap.docs });
+        }
+      } catch(e) {}
+
+      // Llegir per materiaId = mat.id
+      try {
+        const snap = await db.collection('avaluacio_centre')
+          .doc(curs)
+          .collection(mat.id)
+          .where('grupId', '==', grupId)
+          .limit(1)
+          .get();
+        if (!snap.empty) {
+          materiesAmbDades.push({ id: mat.id, nom: mat.nom, docs: snap.docs });
+        }
+      } catch(e) {}
+    }
+
+    // Deduplicar
+    const matUniques = [...new Map(materiesAmbDades.map(m=>[m.id,m])).values()];
+
+    // Mostrar resum matèries
+    if (matUniques.length > 0) {
+      matLlista.innerHTML = matUniques.map(m => `
+        <span style="padding:5px 12px;background:#e0e7ff;color:#4338ca;border-radius:8px;
+                     font-size:12px;font-weight:600;">${esH(m.nom)}</span>
+      `).join('');
+      matDiv.style.display = 'block';
+    }
+
+    // Llegir TOTES les dades de l'alumne per les matèries trobades
+    const alumnesAmbDades = {};
+
+    // Inicialitzar amb alumnes del centre
+    alumnesCentre.forEach(a => {
+      const key = a.ralc || `${a.cognoms}_${a.nom}`;
+      alumnesAmbDades[key] = {
+        nom: a.nom, cognoms: a.cognoms, ralc: a.ralc,
+        nomComplet: a.cognoms ? `${a.cognoms}, ${a.nom}` : a.nom,
+        materies: {}
+      };
+    });
+
+    // Afegir dades de cada matèria
+    for (const mat of matUniques) {
+      try {
+        const snap = await db.collection('avaluacio_centre')
+          .doc(curs)
+          .collection(mat.id)
+          .get();
+
+        snap.docs.forEach(doc => {
+          const d = doc.data();
+          const key = d.ralc || `${d.cognoms}_${d.nom}`;
+          if (!alumnesAmbDades[key]) {
+            alumnesAmbDades[key] = {
+              nom: d.nom, cognoms: d.cognoms||'', ralc: d.ralc||'',
+              nomComplet: d.cognoms ? `${d.cognoms}, ${d.nom}` : d.nom,
+              materies: {}
+            };
+          }
+          alumnesAmbDades[key].materies[mat.id] = {
+            nom: mat.nom,
+            items: d.items || [],
+            descripcioComuna: d.descripcioComuna || '',
+            docId: doc.id
+          };
+        });
+      } catch(e) {}
+    }
+
+    const alumnes = Object.values(alumnesAmbDades)
+      .sort((a,b) => (a.cognoms||a.nom).localeCompare(b.cognoms||b.nom,'ca'));
+
+    const ambDades = alumnes.filter(a => Object.keys(a.materies).length > 0);
+    const senseDades = alumnes.filter(a => Object.keys(a.materies).length === 0);
+
+    if (alumnes.length === 0) {
+      resDiv.innerHTML = '<p style="color:#9ca3af;text-align:center;padding:30px;">Cap alumne trobat per a aquest grup.</p>';
+      return;
+    }
+
+    resDiv.innerHTML = `
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;flex-wrap:wrap;gap:8px;">
+        <div style="font-size:13px;color:#6b7280;">
+          <strong style="color:#1e1b4b;">${alumnes.length}</strong> alumnes ·
+          <strong style="color:#059669;">${ambDades.length}</strong> amb dades ·
+          <strong style="color:#dc2626;">${senseDades.length}</strong> sense dades
+        </div>
+        <div style="display:flex;gap:8px;">
+          <button id="bGenTots" style="padding:7px 14px;background:#7c3aed;color:#fff;border:none;border-radius:8px;font-weight:600;cursor:pointer;font-size:12px;">
+            📄 Generar tots (${ambDades.length})
+          </button>
+        </div>
+      </div>
+
+      <table style="width:100%;border-collapse:collapse;font-size:12px;">
+        <thead>
+          <tr style="background:#f3f4f6;">
+            <th style="padding:8px 10px;text-align:left;">Alumne/a</th>
+            <th style="padding:8px 10px;text-align:center;">Matèries</th>
+            <th style="padding:8px 10px;text-align:center;">Ítems</th>
+            <th style="padding:8px 10px;text-align:center;">Accions</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${alumnes.map(a => {
+            const nMat = Object.keys(a.materies).length;
+            const nItems = Object.values(a.materies).reduce((s,m)=>s+(m.items?.length||0),0);
+            return `
+              <tr style="border-bottom:1px solid #f3f4f6;" data-alumne='${JSON.stringify({nom:a.nom,cognoms:a.cognoms,ralc:a.ralc,materies:a.materies})}'>
+                <td style="padding:7px 10px;font-weight:600;color:#1e1b4b;">${esH(a.nomComplet)}</td>
+                <td style="padding:7px 10px;text-align:center;">
+                  ${nMat > 0
+                    ? `<span style="color:#059669;font-weight:700;">${nMat}</span>`
+                    : '<span style="color:#dc2626;">0</span>'}
+                </td>
+                <td style="padding:7px 10px;text-align:center;color:#6b7280;">${nItems||'—'}</td>
+                <td style="padding:7px 10px;text-align:center;">
+                  ${nMat > 0
+                    ? `<button class="btn-gen-butlleti" style="padding:4px 10px;background:#4f46e5;color:#fff;border:none;border-radius:6px;font-size:11px;font-weight:600;cursor:pointer;">
+                        📄 Butlletí
+                      </button>`
+                    : '<span style="color:#9ca3af;font-size:11px;">sense dades</span>'}
+                </td>
+              </tr>
+            `;
+          }).join('')}
+        </tbody>
+      </table>
+    `;
+
+    // Events
+    document.getElementById('bGenTots')?.addEventListener('click', () => {
+      ambDades.forEach(a => generarButlleti(a, curs, grupDoc?.nom||''));
+    });
+
+    document.querySelectorAll('.btn-gen-butlleti').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const tr = btn.closest('tr');
+        const alumne = JSON.parse(tr.dataset.alumne);
+        generarButlleti(alumne, curs, grupDoc?.nom||'');
+      });
+    });
+
+  } catch(e) {
+    console.error('carregarDadesButlletins:', e);
+    resDiv.innerHTML = `<div style="color:#ef4444;padding:16px;">Error: ${e.message}</div>`;
+  }
+}
+
+function generarButlleti(alumne, curs, grupNom) {
+  const COLORS_ASSL = {
+    'Assoliment Excel·lent': '#7c3aed',
+    'Assoliment Notable':    '#2563eb',
+    'Assoliment Satisfactori':'#d97706',
+    'No Assoliment':         '#dc2626',
+    'No avaluat':            '#9ca3af',
+  };
+  const SHORT = {
+    'Assoliment Excel·lent': 'AE',
+    'Assoliment Notable':    'AN',
+    'Assoliment Satisfactori':'AS',
+    'No Assoliment':         'NA',
+    'No avaluat':            '--',
+  };
+
+  const nomComplet = alumne.cognoms ? `${alumne.cognoms}, ${alumne.nom}` : alumne.nom;
+  const materies = Object.values(alumne.materies);
+
+  const html = `<!DOCTYPE html>
+<html lang="ca">
+<head>
+  <meta charset="UTF-8">
+  <title>Butlletí — ${nomComplet}</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: Arial, sans-serif; font-size: 11pt; color: #111; padding: 20mm; }
+    .cap { display: flex; justify-content: space-between; align-items: flex-start;
+           border-bottom: 2px solid #1e1b4b; padding-bottom: 12px; margin-bottom: 16px; }
+    .cap h1 { font-size: 16pt; color: #1e1b4b; }
+    .cap .sub { font-size: 10pt; color: #555; margin-top: 4px; }
+    .dades { background: #f3f4f6; padding: 10px 14px; border-radius: 8px; margin-bottom: 16px; font-size: 10pt; }
+    .dades span { margin-right: 20px; }
+    .materia { margin-bottom: 16px; page-break-inside: avoid; }
+    .mat-head { background: #1e1b4b; color: #fff; padding: 7px 12px; border-radius: 6px 6px 0 0; font-weight: bold; font-size: 11pt; }
+    .mat-desc { background: #f9fafb; padding: 8px 12px; font-size: 10pt; color: #444; border: 1px solid #e5e7eb; border-top: none; }
+    table { width: 100%; border-collapse: collapse; border: 1px solid #e5e7eb; }
+    th { background: #f3f4f6; padding: 7px 10px; text-align: left; font-size: 10pt; border-bottom: 1px solid #e5e7eb; }
+    td { padding: 7px 10px; font-size: 10pt; border-bottom: 1px solid #f0f0f0; vertical-align: top; }
+    .badge { display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 9pt; font-weight: bold; color: #fff; }
+    .peu { margin-top: 30px; display: flex; justify-content: space-between; font-size: 10pt; }
+    .firma { border-top: 1px solid #999; width: 150px; padding-top: 6px; text-align: center; font-size: 9pt; color: #666; }
+    @media print { body { padding: 15mm; } }
+  </style>
+</head>
+<body>
+  <div class="cap">
+    <div>
+      <h1>INS Matadepera</h1>
+      <div class="sub">Butlletí d'avaluació · ${esH(curs)} · ${esH(grupNom)}</div>
+    </div>
+    <div style="text-align:right;font-size:10pt;color:#555;">
+      Data: ${new Date().toLocaleDateString('ca-ES')}<br>
+    </div>
+  </div>
+
+  <div class="dades">
+    <span><strong>Alumne/a:</strong> ${esH(nomComplet)}</span>
+    ${alumne.ralc ? `<span><strong>RALC:</strong> ${esH(alumne.ralc)}</span>` : ''}
+    <span><strong>Grup:</strong> ${esH(grupNom)}</span>
+    <span><strong>Curs:</strong> ${esH(curs)}</span>
+  </div>
+
+  ${materies.map(mat => `
+    <div class="materia">
+      <div class="mat-head">${esH(mat.nom)}</div>
+      ${mat.descripcioComuna ? `<div class="mat-desc">${esH(mat.descripcioComuna)}</div>` : ''}
+      <table>
+        <thead>
+          <tr>
+            <th style="width:40%">Aprenentatge / Competència</th>
+            <th>Comentari</th>
+            <th style="width:110px;text-align:center;">Assoliment</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${(mat.items||[]).map(it => `
+            <tr>
+              <td><strong>${esH(it.titol||'')}</strong></td>
+              <td>${esH(it.comentari||'')}</td>
+              <td style="text-align:center;">
+                <span class="badge" style="background:${COLORS_ASSL[it.assoliment]||'#9ca3af'}">
+                  ${SHORT[it.assoliment]||'--'}
+                </span><br>
+                <span style="font-size:8pt;color:#666;">${esH(it.assoliment||'No avaluat')}</span>
+              </td>
+            </tr>
+          `).join('')}
+        </tbody>
+      </table>
+    </div>
+  `).join('')}
+
+  <div class="peu">
+    <div class="firma">Tutor/a</div>
+    <div class="firma">Director/a</div>
+    <div class="firma">Signatura família</div>
+  </div>
+</body>
+</html>`;
+
+  const win = window.open('', '_blank');
+  if (!win) { window.mostrarToast('⚠️ Permet les finestres emergents al navegador', 4000); return; }
+  win.document.write(html);
+  win.document.close();
+  setTimeout(() => win.print(), 500);
 }
 
 async function renderQuadreDades(body) {
@@ -1246,14 +1605,20 @@ async function renderQuadreDades(body) {
 
   body.innerHTML = `
     <h3 style="font-size:16px;font-weight:700;color:#1e1b4b;margin-bottom:16px;">📊 Quadre de dades</h3>
-    <div style="display:flex;gap:12px;margin-bottom:20px;flex-wrap:wrap;">
-      <select id="selCursQD" style="padding:9px 12px;border:1.5px solid #e5e7eb;border-radius:9px;font-size:13px;outline:none;">
-        ${cursos.map(c=>`<option value="${c}">${c}</option>`).join('')}
-      </select>
-      <select id="selNivellQD" style="padding:9px 12px;border:1.5px solid #e5e7eb;border-radius:9px;font-size:13px;outline:none;">
-        <option value="">— Tots els nivells —</option>
-        ${nivells.map(n=>`<option value="${n.id}">${n.nom}</option>`).join('')}
-      </select>
+    <div style="display:flex;gap:12px;margin-bottom:20px;flex-wrap:wrap;align-items:flex-end;">
+      <div>
+        <label style="font-size:12px;font-weight:600;color:#374151;display:block;margin-bottom:4px;">Curs</label>
+        <select id="selCursQD" style="padding:9px 12px;border:1.5px solid #e5e7eb;border-radius:9px;font-size:13px;outline:none;">
+          ${cursos.length ? cursos.map(c=>`<option value="${c}">${c}</option>`).join('') : '<option value="">Cap curs</option>'}
+        </select>
+      </div>
+      <div>
+        <label style="font-size:12px;font-weight:600;color:#374151;display:block;margin-bottom:4px;">Nivell</label>
+        <select id="selNivellQD" style="padding:9px 12px;border:1.5px solid #e5e7eb;border-radius:9px;font-size:13px;outline:none;">
+          <option value="">— Tots els nivells —</option>
+          ${nivells.map(n=>`<option value="${n.id}">${esH(n.nom)}</option>`).join('')}
+        </select>
+      </div>
       <button id="btnCarregarQD" style="padding:9px 18px;background:#7c3aed;color:#fff;
         border:none;border-radius:9px;font-weight:600;cursor:pointer;">🔍 Carregar</button>
     </div>
@@ -1269,36 +1634,76 @@ async function renderQuadreDades(body) {
     const grupsFilt = grups.filter(g =>
       (!curs || g.curs === curs) &&
       (!nivellId || g.nivellId === nivellId)
-    );
+    ).sort((a,b)=>(a.ordre||99)-(b.ordre||99));
 
     if (grupsFilt.length === 0) {
-      res.innerHTML = `<p style="color:#9ca3af;text-align:center;padding:30px;">Cap dada trobada</p>`;
+      res.innerHTML = `<p style="color:#9ca3af;text-align:center;padding:30px;">Cap dada trobada per a aquest filtre.</p>`;
       return;
     }
 
     // Agrupar per nivell
     const perNivell = {};
     grupsFilt.forEach(g => {
-      if (!perNivell[g.nivellNom||g.nivellId]) perNivell[g.nivellNom||g.nivellId] = [];
-      perNivell[g.nivellNom||g.nivellId].push(g);
+      const clau = g.nivellNom || g.nivellId || 'Sense nivell';
+      if (!perNivell[clau]) perNivell[clau] = [];
+      perNivell[clau].push(g);
     });
 
     res.innerHTML = Object.entries(perNivell).map(([nom, gs]) => `
       <div style="margin-bottom:20px;">
         <h4 style="font-size:13px;font-weight:700;color:#1e1b4b;padding:8px 12px;
                    background:#e0e7ff;border-radius:8px;margin-bottom:10px;">${esH(nom)}</h4>
-        <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:10px;">
-          ${gs.map(g => `
-            <div style="background:#f9fafb;border:1.5px solid #e5e7eb;border-radius:10px;padding:14px;">
-              <div style="font-size:11px;color:#9ca3af;">${TIPUS_GRUP[g.tipus]?.icon||'📁'} ${TIPUS_GRUP[g.tipus]?.label||g.tipus}</div>
-              <div style="font-weight:700;color:#1e1b4b;margin:4px 0;">${esH(g.nom)}</div>
-              <div style="font-size:12px;color:#6b7280;">${(g.alumnes||[]).length} alumnes</div>
-            </div>
-          `).join('')}
+        <div style="overflow-x:auto;">
+          <table style="width:100%;border-collapse:collapse;font-size:12px;">
+            <thead>
+              <tr style="background:#f3f4f6;">
+                <th style="padding:7px 10px;text-align:left;font-weight:600;">Tipus</th>
+                <th style="padding:7px 10px;text-align:left;font-weight:600;">Nom</th>
+                <th style="padding:7px 10px;text-align:center;font-weight:600;">Alumnes</th>
+                <th style="padding:7px 10px;text-align:center;font-weight:600;">Accions</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${gs.map(g => `
+                <tr style="border-bottom:1px solid #f3f4f6;">
+                  <td style="padding:7px 10px;font-size:11px;color:#9ca3af;">
+                    ${TIPUS_GRUP[g.tipus]?.icon||'📁'} ${TIPUS_GRUP[g.tipus]?.label||g.tipus||'—'}
+                  </td>
+                  <td style="padding:7px 10px;font-weight:600;color:#1e1b4b;">${esH(g.nom||'—')}</td>
+                  <td style="padding:7px 10px;text-align:center;color:#6b7280;">
+                    ${(g.alumnes||[]).length}
+                  </td>
+                  <td style="padding:7px 10px;text-align:center;">
+                    <button class="btn-del-qd" data-id="${g.id}" data-nom="${esH(g.nom)}"
+                      style="padding:3px 10px;background:#fee2e2;color:#dc2626;border:none;
+                             border-radius:6px;font-size:11px;font-weight:600;cursor:pointer;">
+                      🗑️ Eliminar
+                    </button>
+                  </td>
+                </tr>
+              `).join('')}
+            </tbody>
+          </table>
         </div>
       </div>
     `).join('');
+
+    // Events eliminar
+    res.querySelectorAll('.btn-del-qd').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        if (!confirm(`Eliminar "${btn.dataset.nom}" i totes les dades associades?`)) return;
+        btn.disabled = true; btn.textContent = '⏳';
+        await eliminarGrupComplet(btn.dataset.id, btn.dataset.nom);
+        // Recarregar
+        document.getElementById('btnCarregarQD')?.click();
+      });
+    });
   });
+
+  // Auto-carregar si hi ha curs
+  if (cursos.length > 0) {
+    setTimeout(() => document.getElementById('btnCarregarQD')?.click(), 100);
+  }
 }
 
 /* ══════════════════════════════════════════════════════
