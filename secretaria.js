@@ -1725,6 +1725,7 @@ async function carregarDadesButlletins(grups) {
   const grupId    = document.getElementById('bGrup')?.value;
   const curs      = document.getElementById('bCurs')?.value;
   const trimestre = document.getElementById('bTrimestre')?.value || '';
+  // 'tots' o buit = sense filtre; qualsevol altre valor = filtra per periodeNom
   if (!grupId || !curs) {
     window.mostrarToast('⚠️ Tria el curs i el grup classe', 3000);
     return;
@@ -1776,8 +1777,12 @@ async function carregarDadesButlletins(grups) {
 
           snap.docs.forEach(doc => {
             const d = doc.data();
-            // Filtrar per trimestre si s'ha seleccionat
-            if (trimestre && d.periodeNom && d.periodeNom !== trimestre) return;
+            // Filtrar per trimestre (mode estricte):
+            // Si trimestre seleccionat → NOMÉS mostrar docs amb periodeNom igual
+            // Docs sense periodeNom (dades antigues) → s'ignoren quan hi ha filtre
+            if (trimestre) {
+              if (!d.periodeNom || d.periodeNom !== trimestre) return;
+            }
             const key = d.ralc || `${d.cognoms}_${d.nom}`;
             if (!alumnesAmbDades[key]) {
               alumnesAmbDades[key] = {
@@ -1802,9 +1807,13 @@ async function carregarDadesButlletins(grups) {
             .get();
           if (!snap2.empty) {
             const nomMat = cand.nom || cand.id;
-            materiesAmbDades.push({ id: cand.id, nom: nomMat });
+            let hasAnyDoc = false;
             snap2.docs.forEach(doc => {
               const d = doc.data();
+              if (trimestre) {
+                if (!d.periodeNom || d.periodeNom !== trimestre) return;
+              }
+              hasAnyDoc = true;
               const key = d.ralc || `${d.cognoms}_${d.nom}`;
               if (!alumnesAmbDades[key]) {
                 alumnesAmbDades[key] = {
@@ -1815,10 +1824,12 @@ async function carregarDadesButlletins(grups) {
               }
               if (!alumnesAmbDades[key].materies[cand.id]) {
                 alumnesAmbDades[key].materies[cand.id] = {
-                  nom: nomMat, items: d.items||[], descripcioComuna: d.descripcioComuna||''
+                  nom: nomMat, periodeNom: d.periodeNom||'',
+                  items: d.items||[], descripcioComuna: d.descripcioComuna||''
                 };
               }
             });
+            if (hasAnyDoc) materiesAmbDades.push({ id: cand.id, nom: nomMat });
           }
         }
       } catch(e) { /* ignorem errors de subcoleccions que no existeixen */ }
@@ -1930,7 +1941,7 @@ async function carregarDadesButlletins(grups) {
     });
 
     document.getElementById('bGenTots')?.addEventListener('click', () => {
-      ambDades.forEach(a => generarButlleti(a, curs, grupDoc?.nom||''));
+      ambDades.forEach(a => generarButlleti(a, curs, grupDoc?.nom||'', trimestre));
     });
 
     // Guardar alumnes en window per accés des dels botons (evita JSON en atributs HTML)
@@ -1940,7 +1951,7 @@ async function carregarDadesButlletins(grups) {
       btn.addEventListener('click', () => {
         const idx = parseInt(btn.dataset.idx);
         const alumne = window._butlletinsAlumnes?.[idx];
-        if (alumne) generarButlleti(alumne, curs, grupDoc?.nom||'');
+        if (alumne) generarButlleti(alumne, curs, grupDoc?.nom||'', trimestre);
       });
     });
 
@@ -1950,7 +1961,7 @@ async function carregarDadesButlletins(grups) {
   }
 }
 
-function generarButlleti(alumne, curs, grupNom) {
+function generarButlleti(alumne, curs, grupNom, trimestre) {
   const COLORS_ASSL = {
     'Assoliment Excel·lent': '#7c3aed',
     'Assoliment Notable':    '#2563eb',
@@ -1999,7 +2010,7 @@ function generarButlleti(alumne, curs, grupNom) {
   <div class="cap">
     <div>
       <h1>INS Matadepera</h1>
-      <div class="sub">Butlletí d'avaluació · ${esH(curs)} · ${esH(grupNom)}</div>
+      <div class="sub">Butlletí d'avaluació · ${esH(curs)} · ${esH(grupNom)}${trimestre ? ' · ' + esH(trimestre) : ''}</div>
     </div>
     <div style="text-align:right;font-size:10pt;color:#555;">
       Data: ${new Date().toLocaleDateString('ca-ES')}<br>
