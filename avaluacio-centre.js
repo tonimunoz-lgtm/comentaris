@@ -489,58 +489,50 @@ function mostrarResumAlumnes(alumnes) {
 
 
 /* ══════════════════════════════════════════════════════
-   EXTREURE COMENTARI D'UN ÍTEM DEL TEXT NARRATIU GLOBAL
-   El text de l'UC és: "Pel que fa a [ítem1]... Pel que fa a [ítem2]..."
-   Extreu la frase que correspon a titolActual fins que comença titolSeguent
+   EXTREURE COMENTARI D'UN ÍTEM PER ÍNDEX
+   Divideix el text en blocs "Pel que fa..." i assigna
+   cada bloc per posició (idx) als ítems en ordre
 ══════════════════════════════════════════════════════ */
-function extraureComentariItem(textGlobal, titolActual, titolSeguent) {
-  if (!textGlobal || !titolActual) return '';
 
-  // Normalitzar text per cercar sense accents ni majúscules
-  const norm = s => (s||'').normalize('NFD').replace(/[̀-ͯ]/g,'').toLowerCase().trim();
-  const textNorm = norm(textGlobal);
-
-  // Paraules de connexió que pot inserir l'UC entre "Pel que fa" i el títol
-  const CONNECTORS = ['a les', 'a l', 'al', 'a', 'als', 'les', 'el', 'els', ''];
-
-  // Trobar posició d'inici del bloc d'aquest ítem
-  const cercaInici = (titol) => {
-    const t = norm(titol);
-    // 1. Intentar amb variants de "pel que fa"
-    const prefixos = ['pel que fa', 'quant', 'en relacio a', 'respecte a'];
-    for (const pref of prefixos) {
-      for (const con of CONNECTORS) {
-        const cerca = con ? `${pref} ${con} ${t}` : `${pref} ${t}`;
-        const idx = textNorm.indexOf(cerca);
-        if (idx !== -1) return idx;
-      }
-    }
-    // 2. Cercar només el títol com a paraula (mínim 5 caràcters)
-    if (t.length >= 5) {
-      const idx = textNorm.indexOf(t);
-      if (idx !== -1) return idx;
-    }
-    // 3. Cercar les primeres 3 paraules del títol
-    const paraules = t.split(/\s+/).slice(0,3).join(' ');
-    if (paraules.length >= 4) {
-      const idx = textNorm.indexOf(paraules);
-      if (idx !== -1) return idx;
-    }
-    return -1;
-  };
-
-  const start = cercaInici(titolActual);
-  if (start === -1) return '';
-
-  // Trobar on acaba (on comença el seguent bloc)
-  let end = textGlobal.length;
-  if (titolSeguent) {
-    const endPos = cercaInici(titolSeguent);
-    if (endPos !== -1 && endPos > start) end = endPos;
-  }
-
-  return textGlobal.slice(start, end).trim();
+// Dividir el text global en fragments "Pel que fa..."
+// Retorna array de fragments en ordre d'aparició
+function dividirTextEnBlocs(textGlobal) {
+  if (!textGlobal) return [];
+  // Dividir per qualsevol variant de "Pel que fa"
+  const regex = /(?=Pel que fa\b)/gi;
+  const blocs = textGlobal.split(regex).filter(b => b.trim().length > 0);
+  return blocs.map(b => b.trim());
 }
+
+// Extreu el comentari corresponent a l'ítem en la posició idx
+function extraureComentariItem(textGlobal, titolActual, titolSeguent, itemIdx, totalItems) {
+  if (!textGlobal) return '';
+  
+  const blocs = dividirTextEnBlocs(textGlobal);
+  if (!blocs.length) return textGlobal;
+  
+  // Si tenim l'índex, usar-lo directament (és el mètode més fiable)
+  if (typeof itemIdx === 'number' && itemIdx < blocs.length) {
+    return blocs[itemIdx];
+  }
+  
+  // Fallback: intentar per títol
+  const norm = s => (s||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().trim();
+  const tNorm = norm(titolActual);
+  
+  for (const bloc of blocs) {
+    const blocNorm = norm(bloc);
+    // Verificar que el bloc conté paraules del títol
+    const paraulesTitol = tNorm.split(/\s+/).filter(p => p.length > 3);
+    const coincidencies = paraulesTitol.filter(p => blocNorm.includes(p));
+    if (coincidencies.length >= Math.min(2, paraulesTitol.length)) {
+      return bloc;
+    }
+  }
+  
+  return '';
+}
+
 
 /* ══════════════════════════════════════════════════════
    ENVIAR A FIREBASE
@@ -614,8 +606,11 @@ async function enviarAvaluacioCentre() {
           ? alumne.comentarisItems.map((it, idx, arr) => {
               const titol     = it.titol      || '';
               const assoliment= it.assoliment || 'No avaluat';
-              // Extreure la frase del text global que correspon a aquest ítem
-              const comentari = extraureComentariItem(comentariGlobal, titol, arr[idx+1]?.titol || null);
+              // Extreure el fragment del text corresponent a la posició idx
+              const comentari = extraureComentariItem(
+                comentariGlobal, titol, arr[idx+1]?.titol || null,
+                idx, arr.length
+              );
               return { titol, assoliment, comentari };
             })
           : [];
