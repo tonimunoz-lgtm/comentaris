@@ -1796,6 +1796,7 @@ async function carregarDadesButlletins(grups) {
               periodeNom: d.periodeNom || '',
               items: d.items || [],
               descripcioComuna: d.descripcioComuna || '',
+              comentariGlobal: d.comentariGlobal || '',
             };
           });
         } else {
@@ -1825,7 +1826,8 @@ async function carregarDadesButlletins(grups) {
               if (!alumnesAmbDades[key].materies[cand.id]) {
                 alumnesAmbDades[key].materies[cand.id] = {
                   nom: nomMat, periodeNom: d.periodeNom||'',
-                  items: d.items||[], descripcioComuna: d.descripcioComuna||''
+                  items: d.items||[], descripcioComuna: d.descripcioComuna||'',
+                  comentariGlobal: d.comentariGlobal||''
                 };
               }
             });
@@ -2027,13 +2029,19 @@ function generarButlleti(alumne, curs, grupNom, trimestre) {
   ${materies.map(mat => `
     <div class="materia">
       <div class="mat-head">${esH(mat.nom)}</div>
-      ${mat.descripcioComuna ? `<div class="mat-desc">${esH(mat.descripcioComuna)}</div>` : ''}
+      ${mat.descripcioComuna
+        ? `<div class="mat-desc" style="font-style:italic;">${esH(mat.descripcioComuna)}</div>`
+        : ''}
+      ${mat.comentariGlobal
+        ? `<div class="mat-desc">${esH(mat.comentariGlobal)}</div>`
+        : ''}
+      ${(mat.items||[]).length > 0 ? `
       <table>
         <thead>
           <tr>
-            <th style="width:40%">Aprenentatge / Competència</th>
+            <th style="width:30%">Aprenentatge / Competència</th>
             <th>Comentari</th>
-            <th style="width:110px;text-align:center;">Assoliment</th>
+            <th style="width:120px;text-align:center;">Assoliment</th>
           </tr>
         </thead>
         <tbody>
@@ -2050,7 +2058,7 @@ function generarButlleti(alumne, curs, grupNom, trimestre) {
             </tr>
           `).join('')}
         </tbody>
-      </table>
+      </table>` : ''}
     </div>
   `).join('')}
 
