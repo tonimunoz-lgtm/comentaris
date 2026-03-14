@@ -1570,13 +1570,21 @@ async function modalEditarRols(usuari, onGuardat) {
 
   const revisorNivells = Array.isArray(usuari.revisio_nivells) ? usuari.revisio_nivells : [];
 
-  // Carregar grups de tutoria per assignar al tutor
+  // Carregar grups classe per assignar al tutor (A, B, C, D...)
   let grupsTutoria = [];
   try {
     const snapT = await window.db.collection('grups_centre')
-      .where('tipus','==','tutoria').get();
+      .where('tipus','==','classe').orderBy('ordre').get();
     grupsTutoria = snapT.docs.map(d=>({id:d.id,...d.data()}));
-  } catch(e){}
+  } catch(e){
+    // Si no hi ha índex, carregar tots i filtrar
+    try {
+      const snapT2 = await window.db.collection('grups_centre').get();
+      grupsTutoria = snapT2.docs.map(d=>({id:d.id,...d.data()}))
+        .filter(g => g.tipus === 'classe')
+        .sort((a,b) => (a.ordre||99)-(b.ordre||99));
+    } catch(e2){}
+  }
   const tutorGrups = Array.isArray(usuari.tutoria_grups) ? usuari.tutoria_grups : [];
 
   crearModal(`🎭 Rols — ${usuari.nom||usuari.email}`, `
@@ -1632,7 +1640,7 @@ async function modalEditarRols(usuari, onGuardat) {
          border:1.5px solid #bfdbfe;border-radius:10px;
          display:${rolsActuals.includes('tutor')?'block':'none'};">
       <div style="font-size:13px;font-weight:700;color:#1d4ed8;margin-bottom:10px;">
-        🧑‍🏫 Grups de tutoria assignats
+        🏫 Grups que pot observar (tutoria)
       </div>
       ${grupsTutoria.length === 0
         ? `<p style="font-size:12px;color:#9ca3af;">Cap grup de tutoria creat. Crea'n des de la pestanya Estructura.</p>`
@@ -1648,8 +1656,8 @@ async function modalEditarRols(usuari, onGuardat) {
                   <input type="checkbox" class="chk-grup-tutor" value="${g.id}"
                     ${tutorGrups.includes(g.id)?'checked':''}
                     style="width:15px;height:15px;accent-color:#2563eb;">
-                  🧑‍🏫 ${esH(g.nom)}
-                  <span style="color:#9ca3af;">${esH(g.nivellNom||'')} ${esH(g.curs||'')}</span>
+                  🏫 ${esH(g.nivellNom||'')} — ${esH(g.nom)}
+                  <span style="color:#9ca3af;">${esH(g.curs||'')}</span>
                 </label>
               `).join('')}
             </div>
