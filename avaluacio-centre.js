@@ -470,6 +470,53 @@ function mostrarResumAlumnes(alumnes) {
   btnEnviar.style.display = total > 0 ? 'block' : 'none';
 }
 
+
+/* ══════════════════════════════════════════════════════
+   EXTREURE COMENTARI D'UN ÍTEM DEL TEXT NARRATIU GLOBAL
+   El text de l'UC és: "Pel que fa a [ítem1]... Pel que fa a [ítem2]..."
+   Extreu la frase que correspon a titolActual fins que comença titolSeguent
+══════════════════════════════════════════════════════ */
+function extraureComentariItem(textGlobal, titolActual, titolSeguent) {
+  if (!textGlobal || !titolActual) return '';
+
+  // Normalitzar: eliminar accents i passar a minúscules per cercar
+  const norm = s => (s||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().trim();
+
+  const textNorm = norm(textGlobal);
+
+  // Cercar on comença la frase d'aquest ítem
+  // Patrons: "pel que fa a [titol]" o simplement el títol
+  const patrons = [
+    `pel que fa a ${norm(titolActual)}`,
+    `pel que fa al ${norm(titolActual)}`,
+    `quant a ${norm(titolActual)}`,
+    norm(titolActual),
+  ];
+
+  let start = -1;
+  for (const patro of patrons) {
+    const idx = textNorm.indexOf(patro);
+    if (idx !== -1) { start = idx; break; }
+  }
+  if (start === -1) return ''; // no trobat
+
+  // Cercar on acaba (on comença el següent ítem)
+  let end = textGlobal.length;
+  if (titolSeguent) {
+    const patronsSeg = [
+      `pel que fa a ${norm(titolSeguent)}`,
+      `pel que fa al ${norm(titolSeguent)}`,
+      `quant a ${norm(titolSeguent)}`,
+    ];
+    for (const patro of patronsSeg) {
+      const idx = textNorm.indexOf(patro, start + 1);
+      if (idx !== -1 && idx < end) { end = idx; break; }
+    }
+  }
+
+  return textGlobal.slice(start, end).trim();
+}
+
 /* ══════════════════════════════════════════════════════
    ENVIAR A FIREBASE
    Cada alumne té els seus propis ítems i comentari
@@ -514,14 +561,20 @@ async function enviarAvaluacioCentre() {
       const batch = db.batch();
 
       chunk.forEach(alumne => {
-        // Items: prioritat als ítems UC; si no, crear un ítem amb el comentari
+        // Items: titol + assoliment + comentari específic extret del text narratiu
+        // L'UC guarda un text global que conté totes les frases encadenades.
+        // Cada fragment comença amb "Pel que fa a [títol]" i acaba quan comença el següent.
+        const comentariGlobal = alumne.comentariText || '';
+
         const items = alumne.teItems
-          ? alumne.comentarisItems.map(it => ({
-              titol:      it.titol      || '',
-              assoliment: it.assoliment || 'No avaluat',
-              comentari:  it.comentari  || alumne.comentariText || '',
-            }))
-          : [{ titol: 'Comentari', comentari: alumne.comentariText, assoliment: 'No avaluat' }];
+          ? alumne.comentarisItems.map((it, idx, arr) => {
+              const titol     = it.titol      || '';
+              const assoliment= it.assoliment || 'No avaluat';
+              // Extreure la frase del text global que correspon a aquest ítem
+              const comentari = extraureComentariItem(comentariGlobal, titol, arr[idx+1]?.titol || null);
+              return { titol, assoliment, comentari };
+            })
+          : [];
 
         const ref = db
           .collection('avaluacio_centre')
@@ -545,6 +598,7 @@ async function enviarAvaluacioCentre() {
           periodeId,
           periodeNom,
           descripcioComuna: descComuna,
+          comentariGlobal,   // text narratiu complet de l'alumne
           items,
           professorUid:    profUid,
           professorEmail:  profEmail,
