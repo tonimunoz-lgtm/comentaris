@@ -217,13 +217,56 @@ async function obrirModalAvaluacioCentre() {
 
   document.body.appendChild(modal);
 
-  // Preseleccionar si el nom de la classe coincideix amb algun grup
-  if (classTitle) {
-    const opt = [...modal.querySelectorAll('#selGrupAC option')].find(o =>
-      o.textContent.trim().toLowerCase().includes(classTitle.toLowerCase().split('—')[0].trim().toLowerCase())
-    );
-    if (opt) opt.selected = true;
-  }
+  // Preseleccionar grup automàticament des de la classe actual
+  setTimeout(async () => {
+    try {
+      // 1. Intentar via grupCentreId (classe creada des de Secretaria)
+      if (window.currentClassId) {
+        const classeDoc = await window.db.collection('classes').doc(window.currentClassId).get();
+        const classeData = classeDoc.data() || {};
+        const grupCentreId = classeData.grupCentreId;
+
+        if (grupCentreId) {
+          const selGrup = document.getElementById('selGrupAC');
+          if (selGrup) {
+            const opt = [...selGrup.options].find(o => o.value === grupCentreId);
+            if (opt) {
+              selGrup.value = grupCentreId;
+              // Disparar change per actualitzar curs si cal
+              selGrup.dispatchEvent(new Event('change'));
+            }
+          }
+        } else if (classTitle) {
+          // 2. Fallback: per nom de classe
+          const nomBase = classTitle.split('—')[0].trim().toLowerCase();
+          const selGrup = document.getElementById('selGrupAC');
+          if (selGrup) {
+            const opt = [...selGrup.options].find(o =>
+              o.textContent.trim().toLowerCase().includes(nomBase)
+            );
+            if (opt) selGrup.value = opt.value;
+          }
+        }
+
+        // Preseleccionar matèria si la classe té materiaId guardat
+        if (classeData.materiaId) {
+          const selMat = document.getElementById('selMateriaAC');
+          if (selMat) selMat.value = classeData.materiaId;
+        }
+
+        // Preseleccionar descripció comuna si la matèria en té una
+        const selMat = document.getElementById('selMateriaAC');
+        if (selMat?.value) {
+          const matDoc = await window.db.collection('materies_centre').doc(selMat.value).get();
+          const descComuna = matDoc.data()?.descripcioComuna;
+          if (descComuna) {
+            const ta = document.getElementById('descComunaAC');
+            if (ta && !ta.value) ta.value = descComuna;
+          }
+        }
+      }
+    } catch(e) { console.warn('Preselecció automàtica:', e.message); }
+  }, 100);
 
   // Events
   modal.querySelector('#btnTancarAvCentre').addEventListener('click', () => modal.remove());
@@ -240,7 +283,8 @@ async function obrirModalAvaluacioCentre() {
 ══════════════════════════════════════════════════════ */
 async function carregarComentarisClasse() {
   const classId   = window.currentClassId;
-  const periodeId = window.currentPeriodeId;
+  // window.currentPeriodeId és variable local d'app.js — usar _tcClassId que sí s'exporta
+  const periodeId = window._tcClassId || window.currentPeriodeId;
 
   if (!classId) {
     window.mostrarToast('⚠️ Primer obre una classe', 3000);
