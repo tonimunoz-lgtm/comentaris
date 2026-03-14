@@ -396,36 +396,30 @@ function esH(s) {
    app.js usa data.nom — patchegem perquè mostri nom complet
 ══════════════════════════════════════════════════════ */
 function patchMostrarNomComplet() {
-  // Interceptar Firestore .get() per a la col·lecció alumnes
-  // Addicionalment, patchegem la funció nativa del DOM per
-  // substituir noms simples per nom complet quan l'alumne té cognoms
-
-  // Observem el DOM — quan es renderitzen student-name, corregim
   const observer = new MutationObserver(mutations => {
     mutations.forEach(m => {
       m.addedNodes.forEach(node => {
         if (node.nodeType !== 1) return;
-        // Buscar spans .student-name dins del node afegit
         const noms = node.classList?.contains('student-name')
           ? [node]
           : [...(node.querySelectorAll?.('.student-name') || [])];
         noms.forEach(span => {
-          // Si ja té el format "Cognoms, Nom", no fer res
           if (span.dataset.nomPatchat) return;
           span.dataset.nomPatchat = '1';
           const li = span.closest('[data-id]');
           if (!li?.dataset?.id) return;
-          // Llegir cognoms des de Firestore i actualitzar
           window.db?.collection('alumnes').doc(li.dataset.id).get().then(doc => {
             if (!doc?.exists) return;
             const d = doc.data();
-            const cognoms = d.cognoms || '';
-            const nom     = d.nom || '';
-            if (cognoms) {
-              const nomComplet = `${cognoms}, ${nom}`;
+            if (d.cognoms) {
+              const nomComplet = `${d.cognoms}, ${d.nom}`;
               span.textContent = nomComplet;
-              // Actualitzar dataset.nom per al filtre de cerca
               if (li.dataset) li.dataset.nom = nomComplet.toLowerCase();
+            }
+            // Indicador d'enviament a Avaluació Centre
+            if (d.grupCentreId && !li.querySelector('.badge-avc')) {
+              // Buscar si hi ha dades a avaluacio_centre per aquest alumne
+              verificarEnviamentAvaluacio(li.dataset.id, d, li);
             }
           }).catch(()=>{});
         });
@@ -443,6 +437,52 @@ function patchMostrarNomComplet() {
     }
   };
   tryObserve();
+}
+
+
+/* ══════════════════════════════════════════════════════
+   VERIFICAR ENVIAMENT A AVALUACIÓ CENTRE
+   Mostra un petit badge 🏫 a l'alumne que ja té dades enviades
+══════════════════════════════════════════════════════ */
+async function verificarEnviamentAvaluacio(alumneId, alumneData, liEl) {
+  if (!window.db || !alumneData.grupCentreId) return;
+  try {
+    const curs = window._cursActiu || await obtenirCursActiu();
+    // Buscar en qualsevol subcolecció de avaluacio_centre/{curs}
+    const doc = await window.db.collection('avaluacio_centre')
+      .doc(curs)
+      .collection(alumneData.grupCentreId)
+      .doc(alumneId)
+      .get();
+
+    if (doc.exists) {
+      // Afegir badge verd al costat del nom
+      const badge = document.createElement('span');
+      badge.className = 'badge-avc';
+      badge.title = 'Avaluació Centre enviada';
+      badge.style.cssText = `
+        display:inline-block;background:#059669;color:#fff;
+        border-radius:4px;font-size:9px;font-weight:700;
+        padding:1px 5px;margin-left:5px;vertical-align:middle;
+      `;
+      badge.textContent = '🏫';
+      const span = liEl.querySelector('.student-name');
+      if (span && !liEl.querySelector('.badge-avc')) {
+        span.insertAdjacentElement('afterend', badge);
+      }
+    }
+  } catch(e) {}
+}
+
+async function obtenirCursActiu() {
+  try {
+    const doc = await window.db.collection('_sistema').doc('config').get();
+    const curs = doc.data()?.cursActiu;
+    if (curs) { window._cursActiu = curs; return curs; }
+  } catch(e) {}
+  const ara = new Date();
+  const any = ara.getMonth() >= 8 ? ara.getFullYear() : ara.getFullYear()-1;
+  return `${any}-${String(any+1).slice(-2)}`;
 }
 
 // Activar el patch
