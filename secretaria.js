@@ -1729,7 +1729,7 @@ function modalNouUsuari(onCreat) {
     <div style="margin-bottom:14px;">
       <label style="font-size:12px;font-weight:600;color:#374151;display:block;margin-bottom:8px;">Rols</label>
       <div style="display:flex;gap:10px;flex-wrap:wrap;">
-       ${(['professor','tutor','secretaria','revisor','admin','superadmin']
+       ${(['professor','tutor','secretaria','revisor','admin']
    .filter(r => {
      const uRols = window._userRols || [];
      if (uRols.includes('superadmin') || uRols.includes('admin')) return true;
@@ -1837,7 +1837,7 @@ async function modalEditarRols(usuari, onGuardat) {
 
   crearModal(`🎭 Rols — ${usuari.nom||usuari.email}`, `
     <div style="display:flex;flex-direction:column;gap:10px;">
-      ${(['professor','tutor','pedagog','secretaria','revisor','admin','superadmin']
+      ${(['professor','tutor','pedagog','secretaria','revisor','admin']
    .filter(r => {
      const uRols = window._userRols || [];
      // Admins i superadmins veuen tot
