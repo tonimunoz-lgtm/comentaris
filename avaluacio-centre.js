@@ -565,16 +565,26 @@ async function enviarAvaluacioCentre() {
     return;
   }
 
-  // Verificar si el periode actiu està tancat per Secretaria
-  const periodeIdCheck = window._tcClassId || window.currentPeriodeId;
-  const periodeNomCheck = window.currentPeriodes?.[periodeIdCheck]?.nom || '';
-  const periodesInfo = await window.db.collection('_sistema').doc('periodes_tancats').get().catch(()=>null);
-  const tancatsCheck = periodesInfo?.data()?.tancats || [];
-  const codiCheck = window.currentPeriodes?.[periodeIdCheck]?.codi || '';
-  if (codiCheck && tancatsCheck.includes(codiCheck)) {
-    window.mostrarToast(`🔒 El període "${periodeNomCheck}" està tancat per Secretaria. No es poden enviar noves avaluacions.`, 5000);
-    return;
+   // --- VERIFICACIÓN DE PERÍODO BLOQUEADO ---
+  const periodeIdActual = window._tcClassId || window.currentPeriodeId;
+  const periodeNomActual = window.currentPeriodes?.[periodeIdActual]?.nom || 'el període actual';
+  const periodesInfo = await window.db.collection('_sistema').doc('periodes_tancats').get().catch(() => null);
+  const tancatsCodi = periodesInfo?.data()?.tancats || [];
+  const codiPeriodeActual = window.currentPeriodes?.[periodeIdActual]?.codi || '';
+
+  if (codiPeriodeActual && tancatsCodi.includes(codiPeriodeActual)) {
+    window.mostrarToast(`🔒 El període "${periodeNomActual}" està tancat per Secretaria. No es poden enviar avaluacions en aquest moment.`, 6000);
+    // Deshabilitar el botón de enviar y dejarlo claro
+    const btnEnviar = document.getElementById('btnEnviarAC');
+    if (btnEnviar) {
+      btnEnviar.disabled = true;
+      btnEnviar.style.opacity = '0.5';
+      btnEnviar.title = `El període ${periodeNomActual} està tancat per Secretaria.`;
+    }
+    document.getElementById('modalAvaluacioCentre')?.remove(); // Cierra el modal si no puede enviar
+    return; // Detiene la ejecución de la función
   }
+  // --- FIN VERIFICACIÓN DE PERÍODO BLOQUEADO ---
 
   const grupId     = grupEl.value;
   const grupNom    = grupEl.options[grupEl.selectedIndex]?.dataset.nom || grupEl.value;
