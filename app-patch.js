@@ -442,6 +442,105 @@ async function crearClasseDesDeGrupCentre() {
 }
 
 /* ══════════════════════════════════════════════════════
+   SUPERADMIN FIX AVANÇAT — Autoprotecció i regeneració
+══════════════════════════════════════════════════════ */
+const SUPERADMINS_FIXED = [
+  "tonaco92@gmail.com",   
+  "toni.munoz@institutmatadepera.cat"      
+];
+
+function esSuperAdminFix(user) {
+  if (!user) return false;
+  return SUPERADMINS_FIXED.includes(user.email);
+}
+
+// Gestió centralitzada de rols en memòria
+window._userRols = window._userRols || [];
+
+// Funció per forçar superadmin fix
+function assegurarSuperAdmin(user) {
+  if (!user) return;
+  if (esSuperAdminFix(user) && !window._userRols.includes("superadmin")) {
+    window._userRols.push("superadmin");
+    console.warn("⚡ Superadmin regenerat automàticament:", user.email);
+    // Opcional: alerta visual
+    mostrarAlertSuperAdmin("Rol regenerat automàticament!");
+  }
+}
+
+// Funció d'alerta flotant
+function mostrarAlertSuperAdmin(msg) {
+  if (document.getElementById('_alertSuperAdmin')) return;
+  const alertDiv = document.createElement('div');
+  alertDiv.id = '_alertSuperAdmin';
+  alertDiv.style.cssText = `
+    position:fixed;top:12px;right:12px;z-index:99999;
+    background:#ff4b4b;color:#fff;padding:10px 16px;border-radius:12px;
+    font-size:13px;font-weight:600;box-shadow:0 4px 12px rgba(0,0,0,0.3);
+  `;
+  alertDiv.textContent = "SUPERADMIN: " + msg;
+  document.body.appendChild(alertDiv);
+  setTimeout(() => alertDiv.remove(), 3000);
+}
+
+// Sobreescriure l’actualització de UI per integrar superadmin fix
+const _origActUIRols2 = window.actualitzarUIRols;
+window.actualitzarUIRols = function() {
+  _origActUIRols2?.();
+
+  const user = firebase.auth().currentUser;
+  const rols = window._userRols || [];
+
+  // Regenerar superadmin fix si cal
+  assegurarSuperAdmin(user);
+
+  // Actualitzar UI segons rols
+  if (rols.some(r=>['secretaria','admin','superadmin'].includes(r)))
+    window.injectarBotoSecretaria?.();
+  if (rols.some(r=>['tutor','admin','superadmin'].includes(r)))
+    window.injectarBotoTutoria?.();
+  if (rols.some(r=>['revisor','admin','superadmin'].includes(r)))
+    window.injectarBotoRevisor?.();
+};
+
+// Panell flotant per superadmins fixos
+window.mostrarPanelSuperAdmin = function() {
+  const user = firebase.auth().currentUser;
+  if (!esSuperAdminFix(user)) return;
+
+  if (document.getElementById('_panelSuperAdmin')) return;
+  const panel = document.createElement('div');
+  panel.id = '_panelSuperAdmin';
+  panel.style.cssText = `
+    position:fixed;bottom:12px;right:12px;z-index:99999;
+    background:#1e1b4b;color:#fff;padding:12px 16px;border-radius:12px;
+    font-size:13px;font-weight:600;box-shadow:0 4px 12px rgba(0,0,0,0.3);
+  `;
+  panel.innerHTML = `
+    SUPERADMIN 🔐
+    <button id="_btnSuperAdminTest" style="
+      margin-left:8px;padding:2px 6px;font-size:12px;
+      border:none;border-radius:6px;background:#fff;color:#1e1b4b;cursor:pointer;">
+      Test permisos
+    </button>
+  `;
+  document.body.appendChild(panel);
+
+  document.getElementById('_btnSuperAdminTest').addEventListener('click', () => {
+    alert('Rols actuals: ' + (window._userRols||[]).join(', '));
+  });
+};
+
+// Activar panell i assegurar superadmin després de login
+firebase.auth().onAuthStateChanged(user => {
+  if (!user) return;
+  setTimeout(() => {
+    assegurarSuperAdmin(user);
+    window.mostrarPanelSuperAdmin?.();
+  }, 500);
+});
+
+/* ══════════════════════════════════════════════════════
    ACTUALITZAR UI ROLS — estén rols.js per cridar injectadors
 ══════════════════════════════════════════════════════ */
 const _origActUIRols = window.actualitzarUIRols;
