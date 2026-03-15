@@ -317,8 +317,7 @@ async function carregarOpcionesNivells() {
       return;
     }
     selNivell.innerHTML = `<option value="">— Tria un nivell —</option>` +
-      nivells.map(n=>`<option value="${n.id}">${esH(n.data().nom)} (${esH(n.data().curs||'')})</option>`).join('');
-
+            nivells.map(n=>`<option value="${n.id}">${esH(n.nom)} (${esH(n.curs||'')})</option>`).join('');
   } catch(e) {
     selNivell.innerHTML = `<option value="">Error carregant nivells: ${e.message}</option>`;
     console.error(e);
