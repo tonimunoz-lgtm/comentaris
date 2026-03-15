@@ -580,19 +580,28 @@ async function renderEstructura(body) {
     }));
   });
 
-  document.getElementById('btnCopiarDe').addEventListener('click', () => {
-    const gId = materiaActiva || grupActiu;
-    const g = grups.find(x=>x.id===gId);
-    if (!g) return;
-    // Candidats: materies del mateix grup pare o del mateix nivell, que tinguin alumnes
-       const candidates = grups.filter(x =>
-      // Filtra por el mismo parentGrupId (grup classe padre) si existe, o por el mismo grupActiu si es un grupo clase
-      (x.parentGrupId === grupDesti.parentGrupId || (grupDesti.tipus === 'classe' && x.id !== grupDesti.id && x.parentGrupId === grupDesti.id)) &&
-      (x.alumnes && x.alumnes.length > 0) &&
-      x.id !== grupDesti.id
-    );
-    modalCopiarAlumnesDe(g, candidates, () => recarregar().then(() => {
-      const gAct = grups.find(x=>x.id===gId);
+  d  document.getElementById('btnCopiarDe').addEventListener('click', () => {
+    const grupOrigen = grups.find(x => x.id === (materiaActiva || grupActiu));
+    if (!grupOrigen) return;
+
+    let candidates;
+    if (grupOrigen.tipus === 'classe') { // Si el origen es un grupo clase
+      // Mostrar materias de ese mismo grupo clase
+      candidates = grups.filter(x =>
+        x.parentGrupId === grupOrigen.id &&
+        (x.alumnes && x.alumnes.length > 0)
+      );
+    } else { // Si el origen es una materia
+      // Mostrar otras materias del mismo grupo clase padre
+      candidates = grups.filter(x =>
+        x.parentGrupId === grupOrigen.parentGrupId &&
+        (x.alumnes && x.alumnes.length > 0) &&
+        x.id !== grupOrigen.id // Excluir la materia actual
+      );
+    }
+    
+    modalCopiarAlumnesDe(grupOrigen, candidates, () => recarregar().then(() => {
+      const gAct = grups.find(x => x.id === (materiaActiva || grupActiu));
       if (gAct) renderAlumnes(gAct);
     }));
   });
