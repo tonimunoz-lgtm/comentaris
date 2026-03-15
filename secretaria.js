@@ -1039,21 +1039,24 @@ async function copiarEstructuraATots(grupFont, grupsDesti, onRefresh) {
   }
   if (!confirm(`Copiar ${materies.length} matèries de "${grupFont.nom}" a ${grupsDesti.length} grups?`)) return;
   try {
-    for (const g of grupsDesti) {
-      let ordre = 1;
-      for (const m of materies) {
-        await window.db.collection('grups_centre').add({
-          nom: m.nom,
-          tipus: m.tipus,
-          parentGrupId: g.id,
-          nivellId: g.nivellId,
-          nivellNom: g.nivellNom,
-          curs: g.curs,
-          ordre: ordre++,
-          alumnes: []
-        });
-      }
-    }
+   for (const g of grupsDesti) {
+    const existents = (materiesPer[g.id] || []).map(x => x.nom.toLowerCase());
+    let ordre = (materiesPer[g.id]?.length || 0) + 1;
+    for (const m of materies) {
+      // evitar duplicats
+       if (existents.includes(m.nom.toLowerCase())) continue;
+       await window.db.collection('grups_centre').add({
+         nom: m.nom,
+         tipus: m.tipus,
+         parentGrupId: g.id,
+         nivellId: g.nivellId,
+         nivellNom: g.nivellNom,
+         curs: g.curs,
+         ordre: ordre++,
+         alumnes: []
+       });
+     }
+   }
     window.mostrarToast(`✅ Estructura copiada a ${grupsDesti.length} grups`);
     onRefresh?.();
   } catch(e) {
