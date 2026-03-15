@@ -257,6 +257,7 @@ async function renderEstructura(body) {
             <button id="btnNouAlumne" disabled style="background:#d97706;color:#fff;border:none;border-radius:5px;padding:2px 8px;font-size:11px;font-weight:700;cursor:pointer;opacity:0.4;">+ Alumne</button>
             <button id="btnImportarAlumnes" disabled style="background:#059669;color:#fff;border:none;border-radius:5px;padding:2px 8px;font-size:11px;font-weight:700;cursor:pointer;opacity:0.4;">📥 Excel</button>
             <button id="btnCopiarDe" disabled style="background:#4f46e5;color:#fff;border:none;border-radius:5px;padding:2px 8px;font-size:11px;font-weight:700;cursor:pointer;opacity:0.4;">📋 Copiar de...</button>
+            <button id="btnCopiarAlumnesATotes" disabled style="background:#9333ea;color:#fff;border:none;border-radius:5px;padding:2px 8px;font-size:11px;font-weight:700;cursor:pointer;opacity:0.4;">🚀 Copiar a totes</button>
           </div>
         </div>
         <div id="col-alumnes" style="flex:1;overflow-y:auto;">
@@ -438,6 +439,7 @@ async function renderEstructura(body) {
         enableBtn('btnNouAlumne');
         enableBtn('btnImportarAlumnes');
         enableBtn('btnCopiarDe');
+        enableBtn('btnCopiarAlumnesATotes');
       });
       const _cbMat = (x,o) => window.db.collection('grups_centre').doc(x.id).update({ordre:o}).catch(()=>{});
       _cbMat._rerender = renderMateries;
@@ -604,6 +606,17 @@ async function renderEstructura(body) {
       const gAct = grups.find(x => x.id === (materiaActiva || grupActiu));
       if (gAct) renderAlumnes(gAct);
     }));
+  });
+
+     document.getElementById('btnCopiarAlumnesATotes').addEventListener('click', () => {
+    if (!materiaActiva) {
+      window.mostrarToast('⚠️ Selecciona una matèria per copiar els alumnes.', 3000);
+      return;
+    }
+    const materiaOrigen = grups.find(x => x.id === materiaActiva);
+    if (!materiaOrigen) return;
+    
+    copiarAlumnesATotesLesMateries(materiaOrigen, grups, recarregar);
   });
 
   // ── RECARREGAR ──────────────────────────────────────
@@ -978,6 +991,60 @@ function modalCopiarAlumnesDe(grupDesti, candidates, onRefresh) {
     });
   }, 100);
 }
+
+/* ══════════════════════════════════════════════════════
+   MODAL COPIAR ALUMNES A TOTES LES MATÈRIES SENSE ALUMNES DEL GRUP
+══════════════════════════════════════════════════════ */
+async function copiarAlumnesATotesLesMateries(materiaOrigen, grups, onRefresh) {
+  if (!materiaOrigen || !materiaOrigen.alumnes || materiaOrigen.alumnes.length === 0) {
+    window.mostrarToast('⚠️ La matèria d\'origen no té alumnes per copiar.', 3000);
+    return;
+  }
+
+  // Buscar todas las materias del mismo grupo clase padre (parentGrupId)
+  // que no sean la materia origen y que no tengan alumnos.
+  const materiesDesti = grups.filter(g =>
+    g.parentGrupId === materiaOrigen.parentGrupId && // Mismo grupo clase padre
+    g.id !== materiaOrigen.id && // No es la materia origen
+    (!g.alumnes || g.alumnes.length === 0) // No tiene alumnos
+  );
+
+  if (materiesDesti.length === 0) {
+    window.mostrarToast('⚠️ No hi ha altres matèries sense alumnes en aquest grup per copiar.', 3000);
+    return;
+  }
+
+  const nomsMateriesDesti = materiesDesti.map(m => `"${esH(m.nom)}"`).join(', ');
+
+  modalConfirmacio(
+    '🚀 Copiar alumnes a totes les matèries',
+    `Estàs a punt de copiar els ${materiaOrigen.alumnes.length} alumnes de
+    <strong>"${esH(materiaOrigen.nom)}"</strong> a les següents matèries del mateix grup que no tenen alumnes:
+    <strong>${nomsMateriesDesti}</strong>.
+    <br><br>
+    Aquesta acció només afectarà les matèries actualment sense alumnes i NO té marxa enrere.`,
+    async () => {
+      window.mostrarToast('⏳ Copiant alumnes...', 2000);
+      try {
+        for (const desti of materiesDesti) {
+          // Copiar solo si la materia destino sigue sin alumnos (para evitar race conditions o cambios de última hora)
+          const currentDesti = grups.find(g => g.id === desti.id); // Re-fetch para el estado actual
+          if (currentDesti && (!currentDesti.alumnes || currentDesti.alumnes.length === 0)) {
+            await window.db.collection('grups_centre').doc(desti.id).update({
+              alumnes: materiaOrigen.alumnes
+            });
+          }
+        }
+        window.mostrarToast(`✅ Alumnes copiats a ${materiesDesti.length} matèries.`, 3000);
+        onRefresh?.();
+      } catch (e) {
+        window.mostrarToast('❌ Error copiant alumnes: ' + e.message, 5000);
+        console.error('Error copiando alumnos a todas las materias:', e);
+      }
+    }
+  );
+}
+
 
 /* ══════════════════════════════════════════════════════
    MODAL COPIAR ESTRUCTURA D'ALTRA NIVELL
