@@ -545,6 +545,20 @@ async function renderEstructura(body) {
     modalGrupMateria(null, grupActiu, g, n);
   });
 
+  document.getElementById('btnCopiarEstructura').addEventListener('click', () => {
+    if (!grupActiu) return;
+    const g = grups.find(x=>x.id===grupActiu);
+    // buscar altres grups del mateix nivell amb matèries
+    const candidats = grups.filter(x =>
+    x.tipus === 'classe' &&
+    x.nivellId === nivellActiu &&
+    x.id !== grupActiu &&
+    (materiesPer[x.id] || []).length > 0
+   );
+
+    modalCopiarEstructura(g, candidats, recarregar);
+    });
+
   document.getElementById('btnNouAlumne').addEventListener('click', () => {
     const gId = materiaActiva || grupActiu;
     const g = grups.find(x=>x.id===gId);
