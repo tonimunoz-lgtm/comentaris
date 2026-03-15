@@ -554,6 +554,17 @@ async function renderEstructura(body) {
     modalCopiarEstructura(g, candidats, recarregar);
     });
 
+   document.getElementById('btnCopiarTots').addEventListener('click', () => {
+    if (!grupActiu) return;
+    const grupFont = grups.find(x=>x.id===grupActiu);
+    const altresGrups = grups.filter(g =>
+      g.tipus === 'classe' &&
+      g.nivellId === nivellActiu &&
+       g.id !== grupActiu
+    );
+   copiarEstructuraATots(grupFont, altresGrups, recarregar);
+   });
+
   document.getElementById('btnNouAlumne').addEventListener('click', () => {
     const gId = materiaActiva || grupActiu;
     const g = grups.find(x=>x.id===gId);
@@ -1014,6 +1025,40 @@ function modalCopiarEstructura(grupDesti, candidats, onRefresh) {
       });
     });
   },100);
+}
+
+/* ══════════════════════════════════════════════════════
+   MODAL COPIAR ESTRUCTURA A TOTS ELS GRUPS
+══════════════════════════════════════════════════════ */
+
+async function copiarEstructuraATots(grupFont, grupsDesti, onRefresh) {
+  const materies = (materiesPer[grupFont.id] || []);
+  if (!materies.length) {
+    window.mostrarToast('⚠️ Aquest grup no té matèries');
+    return;
+  }
+  if (!confirm(`Copiar ${materies.length} matèries de "${grupFont.nom}" a ${grupsDesti.length} grups?`)) return;
+  try {
+    for (const g of grupsDesti) {
+      let ordre = 1;
+      for (const m of materies) {
+        await window.db.collection('grups_centre').add({
+          nom: m.nom,
+          tipus: m.tipus,
+          parentGrupId: g.id,
+          nivellId: g.nivellId,
+          nivellNom: g.nivellNom,
+          curs: g.curs,
+          ordre: ordre++,
+          alumnes: []
+        });
+      }
+    }
+    window.mostrarToast(`✅ Estructura copiada a ${grupsDesti.length} grups`);
+    onRefresh?.();
+  } catch(e) {
+    window.mostrarToast('❌ Error: ' + e.message);
+  }
 }
 
 /* ══════════════════════════════════════════════════════
