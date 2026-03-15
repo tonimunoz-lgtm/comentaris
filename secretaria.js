@@ -390,6 +390,7 @@ async function renderEstructura(body) {
         });
         enableBtn('btnNouMateria');
         enableBtn('btnCopiarEstructura');
+        enableBtn('btnCopiarTots');
         document.getElementById('titol-col-mat').textContent = `MATÈRIES — ${g.nom}`;
       });
       const _cbGrup = (x,o) => window.db.collection('grups_centre').doc(x.id).update({ordre:o}).catch(()=>{});
