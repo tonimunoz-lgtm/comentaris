@@ -238,8 +238,18 @@ async function renderEstructura(body) {
       <div style="width:200px;flex-shrink:0;display:flex;flex-direction:column;padding:0 14px;border-right:1px solid #e5e7eb;">
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
           <span style="font-size:11px;font-weight:700;color:#059669;letter-spacing:0.04em;" id="titol-col-mat">MATÈRIES</span>
-          <button id="btnNouMateria" disabled style="background:#059669;color:#fff;border:none;border-radius:5px;padding:2px 8px;font-size:11px;font-weight:700;cursor:pointer;opacity:0.4;">+ Nova</button>
-        </div>
+            <div style="display:flex;gap:4px;">
+              <button id="btnNouMateria" disabled
+                style="background:#059669;color:#fff;border:none;border-radius:5px;padding:2px 8px;font-size:11px;font-weight:700;cursor:pointer;opacity:0.4;">
+                + Nova
+              </button>
+
+              <button id="btnCopiarEstructura" disabled
+                style="background:#4f46e5;color:#fff;border:none;border-radius:5px;padding:2px 8px;font-size:11px;font-weight:700;cursor:pointer;opacity:0.4;">
+                📋 Copiar estructura
+              </button>
+         </div>
+         </div>
         <div id="col-materies" style="flex:1;overflow-y:auto;display:flex;flex-direction:column;gap:4px;">
           <p style="font-size:11px;color:#9ca3af;text-align:center;padding:20px 0;">← Tria un grup</p>
         </div>
