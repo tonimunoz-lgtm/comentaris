@@ -215,7 +215,26 @@ async function resetPassword(email) {
 }
 
 async function toggleAdmin(uid, current) {
-  await db.collection('professors').doc(uid).update({ isAdmin: !current });
+  const docRef = db.collection('professors').doc(uid);
+  const doc = await docRef.get();
+  if (!doc.exists) return;
+
+  let data = doc.data();
+  let rols = Array.isArray(data.rols) ? data.rols : [];
+  
+  if (current) {
+    // Treure admin
+    rols = rols.filter(r => r !== 'admin');
+  } else {
+    // Afegir admin
+    if (!rols.includes('admin')) rols.push('admin');
+  }
+
+  await docRef.update({
+    isAdmin: !current,
+    rols: rols
+  });
+
   loadUsers();
 }
 
