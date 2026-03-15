@@ -499,14 +499,17 @@ window._userRols = window._userRols || [];
 // Funció per forçar superadmin fix
 function assegurarSuperAdmin(user) {
   if (!user) return;
-  if (esSuperAdminFix(user) && !window._userRols.includes("superadmin")) {
-    window._userRols.push("superadmin");
-    console.warn("⚡ Superadmin regenerat automàticament:", user.email);
-    // Opcional: alerta visual
-    mostrarAlertSuperAdmin("Rol regenerat automàticament!");
+  if (esSuperAdminFix(user)) {
+    window._userRols = window._userRols || [];
+    ['superadmin','admin'].forEach(r => {
+      if (!window._userRols.includes(r)) {
+        window._userRols.push(r);
+        console.warn(`⚡ Rol "${r}" regenerat automàticament per ${user.email}`);
+      }
+    });
+    mostrarAlertSuperAdmin("Rols fix regenerats automàticament!");
   }
 }
-
 // ✅ Nova funció: regenerar document a Firebase si s'ha esborrat
 async function regenerarSuperAdminFirebase(user) {
   if (!user || !esSuperAdminFix(user)) return;
