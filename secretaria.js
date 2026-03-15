@@ -963,6 +963,65 @@ function modalCopiarAlumnesDe(grupDesti, candidates, onRefresh) {
 }
 
 /* ══════════════════════════════════════════════════════
+   MODAL COPIAR ESTRUCTURA D'ALTRA NIVELL
+══════════════════════════════════════════════════════ */
+function modalCopiarEstructura(grupDesti, candidats, onRefresh) {
+
+  if (!candidats.length) {
+    window.mostrarToast('⚠️ No hi ha cap altre grup amb matèries',3000);
+    return;
+  }
+  crearModal('📋 Copiar estructura de...', `
+    <p style="font-size:13px;color:#6b7280;margin-bottom:14px;">
+      Selecciona el grup d'on vols copiar totes les matèries a
+      <strong>${grupDesti.nom}</strong>.
+    </p>
+    <div style="display:flex;flex-direction:column;gap:7px;">
+      ${candidats.map(g => `
+        <button class="btn-copy-estruct" data-id="${g.id}"
+          style="padding:11px 14px;border:1.5px solid #e5e7eb;border-radius:9px;
+                 background:#fff;cursor:pointer;text-align:left;
+                 font-size:13px;font-weight:600;">
+          ${g.nom}
+        </button>
+      `).join('')}
+    </div>
+  `, () => false, '');
+
+  setTimeout(() => {document.getElementById('_btnOkModal')?.style.setProperty('display','none');
+    document.querySelectorAll('.btn-copy-estruct').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        const grupFont = candidats.find(x=>x.id===btn.dataset.id);
+        if (!grupFont) return;
+        btn.disabled=true;
+        btn.textContent='⏳ Copiant...';
+        try {
+          const materiesFont = (materiesPer[grupFont.id] || []);
+          let ordre = 1;
+          for (const m of materiesFont) {
+            await window.db.collection('grups_centre').add({
+              nom: m.nom,
+              tipus: m.tipus,
+              parentGrupId: grupDesti.id,
+              nivellId: grupDesti.nivellId,
+              nivellNom: grupDesti.nivellNom,
+              curs: grupDesti.curs,
+              ordre: ordre++,
+              alumnes: []
+            });
+          }
+          document.getElementById('_modalSec')?.remove();
+          window.mostrarToast(`✅ ${materiesFont.length} matèries copiades`);
+          onRefresh?.();
+        } catch(e) {
+          window.mostrarToast('❌ Error: '+e.message);
+        }
+      });
+    });
+  },100);
+}
+
+/* ══════════════════════════════════════════════════════
    MODAL AFEGIR ALUMNE
 ══════════════════════════════════════════════════════ */
 function modalAlumne(grup, onRefresh) {
