@@ -1076,6 +1076,7 @@ async function copiarEstructuraATots(grupFont, grupsDesti, materiesPer, onRefres
     }
   }
 );
+} 
 
 /* ══════════════════════════════════════════════════════
    MODAL AFEGIR ALUMNE
