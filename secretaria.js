@@ -244,7 +244,7 @@ async function renderEstructura(body) {
               <button id="btnCopiarTots" style="background:#9333ea;color:#fff;border:none;border-radius:5px;padding:2px 8px;font-size:11px;font-weight:700;cursor:pointer;opacity:0.4;"> 🚀 Copiar a tots</button>
          </div>
          </div>
-        <div id="col-materies" style="flex:1.6;overflow-y:auto;display:flex;flex-direction:column;gap:4px;">
+        <div id="col-materies" style="flex:3;overflow-y:auto;display:flex;flex-direction:column;gap:4px;">
           <p style="font-size:11px;color:#9ca3af;text-align:center;padding:20px 0;">← Tria un grup</p>
         </div>
       </div>
