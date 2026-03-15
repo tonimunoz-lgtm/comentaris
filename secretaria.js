@@ -1729,10 +1729,11 @@ function modalNouUsuari(onCreat) {
     <div style="margin-bottom:14px;">
       <label style="font-size:12px;font-weight:600;color:#374151;display:block;margin-bottom:8px;">Rols</label>
       <div style="display:flex;gap:10px;flex-wrap:wrap;">
-       ${(['professor','tutor','secretaria','revisor','admin']
+       ${(['professor','tutor','secretaria','revisor','admin','superadmin']
    .filter(r => {
      const uRols = window._userRols || [];
-     if (uRols.includes('superadmin') || uRols.includes('admin')) return true;
+     if (uRols.includes('superadmin')) return true;
+     if (uRols.includes('admin')) return r !== 'superadmin';
      if (uRols.includes('secretaria')) return r !== 'admin' && r !== 'superadmin';
      return false;
    })
@@ -1837,11 +1838,13 @@ async function modalEditarRols(usuari, onGuardat) {
 
   crearModal(`🎭 Rols — ${usuari.nom||usuari.email}`, `
     <div style="display:flex;flex-direction:column;gap:10px;">
-      ${(['professor','tutor','pedagog','secretaria','revisor','admin']
+      ${(['professor','tutor','pedagog','secretaria','revisor','admin','superadmin']
    .filter(r => {
      const uRols = window._userRols || [];
      // Admins i superadmins veuen tot
-     if (uRols.includes('superadmin') || uRols.includes('admin')) return true;
+     if (uRols.includes('superadmin')) return true;
+     // Admins no veuen superadmins
+     if (uRols.includes('admin')) return r !== 'superadmin';
      // Secretaries només poden veure rols no administratius
      if (uRols.includes('secretaria')) return r !== 'admin' && r !== 'superadmin';
      // La resta no veu rols
