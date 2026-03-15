@@ -1706,13 +1706,13 @@ function modalNouUsuari(onCreat) {
   const pwGen = generarPassword();
   const cfgKey = '_excelColCfg';
   const cfgDef = { primerFila: 2, colNom: 'B', colCog1: 'A', colCog2: '', colEmail: 'C' };
-  const cfg = Object.assign({}, cfgDef, JSON.parse(sessionStorage.getItem(cfgKey) || '{}'));
+  const cfg = Object.assign({}, cfgDef, JSON.parse(sessionStorage.getItem(cfgKey)||'{}'));
 
   const optsCol = (sel, buit) => {
     let html = buit ? '<option value="">— cap —</option>' : '';
-    for (let i = 0; i < 26; i++) {
-      const l = String.fromCharCode(65 + i);
-      html += `<option value="${l}"${sel === l ? ' selected' : ''}>${l}</option>`;
+    for (let i=0;i<26;i++){
+      const l = String.fromCharCode(65+i);
+      html += `<option value="${l}"${sel===l?' selected':''}>${l}</option>`;
     }
     return html;
   };
@@ -1720,12 +1720,98 @@ function modalNouUsuari(onCreat) {
   const inputStyle = 'width:100%;box-sizing:border-box;padding:7px 10px;border:1.5px solid #e5e7eb;border-radius:8px;font-size:13px;outline:none;background:#f9fafb;';
   const labelStyle = 'font-size:11px;font-weight:700;color:#6b7280;display:block;margin-bottom:4px;';
 
-  // Assegurem que onOk sempre sigui una funció
-  const safeOnOk = async () => {};
-
   crearModal('+ Nou usuari', `
-    <!-- HTML igual que abans, sense canvis -->
-  `, safeOnOk, 'Crear usuari');
+    <div style="display:flex;justify-content:space-between;gap:12px;margin-bottom:12px;">
+      <button id="btnIndividual" style="flex:1;padding:9px;background:#7c3aed;color:#fff;border:none;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;">
+        👤 Crear un usuari
+      </button>
+      <button id="btnImportExcel" style="flex:1;padding:9px;background:#4ade80;color:#fff;border:none;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;">
+        📥 Importar Excel
+      </button>
+    </div>
+
+    <div id="seccioIndividual">
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px;">
+        <div>
+          <label style="font-size:12px;font-weight:600;color:#374151;display:block;margin-bottom:5px;">Nom complet *</label>
+          <input id="inpNomUser" type="text" placeholder="Maria Garcia"
+            style="width:100%;box-sizing:border-box;padding:9px 11px;border:1.5px solid #e5e7eb;border-radius:9px;font-size:13px;">
+        </div>
+        <div>
+          <label style="font-size:12px;font-weight:600;color:#374151;display:block;margin-bottom:5px;">Email *</label>
+          <input id="inpEmailUser" type="email" placeholder="professor@insmatadepera.cat"
+            style="width:100%;box-sizing:border-box;padding:9px 11px;border:1.5px solid #e5e7eb;border-radius:9px;font-size:13px;">
+        </div>
+      </div>
+      <div style="margin-bottom:12px;">
+        <label style="font-size:12px;font-weight:600;color:#374151;display:block;margin-bottom:5px;">Contrasenya inicial *</label>
+        <div style="display:flex;gap:8px;">
+          <input id="inpPwUser" type="text" value="${pwGen}"
+            style="flex:1;padding:9px 11px;border:1.5px solid #e5e7eb;border-radius:9px;font-size:13px;">
+          <button id="btnGenPw2" style="padding:9px 14px;background:#f3f4f6;border:none;border-radius:9px;font-size:12px;font-weight:600;cursor:pointer;white-space:nowrap;">🎲 Nova</button>
+        </div>
+      </div>
+      <div style="margin-bottom:14px;">
+        <label style="font-size:12px;font-weight:600;color:#374151;display:block;margin-bottom:5px;">Rols</label>
+        <div style="display:flex;gap:10px;flex-wrap:wrap;">
+         ${(['professor','tutor','secretaria','revisor','admin','superadmin']
+       .filter(r => {
+         const uRols = window._userRols || [];
+         if (uRols.includes('superadmin')) return true;
+         if (uRols.includes('admin')) return r !== 'superadmin';
+         if (uRols.includes('secretaria')) return r !== 'admin' && r !== 'superadmin';
+         return false;
+       })
+      ).map(r => `
+            <label style="display:flex;align-items:center;gap:6px;cursor:pointer;">
+              <input type="checkbox" class="chk-rol-nou" value="${r}" ${r==='professor'?'checked':''}
+                style="width:16px;height:16px;accent-color:${rolColor(r)};">
+              <span style="font-size:13px;font-weight:600;color:${rolColor(r)};">${r}</span>
+            </label>
+          `).join('')}
+        </div>
+      </div>
+      <div>
+        <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:13px;color:#374151;">
+          <input type="checkbox" id="chkForcePw" checked style="width:16px;height:16px;">
+          Forçar canvi de contrasenya en el primer accés
+        </label>
+      </div>
+      <div id="errUser" style="color:#ef4444;font-size:12px;min-height:16px;margin-top:10px;"></div>
+    </div>
+
+    <div id="seccioImport" style="display:none;">
+      <div style="margin-bottom:14px;">
+        <input type="file" id="inpExcelUsuaris" accept=".xlsx,.xls,.csv"
+          style="width:100%;padding:10px;border:2px dashed #7c3aed;border-radius:10px;font-size:13px;cursor:pointer;background:#f9fafb;">
+        <div id="infoFitxer" style="font-size:11px;color:#9ca3af;margin-top:6px;"></div>
+      </div>
+
+      <div id="seccioCols" style="display:none;background:#f9fafb;border:1.5px solid #e5e7eb;border-radius:12px;padding:14px;margin-bottom:12px;">
+        <div style="font-size:13px;font-weight:700;color:#374151;margin-bottom:12px;">Indica quina columna conté cada camp</div>
+        <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:10px;">
+          <div>
+            <label style="${labelStyle}">Fila inici *</label>
+            <input id="cfgFila" type="number" min="1" value="${cfg.primerFila}" style="${inputStyle}text-align:center;">
+          </div>
+          <div>
+            <label style="${labelStyle}">Nom *</label>
+            <select id="cfgNom" style="${inputStyle}">${optsCol(cfg.colNom,false)}</select>
+          </div>
+          <div>
+            <label style="${labelStyle}">Cognoms</label>
+            <select id="cfgCog1" style="${inputStyle}">${optsCol(cfg.colCog1,true)}</select>
+          </div>
+          <div>
+            <label style="${labelStyle}">Email *</label>
+            <select id="cfgEmail" style="${inputStyle}">${optsCol(cfg.colEmail,false)}</select>
+          </div>
+        </div>
+        <button id="btnPreview" style="padding:6px 14px;background:#7c3aed;color:#fff;border:none;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer;">🔄 Vista prèvia</button>
+      </div>
+      <div id="previewImport" style="max-height:200px;overflow-y:auto;"></div>
+    </div>
+  `, () => {}, 'Crear usuari'); // <-- FIX: abans era null, ara funció buida
 
   setTimeout(() => {
     // Canviar secció
@@ -1739,7 +1825,7 @@ function modalNouUsuari(onCreat) {
     });
 
     // Nova contrasenya
-    document.getElementById('btnGenPw2')?.addEventListener('click', () => {
+    document.getElementById('btnGenPw2')?.addEventListener('click',()=> {
       document.getElementById('inpPwUser').value = generarPassword();
     });
 
@@ -1750,75 +1836,73 @@ function modalNouUsuari(onCreat) {
     const seccioCols = document.getElementById('seccioCols');
     const previewDiv = document.getElementById('previewImport');
 
-    inpExcel?.addEventListener('change', async e => {
-      const file = e.target.files[0]; if (!file) return;
+    inpExcel?.addEventListener('change', async e=>{
+      const file = e.target.files[0]; if(!file) return;
       seccioCols.style.display = 'block';
 
       const reader = new FileReader();
       reader.onload = ev => {
         try {
-          const wb = XLSX.read(ev.target.result, { type: 'binary' });
+          const wb = XLSX.read(ev.target.result,{type:'binary'});
           const ws = wb.Sheets[wb.SheetNames[0]];
-          const rows = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '' });
-          const nF = rows.length, nC = Math.max(...rows.map(r => r.length));
+          const rows = XLSX.utils.sheet_to_json(ws,{header:1,defval:''});
+          const nF = rows.length, nC = Math.max(...rows.map(r=>r.length));
           previewDiv.innerHTML = `<p style="font-size:12px;color:#374151;">Fitxer carregat: ${nF} files × ${nC} columnes</p>`;
-        } catch (e) { }
+        } catch(e){}
       };
       reader.readAsBinaryString(file);
     });
 
-    document.getElementById('btnPreview')?.addEventListener('click', async () => {
-      const file = inpExcel.files[0]; if (!file) return;
+    document.getElementById('btnPreview')?.addEventListener('click', async ()=>{
+      const file = inpExcel.files[0]; if(!file) return;
       const colCfg = {
-        primerFila: parseInt(document.getElementById('cfgFila')?.value || '2') || 2,
+        primerFila: parseInt(document.getElementById('cfgFila')?.value||'2')||2,
         colNom: document.getElementById('cfgNom')?.value || 'B',
         colCog1: document.getElementById('cfgCog1')?.value || '',
         colEmail: document.getElementById('cfgEmail')?.value || 'C',
       };
       sessionStorage.setItem(cfgKey, JSON.stringify(colCfg));
-      const alumnes = await parseExcelUsuaris(file, colCfg);
-      if (!alumnes.length) previewDiv.innerHTML = '<div style="color:#ef4444;">⚠️ Cap usuari detectat</div>';
-      else previewDiv.innerHTML = `<p style="font-size:12px;color:#059669;">✅ ${alumnes.length} usuaris detectats</p>
+      const alumnes = await parseExcelUsuaris(file,colCfg);
+      if(!alumnes.length) previewDiv.innerHTML='<div style="color:#ef4444;">⚠️ Cap usuari detectat</div>';
+      else previewDiv.innerHTML=`<p style="font-size:12px;color:#059669;">✅ ${alumnes.length} usuaris detectats</p>
         <table style="width:100%;border-collapse:collapse;font-size:11px;">
         <tr style="background:#f3f4f6;"><th>#</th><th>Nom</th><th>Cognoms</th><th>Email</th></tr>
-        ${alumnes.slice(0, 20).map((u, i) => `<tr><td>${i + 1}</td><td>${u.nom}</td><td>${u.cognoms}</td><td>${u.email}</td></tr>`).join('')}
-        ${alumnes.length > 20 ? `<tr><td colspan="4">... i ${alumnes.length - 20} més</td></tr>` : ''}
+        ${alumnes.slice(0,20).map((u,i)=>`<tr><td>${i+1}</td><td>${u.nom}</td><td>${u.cognoms}</td><td>${u.email}</td></tr>`).join('')}
+        ${alumnes.length>20?`<tr><td colspan="4">... i ${alumnes.length-20} més</td></tr>`:''}
         </table>`;
     });
 
-    // BOTÓ OK: crea usuari o importa
     const okBtn = document.querySelector('#_modalSec button:last-child');
-    okBtn?.addEventListener('click', async () => {
-      if (document.getElementById('seccioIndividual').style.display === '') {
+    okBtn?.addEventListener('click', async ()=>{
+      if(document.getElementById('seccioIndividual').style.display==='') {
+        // Crear individual
         const nom = document.getElementById('inpNomUser').value.trim();
         const email = document.getElementById('inpEmailUser').value.trim();
         const pw = document.getElementById('inpPwUser').value.trim();
-        const rols = [...document.querySelectorAll('.chk-rol-nou:checked')].map(c => c.value);
+        const rols = [...document.querySelectorAll('.chk-rol-nou:checked')].map(c=>c.value);
         const force = document.getElementById('chkForcePw').checked;
         const errEl = document.getElementById('errUser');
-        if (!nom || !email || !pw) { errEl.textContent = '⚠️ Omple els camps obligatoris'; return; }
-        if (pw.length < 6) { errEl.textContent = '⚠️ Mínim 6 caràcters'; return; }
+        if(!nom||!email||!pw){ errEl.textContent='⚠️ Omple els camps obligatoris'; return; }
+        if(pw.length<6){ errEl.textContent='⚠️ Mínim 6 caràcters'; return; }
         try {
           await window.db.collection('_peticions_usuari').add({
-            tipus: 'crear', nom, email, passwordClar: pw,
-            rols: rols.length > 0 ? rols : ['professor'],
-            forcePasswordChange: force,
-            creatPer: firebase.auth().currentUser?.uid || '',
-            creatAt: firebase.firestore.FieldValue.serverTimestamp(),
-            processat: false
+            tipus:'crear',nom,email,passwordClar:pw,rols:rols.length>0?rols:['professor'],
+            forcePasswordChange:force,creatPer:firebase.auth().currentUser?.uid||'',
+            creatAt:firebase.firestore.FieldValue.serverTimestamp(),processat:false
           });
           window.mostrarToast(`✅ Petició creada per a ${email}`);
           onCreat?.();
-        } catch (e) { errEl.textContent = 'Error: ' + e.message; }
+        } catch(e){ errEl.textContent='Error: '+e.message; }
       } else {
-        const file = inpExcel.files[0]; if (!file) return;
-        const colCfg = JSON.parse(sessionStorage.getItem(cfgKey) || '{}');
-        const usuaris = await parseExcelUsuaris(file, colCfg);
-        if (!usuaris.length) { window.mostrarToast('⚠️ Cap usuari detectat'); return; }
+        // Import Excel
+        const file = inpExcel.files[0]; if(!file) return;
+        const colCfg = JSON.parse(sessionStorage.getItem(cfgKey)||'{}');
+        const usuaris = await parseExcelUsuaris(file,colCfg);
+        if(!usuaris.length){ window.mostrarToast('⚠️ Cap usuari detectat'); return; }
         const batch = window.db.batch();
-        usuaris.forEach(u => {
+        usuaris.forEach(u=>{
           const ref = window.db.collection('_peticions_usuari').doc();
-          batch.set(ref, { tipus: 'crear', ...u, rols: ['professor'], forcePasswordChange: true, creatPer: firebase.auth().currentUser?.uid || '', creatAt: firebase.firestore.FieldValue.serverTimestamp(), processat: false });
+          batch.set(ref,{tipus:'crear',...u,rols:['professor'],forcePasswordChange:true,creatPer:firebase.auth().currentUser?.uid||'',creatAt:firebase.firestore.FieldValue.serverTimestamp(),processat:false});
         });
         await batch.commit();
         window.mostrarToast(`✅ ${usuaris.length} peticions d'usuaris creades`);
@@ -1826,7 +1910,35 @@ function modalNouUsuari(onCreat) {
       }
     });
 
-  }, 200);
+  },200);
+}
+
+// Funció parse Excel per usuaris
+async function parseExcelUsuaris(file,colCfg){
+  const ci=l=>l?l.toUpperCase().charCodeAt(0)-65:-1;
+  const iNom = ci(colCfg.colNom), iCog = ci(colCfg.colCog1), iEmail = ci(colCfg.colEmail);
+  const inici = (colCfg.primerFila||2)-1;
+  return new Promise(resolve=>{
+    const reader = new FileReader();
+    reader.onload = e=>{
+      try{
+        const wb = XLSX.read(e.target.result,{type:'binary'});
+        const ws = wb.Sheets[wb.SheetNames[0]];
+        const rows = XLSX.utils.sheet_to_json(ws,{header:1,defval:''});
+        const usuaris = [];
+        for(let i=inici;i<rows.length;i++){
+          const row=rows[i];
+          const nom = iNom>=0?String(row[iNom]||'').trim():'';
+          const cognoms = iCog>=0?String(row[iCog]||'').trim():'';
+          const email = iEmail>=0?String(row[iEmail]||'').trim():'';
+          if(!nom||!email) continue;
+          usuaris.push({nom,cognoms,email,passwordClar:generarPassword()});
+        }
+        resolve(usuaris);
+      } catch(err){ console.error(err); resolve([]); }
+    };
+    reader.readAsBinaryString(file);
+  });
 }
 
 
