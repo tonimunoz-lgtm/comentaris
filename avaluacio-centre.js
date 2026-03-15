@@ -209,33 +209,45 @@ async function obrirModalAvaluacioCentre() {
 
   document.body.appendChild(modal);
 
-  // Mostrar estat del periode actiu (obert/tancat)
+    // Mostrar estat del periode actiu (obert/tancat)
   setTimeout(async () => {
-    const pId  = window._tcClassId || window.currentPeriodeId;
-    const pNom = window.currentPeriodes?.[pId]?.nom || '';
-    const pCodi= window.currentPeriodes?.[pId]?.codi || '';
-    const badge = document.getElementById('avcPeriodeBadge');
-    if (badge && pNom) {
-      try {
-        const doc = await window.db.collection('_sistema').doc('periodes_tancats').get();
-        const tancats = doc.data()?.tancats || [];
-        const tancat = pCodi && tancats.includes(pCodi);
-        badge.innerHTML = `<span style="
-          display:inline-block;padding:3px 10px;border-radius:6px;font-size:11px;font-weight:700;
-          background:${tancat?'#fef2f2':'#f0fdf4'};
-          color:${tancat?'#dc2626':'#059669'};
-          border:1px solid ${tancat?'#fca5a5':'#bbf7d0'};">
-          ${tancat?'🔒 Tancat':'✅ Obert'} — ${pNom}
-        </span>`;
-        if (tancat) {
-          const btnEnviar = document.getElementById('btnEnviarAC');
-          if (btnEnviar) {
-            btnEnviar.disabled = true;
-            btnEnviar.style.opacity = '0.5';
-            btnEnviar.title = 'Període tancat per Secretaria';
-          }
-        }
-      } catch(e) {}
+    const periodeIdActual = window._tcClassId || window.currentPeriodeId;
+    const periodeNomActual = window.currentPeriodes?.[periodeIdActual]?.nom || 'el període actual';
+    const codiPeriodeActual = window.currentPeriodes?.[periodeIdActual]?.codi || '';
+    
+    let isPeriodLocked = false;
+    try {
+      const periodesInfo = await window.db.collection('_sistema').doc('periodes_tancats').get();
+      const tancatsCodi = periodesInfo?.data()?.tancats || [];
+      if (codiPeriodeActual && tancatsCodi.includes(codiPeriodeActual)) {
+        isPeriodLocked = true;
+      }
+    } catch(e) {
+      console.warn('Error al verificar estado del período:', e);
+    }
+
+    const badgeContainer = modal.querySelector('#resümAlumnesAC > div:first-child'); // Intentamos añadirlo cerca del título PAS 2
+    if (badgeContainer) {
+      const badge = document.createElement('span');
+      badge.style.cssText = `
+        display:inline-block;padding:3px 10px;border-radius:6px;font-size:11px;font-weight:700;
+        margin-left:10px;
+        background:${isPeriodLocked?'#fef2f2':'#f0fdf4'};
+        color:${isPeriodLocked?'#dc2626':'#059669'};
+        border:1px solid ${isPeriodLocked?'#fca5a5':'#bbf7d0'};
+      `;
+      badge.innerHTML = `${isPeriodLocked?'🔒 Tancat':'✅ Obert'} — ${periodeNomActual}`;
+      badgeContainer.appendChild(badge);
+    }
+
+    if (isPeriodLocked) {
+      const btnEnviar = document.getElementById('btnEnviarAC');
+      if (btnEnviar) {
+        btnEnviar.disabled = true;
+        btnEnviar.style.opacity = '0.5';
+        btnEnviar.title = `El període ${periodeNomActual} està tancat per Secretaria.`;
+      }
+      window.mostrarToast(`🔒 El període "${periodeNomActual}" està tancat per Secretaria. No podràs enviar avaluacions.`, 5000);
     }
   }, 200);
 
