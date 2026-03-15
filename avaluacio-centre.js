@@ -209,45 +209,33 @@ async function obrirModalAvaluacioCentre() {
 
   document.body.appendChild(modal);
 
-    // Mostrar estat del periode actiu (obert/tancat)
+  // Mostrar estat del periode actiu (obert/tancat)
   setTimeout(async () => {
-    const periodeIdActual = window._tcClassId || window.currentPeriodeId;
-    const periodeNomActual = window.currentPeriodes?.[periodeIdActual]?.nom || 'el període actual';
-    const codiPeriodeActual = window.currentPeriodes?.[periodeIdActual]?.codi || '';
-    
-    let isPeriodLocked = false;
-    try {
-      const periodesInfo = await window.db.collection('_sistema').doc('periodes_tancats').get();
-      const tancatsCodi = periodesInfo?.data()?.tancats || [];
-      if (codiPeriodeActual && tancatsCodi.includes(codiPeriodeActual)) {
-        isPeriodLocked = true;
-      }
-    } catch(e) {
-      console.warn('Error al verificar estado del período:', e);
-    }
-
-    const badgeContainer = modal.querySelector('#resümAlumnesAC > div:first-child'); // Intentamos añadirlo cerca del título PAS 2
-    if (badgeContainer) {
-      const badge = document.createElement('span');
-      badge.style.cssText = `
-        display:inline-block;padding:3px 10px;border-radius:6px;font-size:11px;font-weight:700;
-        margin-left:10px;
-        background:${isPeriodLocked?'#fef2f2':'#f0fdf4'};
-        color:${isPeriodLocked?'#dc2626':'#059669'};
-        border:1px solid ${isPeriodLocked?'#fca5a5':'#bbf7d0'};
-      `;
-      badge.innerHTML = `${isPeriodLocked?'🔒 Tancat':'✅ Obert'} — ${periodeNomActual}`;
-      badgeContainer.appendChild(badge);
-    }
-
-    if (isPeriodLocked) {
-      const btnEnviar = document.getElementById('btnEnviarAC');
-      if (btnEnviar) {
-        btnEnviar.disabled = true;
-        btnEnviar.style.opacity = '0.5';
-        btnEnviar.title = `El període ${periodeNomActual} està tancat per Secretaria.`;
-      }
-      window.mostrarToast(`🔒 El període "${periodeNomActual}" està tancat per Secretaria. No podràs enviar avaluacions.`, 5000);
+    const pId  = window._tcClassId || window.currentPeriodeId;
+    const pNom = window.currentPeriodes?.[pId]?.nom || '';
+    const pCodi= window.currentPeriodes?.[pId]?.codi || '';
+    const badge = document.getElementById('avcPeriodeBadge');
+    if (badge && pNom) {
+      try {
+        const doc = await window.db.collection('_sistema').doc('periodes_tancats').get();
+        const tancats = doc.data()?.tancats || [];
+        const tancat = pCodi && tancats.includes(pCodi);
+        badge.innerHTML = `<span style="
+          display:inline-block;padding:3px 10px;border-radius:6px;font-size:11px;font-weight:700;
+          background:${tancat?'#fef2f2':'#f0fdf4'};
+          color:${tancat?'#dc2626':'#059669'};
+          border:1px solid ${tancat?'#fca5a5':'#bbf7d0'};">
+          ${tancat?'🔒 Tancat':'✅ Obert'} — ${pNom}
+        </span>`;
+        if (tancat) {
+          const btnEnviar = document.getElementById('btnEnviarAC');
+          if (btnEnviar) {
+            btnEnviar.disabled = true;
+            btnEnviar.style.opacity = '0.5';
+            btnEnviar.title = 'Període tancat per Secretaria';
+          }
+        }
+      } catch(e) {}
     }
   }, 200);
 
@@ -550,6 +538,41 @@ function extraureComentariItem(textGlobal, titolActual, titolSeguent, itemIdx, t
    ENVIAR A FIREBASE
    Cada alumne té els seus propis ítems i comentari
 ══════════════════════════════════════════════════════ */
+// Obtenir el codi del periode des del nom (si no s'ha guardat el camp codi)
+function obtenirCodiPeriode(periodeId) {
+  const periodeData = window.currentPeriodes?.[periodeId];
+  if (!periodeData) return '';
+  // Si té codi guardat, usar-lo
+  if (periodeData.codi) return periodeData.codi;
+  // Inferir des del nom
+  const nom = (periodeData.nom || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'');
+  if (nom.includes('preav') || nom.includes('pre-av')) return 'preav';
+  if (nom.includes('1r') || nom.includes('primer')) return 'T1';
+  if (nom.includes('2n') || nom.includes('segon'))  return 'T2';
+  if (nom.includes('3r') || nom.includes('tercer')) return 'T3';
+  if (nom.includes('final')) return 'final';
+  // Per períodes custom, usar el nom com a identificador
+  return nom.replace(/\s+/g, '_').slice(0, 20);
+}
+
+// Verificar si el periode actiu està tancat
+async function isPeriodeTancatActual() {
+  const periodeId = window._tcClassId || window.currentPeriodeId;
+  if (!periodeId) return false;
+  const codi = obtenirCodiPeriode(periodeId);
+  const periodeNom = window.currentPeriodes?.[periodeId]?.nom || '';
+  try {
+    const doc = await window.db.collection('_sistema').doc('periodes_tancats').get();
+    const tancats = doc.data()?.tancats || [];
+    const noms    = doc.data()?.noms    || {};
+    // Comprovar per codi, per nom personalitzat, o per nom base
+    return tancats.includes(codi) ||
+           tancats.some(t => (noms[t]||t) === periodeNom) ||
+           tancats.some(t => t === periodeId);
+  } catch(e) { return false; }
+}
+
+
 async function enviarAvaluacioCentre() {
   const grupEl     = document.getElementById('selGrupAC');
   const descComuna = document.getElementById('descComunaAC')?.value?.trim() || '';
@@ -577,26 +600,16 @@ async function enviarAvaluacioCentre() {
     return;
   }
 
-   // --- VERIFICACIÓN DE PERÍODO BLOQUEADO ---
+  // Verificar si el periode actiu està tancat
   const periodeIdActual = window._tcClassId || window.currentPeriodeId;
   const periodeNomActual = window.currentPeriodes?.[periodeIdActual]?.nom || 'el període actual';
-  const periodesInfo = await window.db.collection('_sistema').doc('periodes_tancats').get().catch(() => null);
-  const tancatsCodi = periodesInfo?.data()?.tancats || [];
-  const codiPeriodeActual = window.currentPeriodes?.[periodeIdActual]?.codi || '';
-
-  if (codiPeriodeActual && tancatsCodi.includes(codiPeriodeActual)) {
-    window.mostrarToast(`🔒 El període "${periodeNomActual}" està tancat per Secretaria. No es poden enviar avaluacions en aquest moment.`, 6000);
-    // Deshabilitar el botón de enviar y dejarlo claro
+  const tancat = await isPeriodeTancatActual();
+  if (tancat) {
+    window.mostrarToast(`🔒 El període "${periodeNomActual}" està tancat per Secretaria. No es poden enviar avaluacions.`, 6000);
     const btnEnviar = document.getElementById('btnEnviarAC');
-    if (btnEnviar) {
-      btnEnviar.disabled = true;
-      btnEnviar.style.opacity = '0.5';
-      btnEnviar.title = `El període ${periodeNomActual} està tancat per Secretaria.`;
-    }
-    document.getElementById('modalAvaluacioCentre')?.remove(); // Cierra el modal si no puede enviar
-    return; // Detiene la ejecución de la función
+    if (btnEnviar) { btnEnviar.disabled = true; btnEnviar.style.opacity = '0.5'; }
+    return;
   }
-  // --- FIN VERIFICACIÓN DE PERÍODO BLOQUEADO ---
 
   const grupId     = grupEl.value;
   const grupNom    = grupEl.options[grupEl.selectedIndex]?.dataset.nom || grupEl.value;
