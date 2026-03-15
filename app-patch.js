@@ -4,7 +4,7 @@
 // 3. Fix: botó Professor (alias btnTutoria per compatibilitat)
 
 console.log('🔧 app-patch.js carregat');
-
+let _grupsCentreData = {};
 /* ══════════════════════════════════════════════════════
    INIT — esperar Firebase + usuari autenticat
 ══════════════════════════════════════════════════════ */
@@ -101,10 +101,10 @@ function patchModalCreateClass() {
   const box = modal.querySelector('.modal-box');
   if (!box) return;
 
-  box.innerHTML = `
+    box.innerHTML = `
     <h3 class="modal-title">Afegir classe del centre</h3>
     <p style="font-size:13px;color:#6b7280;margin-bottom:16px;">
-      Selecciona un grup de Secretaria per crear la teva classe amb els alumnes ja carregats.
+      Selecciona un nivell, un grup classe i la matèria/projecte amb els alumnes que s'importaran.
     </p>
 
     <!-- Selector Nivell -->
@@ -118,14 +118,25 @@ function patchModalCreateClass() {
       </select>
     </div>
 
-    <!-- Selector Grup/Matèria/Projecte -->
+    <!-- Selector Grup Classe -->
     <div style="margin-bottom:12px;">
       <label style="font-size:13px;font-weight:600;color:#374151;display:block;margin-bottom:6px;">
-        Grup / Matèria / Projecte
+        Grup Classe
       </label>
-      <select id="patchSelGrup" style="width:100%;padding:9px 12px;border:1.5px solid #e5e7eb;
+      <select id="patchSelGrupClasse" style="width:100%;padding:9px 12px;border:1.5px solid #e5e7eb;
               border-radius:9px;font-size:14px;outline:none;background:#f9fafb;" disabled>
         <option value="">— Primer tria un nivell —</option>
+      </select>
+    </div>
+
+    <!-- Selector Matèria / Projecte -->
+    <div style="margin-bottom:12px;">
+      <label style="font-size:13px;font-weight:600;color:#374151;display:block;margin-bottom:6px;">
+        Matèria / Projecte / Optativa
+      </label>
+      <select id="patchSelMateria" style="width:100%;padding:9px 12px;border:1.5px solid #e5e7eb;
+              border-radius:9px;font-size:14px;outline:none;background:#f9fafb;" disabled>
+        <option value="">— Primer tria un grup classe —</option>
       </select>
     </div>
 
@@ -141,73 +152,92 @@ function patchModalCreateClass() {
     </div>
   `;
 
-  // Carregar nivells
+    // Carregar nivells (la función carregarOpcionesNivells se modificará abajo)
   carregarOpcionesNivells();
 
-  // Selector nivell → emplenar grups
+  // Selector nivell → emplenar Grups Classe
   document.getElementById('patchSelNivell').addEventListener('change', async (e) => {
     const nivellId = e.target.value;
-    const selGrup = document.getElementById('patchSelGrup');
-    selGrup.innerHTML = `<option value="">⏳ Carregant grups...</option>`;
-    selGrup.disabled = true;
+    const selGrupClasse = document.getElementById('patchSelGrupClasse');
+    const selMateria = document.getElementById('patchSelMateria');
+
+    selGrupClasse.innerHTML = `<option value="">⏳ Carregant grups...</option>`;
+    selGrupClasse.disabled = true;
+    selMateria.innerHTML = `<option value="">— Primer tria un grup classe —</option>`; // Reset del selector de materia
+    selMateria.disabled = true;
     document.getElementById('patchBtnCrearClasse').disabled = true;
     document.getElementById('patchInfoAlumnes').textContent = 'Selecciona un grup per veure els alumnes.';
 
     if (!nivellId) {
-      selGrup.innerHTML = `<option value="">— Primer tria un nivell —</option>`;
+      selGrupClasse.innerHTML = `<option value="">— Primer tria un nivell —</option>`;
       return;
     }
 
-    try {
-      const snap = await window.db.collection('grups_centre')
-        .where('nivellId','==',nivellId)
-        .get();
-      const grups = snap.docs.map(d=>({id:d.id,...d.data()}))
-        .sort((a,b)=>(a.ordre||99)-(b.ordre||99));
+    const nivellData = _grupsCentreData[nivellId];
+    const grupsClasse = nivellData?.grupsClasse || [];
 
-      if (grups.length === 0) {
-        selGrup.innerHTML = `<option value="">Cap grup en aquest nivell</option>`;
-        return;
-      }
-
-      // Agrupar per tipus
-      const perTipus = {};
-      grups.forEach(g => {
-        if (!perTipus[g.tipus]) perTipus[g.tipus]=[];
-        perTipus[g.tipus].push(g);
-      });
-
-      const TIPUS = {classe:'🏫 Grups classe',materia:'📚 Matèries',projecte:'🔬 Projectes',optativa:'🎨 Optatives'};
-      selGrup.innerHTML = `<option value="">— Tria el grup —</option>` +
-        Object.entries(perTipus).map(([t,gs])=>`
-          <optgroup label="${TIPUS[t]||t}">
-            ${gs.map(g=>`
-              <option value="${g.id}"
-                data-nom="${esH(g.nom)}"
-                data-nivell="${esH(g.nivellNom||'')}"
-                data-num-alumnes="${(g.alumnes||[]).length}"
-                data-alumnes='${JSON.stringify(g.alumnes||[])}'>
-                ${g.nom} (${(g.alumnes||[]).length} alumnes)
-              </option>
-            `).join('')}
-          </optgroup>
-        `).join('');
-      selGrup.disabled = false;
-    } catch(e) {
-      selGrup.innerHTML = `<option value="">Error carregant grups</option>`;
-      console.error(e);
+    if (grupsClasse.length === 0) {
+      selGrupClasse.innerHTML = `<option value="">Cap grup classe en aquest nivell</option>`;
+      return;
     }
+
+    selGrupClasse.innerHTML = `<option value="">— Tria un grup classe —</option>` +
+      grupsClasse.map(g => `
+        <option value="${g.id}" data-nom="${esH(g.nom)}">
+          ${esH(g.nom)}
+        </option>
+      `).join('');
+    selGrupClasse.disabled = false;
   });
 
-  // Selector grup → mostrar info alumnes
-  document.getElementById('patchSelGrup').addEventListener('change', (e) => {
+  // Selector Grup Classe → emplenar Materias/Projectes/Optatives
+  document.getElementById('patchSelGrupClasse').addEventListener('change', (e) => {
+    const nivellId = document.getElementById('patchSelNivell').value;
+    const grupClasseId = e.target.value;
+    const selMateria = document.getElementById('patchSelMateria');
+
+    selMateria.innerHTML = `<option value="">⏳ Carregant matèries...</option>`;
+    selMateria.disabled = true;
+    document.getElementById('patchBtnCrearClasse').disabled = true;
+    document.getElementById('patchInfoAlumnes').textContent = 'Selecciona una matèria/projecte per veure els alumnes.';
+
+    if (!grupClasseId) {
+      selMateria.innerHTML = `<option value="">— Primer tria un grup classe —</option>`;
+      return;
+    }
+
+    const nivellData = _grupsCentreData[nivellId];
+    // Asegurarse de que las materias se buscan bajo el ID del grupo clase
+    const materias = nivellData?.materiasPorGrupId[grupClasseId] || [];
+
+    if (materias.length === 0) {
+      selMateria.innerHTML = `<option value="">Cap matèria/projecte en aquest grup</option>`;
+      return;
+    }
+
+    const TIPUS = {classe:'🏫 Grups classe',materia:'📚 Matèria',projecte:'🔬 Projecte',optativa:'🎨 Optativa',tutoria:'🧑‍🏫 Tutoria'}; // Añadido TIPUS aquí para usarlo en el mapeo
+    selMateria.innerHTML = `<option value="">— Tria la matèria/projecte —</option>` +
+      materias.map(m => `
+        <option value="${m.id}"
+          data-nom="${esH(m.nom)}"
+          data-tipus="${esH(m.tipus)}"
+          data-num-alumnes="${(m.alumnes||[]).length}"
+          data-alumnes='${JSON.stringify(m.alumnes||[])}'>
+          ${TIPUS[m.tipus] || ''} ${esH(m.nom)} (${(m.alumnes||[]).length} alumnes)
+        </option>
+      `).join('');
+    selMateria.disabled = false;
+  });
+
+  // Selector Materia → mostrar info alumnes (AHORA SE ACTIVA CON EL ÚLTIMO SELECTOR)
+  document.getElementById('patchSelMateria').addEventListener('change', (e) => {
     const opt = e.target.options[e.target.selectedIndex];
     const btnCrear = document.getElementById('patchBtnCrearClasse');
     const info = document.getElementById('patchInfoAlumnes');
 
     if (!e.target.value) {
       btnCrear.disabled = true;
-      info.textContent = 'Selecciona un grup per veure els alumnes.';
+      info.textContent = 'Selecciona una matèria/projecte per veure els alumnes.';
       info.style.background = '#f9fafb';
       info.style.color = '#6b7280';
       return;
@@ -233,18 +263,65 @@ function patchModalCreateClass() {
 }
 
 async function carregarOpcionesNivells() {
-  const sel = document.getElementById('patchSelNivell');
-  if (!sel) return;
+  const selNivell = document.getElementById('patchSelNivell');
+  if (!selNivell) return;
+
+  // Resetear todos los selectores y estados
+  selNivell.innerHTML = `<option value="">⏳ Carregant...</option>`;
+  document.getElementById('patchSelGrupClasse').innerHTML = `<option value="">— Primer tria un nivell —</option>`;
+  document.getElementById('patchSelGrupClasse').disabled = true;
+  document.getElementById('patchSelMateria').innerHTML = `<option value="">— Primer tria un grup classe —</option>`;
+  document.getElementById('patchSelMateria').disabled = true;
+  document.getElementById('patchBtnCrearClasse').disabled = true;
+  document.getElementById('patchInfoAlumnes').textContent = 'Selecciona una matèria/projecte per veure els alumnes.';
+
   try {
-    const snap = await window.db.collection('nivells_centre').orderBy('ordre').get();
-    if (snap.empty) {
-      sel.innerHTML = `<option value="">⚠️ Cap nivell creat per Secretaria</option>`;
+    const [nivellsSnap, grupsSnap] = await Promise.all([
+      window.db.collection('nivells_centre').orderBy('ordre').get(),
+      window.db.collection('grups_centre').get() // Cargar todos los grupos de una vez
+    ]);
+
+    const nivells = nivellsSnap.docs.map(d => ({id:d.id, ...d.data()}));
+    const todosGrups = grupsSnap.docs.map(d => ({id:d.id, ...d.data()}));
+
+    // Reorganizar los datos de grupos para fácil acceso en _grupsCentreData
+    _grupsCentreData = {};
+    nivells.forEach(n => {
+      _grupsCentreData[n.id] = {
+        info: n,
+        grupsClasse: todosGrups.filter(g => g.nivellId === n.id && g.tipus === 'classe')
+                           .sort((a,b)=>(a.ordre||99)-(b.ordre||99)),
+        materiasPorGrupId: {} // Para almacenar materias por su parentGrupId (el ID del grupo clase)
+      };
+      // Asigna materias a su grupo clase padre o al nivel si no tienen parentGrupId
+      todosGrups.filter(g => g.tipus !== 'classe') // Solo materias/proyectos/optativas/tutorias
+                .forEach(m => {
+                  // Si tiene parentGrupId y coincide con un grupo clase del nivel, asigna a ese grupo
+                  // Si no tiene parentGrupId, o el parentGrupId es el ID del nivel, lo asigna al ID del nivel (para materias "flotantes")
+                  const parentId = m.parentGrupId || m.nivellId;
+
+                  // Solo añadir si la materia realmente pertenece a este nivel (por nivellId)
+                  if (m.nivellId === n.id) {
+                      if (!_grupsCentreData[n.id].materiasPorGrupId[parentId]) {
+                          _grupsCentreData[n.id].materiasPorGrupId[parentId] = [];
+                      }
+                      _grupsCentreData[n.id].materiasPorGrupId[parentId].push(m);
+                      // Ordenar las materias
+                      _grupsCentreData[n.id].materiasPorGrupId[parentId].sort((a,b)=>(a.ordre||99)-(b.ordre||99));
+                  }
+                });
+    });
+
+    if (nivells.length === 0) {
+      selNivell.innerHTML = `<option value="">⚠️ Cap nivell creat per Secretaria</option>`;
       return;
     }
-    sel.innerHTML = `<option value="">— Tria un nivell —</option>` +
-      snap.docs.map(d=>`<option value="${d.id}">${esH(d.data().nom)} (${esH(d.data().curs||'')})</option>`).join('');
+    selNivell.innerHTML = `<option value="">— Tria un nivell —</option>` +
+      nivells.map(n=>`<option value="${n.id}">${esH(n.data().nom)} (${esH(n.data().curs||'')})</option>`).join('');
+
   } catch(e) {
-    sel.innerHTML = `<option value="">Error carregant nivells: ${e.message}</option>`;
+    selNivell.innerHTML = `<option value="">Error carregant nivells: ${e.message}</option>`;
+    console.error(e);
   }
 }
 
@@ -266,16 +343,29 @@ async function obrirModalTriarGrupCentre() {
 ══════════════════════════════════════════════════════ */
 async function crearClasseDesDeGrupCentre() {
   const selNivell = document.getElementById('patchSelNivell');
-  const selGrup   = document.getElementById('patchSelGrup');
-  const btn       = document.getElementById('patchBtnCrearClasse');
+  const selGrupClasse = document.getElementById('patchSelGrupClasse');
+  const selMateria = document.getElementById('patchSelMateria'); // Nuevo selector
+  const btn = document.getElementById('patchBtnCrearClasse');
 
-  const grupId = selGrup.value;
-  if (!grupId) { window.mostrarToast('⚠️ Tria un grup'); return; }
+  const nivellId = selNivell.value;
+  const grupClasseId = selGrupClasse.value;
+  const materiaId = selMateria.value; // ID de la materia/proyecto seleccionada
 
-  const opt = selGrup.options[selGrup.selectedIndex];
-  const nomGrup    = opt.dataset.nom || opt.textContent.split('(')[0].trim();
-  const nivellNom  = opt.dataset.nivell || selNivell.options[selNivell.selectedIndex]?.text?.split('(')[0]?.trim() || '';
-  const alumnesCentre = JSON.parse(opt.dataset.alumnes||'[]');
+  if (!nivellId || !grupClasseId || !materiaId) {
+    window.mostrarToast('⚠️ Tria el nivell, el grup classe i la matèria/projecte');
+    return;
+  }
+
+  // Obtener las opciones seleccionadas para sus datasets
+  const optNivell = selNivell.options[selNivell.selectedIndex];
+  const optGrupClasse = selGrupClasse.options[selGrupClasse.selectedIndex];
+  const optMateria = selMateria.options[selMateria.selectedIndex];
+
+  const nivellNom = optNivell.textContent.split('(')[0].trim(); // "1r ESO"
+  const nomGrupClasse = optGrupClasse.dataset.nom; // "A"
+  const nomMateria = optMateria.dataset.nom; // "Matemàtiques"
+  const tipusMateria = optMateria.dataset.tipus; // "Matèria"
+  const alumnesCentre = JSON.parse(optMateria.dataset.alumnes||'[]'); // Alumnos de la materia seleccionada
 
   btn.disabled = true;
   btn.textContent = '⏳ Creant...';
@@ -284,13 +374,13 @@ async function crearClasseDesDeGrupCentre() {
     const db = window.db;
     const professorUID = firebase.auth().currentUser?.uid;
 
-    // Nom complet de la classe: "3A — 3r ESO" o simplement "3A"
-    const nomClasse = nivellNom ? `${nomGrup} — ${nivellNom}` : nomGrup;
+    // Nombre completo de la clase: "Matemàtiques 1r ESO - A"
+    const nomClasse = `${nomMateria} ${nivellNom} - ${nomGrupClasse}`;
 
-    // Crear la classe
+    // Crear la clase
     const classeRef = db.collection('classes').doc();
-    
-    // Crear els alumnes a la col·lecció alumnes
+
+    // Crear los alumnos en la colección alumnes
     const alumneIds = [];
     const batch = db.batch();
 
@@ -303,17 +393,21 @@ async function crearClasseDesDeGrupCentre() {
         comentari: '',
         ownerUid:  professorUID,
         classId:   classeRef.id,
-        grupCentreId: grupId,
+        grupCentreId: materiaId, // Ahora el grupCentreId será el de la MATERIA seleccionada
       });
       alumneIds.push(alRef.id);
     }
 
-    // Crear la classe amb els alumnes
+    // Crear la clase con los alumnos
     batch.set(classeRef, {
       nom:         nomClasse,
-      nomGrup:     nomGrup,
+      nomGrup:     nomMateria, // El nombre de la materia será el nombre principal para el profesor
       nivellNom,
-      grupCentreId: grupId,
+      grupClasseNom: nomGrupClasse, // Nombre del grupo clase
+      tipusGrupCentre: tipusMateria, // Tipo de la materia (Matèria, Projecte, etc.)
+      grupCentreId: materiaId, // El ID de la materia seleccionada
+      nivellCentreId: nivellId, // El ID del nivel
+      parentGrupCentreId: grupClasseId, // El ID del grupo clase padre (el grupo clase A, B, C...)
       alumnes:     alumneIds,
       ownerUid:    professorUID,
       creatAt:     firebase.firestore.FieldValue.serverTimestamp(),
@@ -329,17 +423,13 @@ async function crearClasseDesDeGrupCentre() {
 
     // Tancar modal i recarregar
     if (typeof window.closeModal === 'function') window.closeModal('modalCreateClass');
-    if (typeof window.loadClassesScreen === 'function') {
-      // No és accessible directament, però podem recarregar la pàgina o fer trigger
-      // Cridem a l'event de tecla Escape per tancar el modal
-    }
 
     // Recarregar la vista de classes immediatament
     setTimeout(() => {
       if (typeof window.loadClassesScreen === 'function') {
         window.loadClassesScreen();
       } else {
-        // Fallback: click al botó de navegació
+        // Fallback: click al botó de navegació (si no existe loadClassesScreen)
         document.getElementById('navClasses')?.click();
       }
     }, 300);
