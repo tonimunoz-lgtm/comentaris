@@ -468,6 +468,36 @@ function assegurarSuperAdmin(user) {
   }
 }
 
+// ✅ Nova funció: regenerar document a Firebase si s'ha esborrat
+async function regenerarSuperAdminFirebase(user) {
+  if (!user || !esSuperAdminFix(user)) return;
+
+  const db = window.db;
+  if (!db) return console.warn("❌ db no inicialitzat per Firebase");
+
+  const profRef = db.collection('professors').doc(user.uid);
+  const doc = await profRef.get();
+
+  if (!doc.exists) {
+    console.warn('⚡ Superadmin fix no trobat a Firebase, regenerant document...', user.email);
+
+    await profRef.set({
+      nom: user.displayName || 'SuperAdmin',
+      email: user.email,
+      rols: ['superadmin','admin'],
+      creatAt: firebase.firestore.FieldValue.serverTimestamp(),
+      updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+    });
+
+    window._userRols = window._userRols || [];
+    ['superadmin','admin'].forEach(r => {
+      if (!window._userRols.includes(r)) window._userRols.push(r);
+    });
+
+    window.mostrarToast?.(`✅ Superadmin fix regenerat a Firebase: ${user.email}`, 4000);
+  }
+}
+
 // Funció d'alerta flotant
 function mostrarAlertSuperAdmin(msg) {
   if (document.getElementById('_alertSuperAdmin')) return;
