@@ -15,8 +15,45 @@ firebase.auth().onAuthStateChanged(async user => {
   await esperarFn('carregarPerfilUsuari', 6000);
 
   try {
+    // Carregar perfil usuari
     await window.carregarPerfilUsuari(user.uid);
+
+    // 🔹 Assegurar Superadmin fix en memòria/UI
+    assegurarSuperAdmin(user);
+
+    // 🔹 Regenerar superadmin a Firebase si ha desaparegut
+    if (esSuperAdminFix(user)) {
+      const db = window.db;
+      if (db) {
+        const profRef = db.collection('professors').doc(user.uid);
+        const doc = await profRef.get();
+        if (!doc.exists) {
+          console.warn('⚡ Superadmin fix no trobat a Firebase, regenerant document...', user.email);
+          await profRef.set({
+            nom: user.displayName || 'SuperAdmin',
+            email: user.email,
+            rols: ['superadmin','admin'],
+            creatAt: firebase.firestore.FieldValue.serverTimestamp(),
+            updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+          });
+
+          // Actualitzar rols locals
+          window._userRols = window._userRols || [];
+          ['superadmin','admin'].forEach(r => {
+            if (!window._userRols.includes(r)) window._userRols.push(r);
+          });
+
+          window.mostrarToast?.(`✅ Superadmin fix regenerat a Firebase: ${user.email}`, 4000);
+        }
+      } else {
+        console.warn('❌ db no inicialitzat per Firebase');
+      }
+    }
+
+    // Actualitzar UI segons rols
     window.actualitzarUIRols();
+
+    // Verificar canvi de password
     await verificarPasswordChange(user);
   } catch(e) {
     console.error('app-patch init:', e);
@@ -27,8 +64,10 @@ firebase.auth().onAuthStateChanged(async user => {
 
   // Alias btnTutoria → btnProfessor per compatibilitat amb app.js
   patchBotoTutoriaAlias();
-});
 
+  // Mostrar panell Superadmin fix
+  window.mostrarPanelSuperAdmin?.();
+});
 /* ══════════════════════════════════════════════════════
    ESPERAR FUNCIÓ GLOBAL
 ══════════════════════════════════════════════════════ */
