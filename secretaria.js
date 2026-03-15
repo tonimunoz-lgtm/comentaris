@@ -585,9 +585,11 @@ async function renderEstructura(body) {
     const g = grups.find(x=>x.id===gId);
     if (!g) return;
     // Candidats: materies del mateix grup pare o del mateix nivell, que tinguin alumnes
-    const candidates = grups.filter(x =>
-      x.id !== gId && (x.alumnes||[]).length > 0 &&
-      (x.parentGrupId === g.parentGrupId || x.parentGrupId === grupActiu || x.nivellId === nivellActiu)
+       const candidates = grups.filter(x =>
+      // Filtra por el mismo parentGrupId (grup classe padre) si existe, o por el mismo grupActiu si es un grupo clase
+      (x.parentGrupId === grupDesti.parentGrupId || (grupDesti.tipus === 'classe' && x.id !== grupDesti.id && x.parentGrupId === grupDesti.id)) &&
+      (x.alumnes && x.alumnes.length > 0) &&
+      x.id !== grupDesti.id
     );
     modalCopiarAlumnesDe(g, candidates, () => recarregar().then(() => {
       const gAct = grups.find(x=>x.id===gId);
