@@ -580,7 +580,7 @@ async function renderEstructura(body) {
     }));
   });
 
-  d  document.getElementById('btnCopiarDe').addEventListener('click', () => {
+    document.getElementById('btnCopiarDe').addEventListener('click', () => {
     const grupOrigen = grups.find(x => x.id === (materiaActiva || grupActiu));
     if (!grupOrigen) return;
 
