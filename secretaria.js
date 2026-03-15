@@ -550,20 +550,20 @@ async function renderEstructura(body) {
     x.id !== grupActiu &&
     (materiesPer[x.id] || []).length > 0
    );
-
     modalCopiarEstructura(g, candidats, recarregar);
     });
 
    document.getElementById('btnCopiarTots').addEventListener('click', () => {
-    if (!grupActiu) return;
-    const grupFont = grups.find(x=>x.id===grupActiu);
-    const altresGrups = grups.filter(g =>
-      g.tipus === 'classe' &&
-      g.nivellId === nivellActiu &&
-       g.id !== grupActiu
-    );
-   copiarEstructuraATots(grupFont, altresGrups, recarregar);
-   });
+  if (!grupActiu) return;
+  const grupFont = grups.find(x => x.id === grupActiu);
+  const altresGrups = grups.filter(g =>
+    g.tipus === 'classe' &&
+    g.nivellId === nivellActiu &&
+    g.id !== grupActiu
+  );
+  // Pasa materiesPer como el tercer argumento
+  copiarEstructuraATots(grupFont, altresGrups, materiesPer, recarregar);
+});
 
   document.getElementById('btnNouAlumne').addEventListener('click', () => {
     const gId = materiaActiva || grupActiu;
