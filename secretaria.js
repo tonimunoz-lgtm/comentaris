@@ -994,42 +994,46 @@ function modalCopiarEstructura(grupDesti, candidats, onRefresh) {
     </div>
   `, () => false, '');
 
-  setTimeout(() => {document.getElementById('_btnOkModal')?.style.setProperty('display','none');
+   setTimeout(() => {
+    document.getElementById('_btnOkModal')?.style.setProperty('display','none');
     document.querySelectorAll('.btn-copy-estruct').forEach(btn => {
-     btn.addEventListener('click', () => {
-  const grupFont = candidats.find(x => x.id === btn.dataset.id);
-  if (!grupFont) return;
+      btn.addEventListener('click', () => { // Inicio de la función callback del click
+        const grupFont = candidats.find(x => x.id === btn.dataset.id);
+        if (!grupFont) return;
 
-  modalConfirmacio(
-    '⚠️ Copiar matèries',
-    `Estàs a punt de copiar totes les matèries de "${grupFont.nom}" a "${grupDesti.nom}". Això NO té marxa enrere.`,
-    async () => {
-      btn.disabled = true;
-      btn.textContent = '⏳ Copiant...';
+        modalConfirmacio(
+          '⚠️ Copiar matèries',
+          `Estàs a punt de copiar totes les matèries de "${grupFont.nom}" a "${grupDesti.nom}". Això NO té marxa enrere.`,
+          async () => {
+            btn.disabled = true;
+            btn.textContent = '⏳ Copiant...';
 
-      try {
-        const materiesFont = (materiesPer[grupFont.id] || []);
-        let ordre = 1;
-        for (const m of materiesFont) {
-          await window.db.collection('grups_centre').add({
-            nom: m.nom,
-            tipus: m.tipus,
-            parentGrupId: grupDesti.id,
-            nivellId: grupDesti.nivellId,
-            nivellNom: grupDesti.nivellNom,
-            curs: grupDesti.curs,
-            ordre: ordre++,
-            alumnes: []
-          });
-        }
-        window.mostrarToast(`✅ ${materiesFont.length} matèries copiades`);
-        onRefresh?.();
-      } catch(e) {
-        window.mostrarToast('❌ Error: ' + e.message);
-      }
-    }
-  );
-});
+            try {
+              const materiesFont = (materiesPer[grupFont.id] || []);
+              let ordre = 1;
+              for (const m of materiesFont) {
+                await window.db.collection('grups_centre').add({
+                  nom: m.nom,
+                  tipus: m.tipus,
+                  parentGrupId: grupDesti.id,
+                  nivellId: grupDesti.nivellId,
+                  nivellNom: grupDesti.nivellNom,
+                  curs: grupDesti.curs,
+                  ordre: ordre++,
+                  alumnes: []
+                });
+              }
+              window.mostrarToast(`✅ ${materiesFont.length} matèries copiades`);
+              onRefresh?.();
+            } catch(e) {
+              window.mostrarToast('❌ Error: ' + e.message);
+            }
+          }
+        );
+      }); // <-- CIERRE DE LA FUNCIÓN CALLBACK DE addEventListener
+    }); // <-- CIERRE DEL forEach
+  }, 100); // <-- CIERRE DE LA FUNCIÓN CALLBACK DE setTimeout Y CIERRE DE setTimeout
+} // <-- CIERRE DE LA FUNCIÓN modalCopiarEstructura
 
 /* ══════════════════════════════════════════════════════
    MODAL COPIAR ESTRUCTURA A TOTS ELS GRUPS
