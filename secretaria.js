@@ -239,15 +239,9 @@ async function renderEstructura(body) {
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
           <span style="font-size:11px;font-weight:700;color:#059669;letter-spacing:0.04em;" id="titol-col-mat">MATÈRIES</span>
             <div style="display:flex;gap:4px;">
-              <button id="btnNouMateria" disabled
-                style="background:#059669;color:#fff;border:none;border-radius:5px;padding:2px 8px;font-size:11px;font-weight:700;cursor:pointer;opacity:0.4;">
-                + Nova
-              </button>
-
-              <button id="btnCopiarEstructura" disabled
-                style="background:#4f46e5;color:#fff;border:none;border-radius:5px;padding:2px 8px;font-size:11px;font-weight:700;cursor:pointer;opacity:0.4;">
-                📋 Copiar estructura
-              </button>
+              <button id="btnNouMateria" disabled style="background:#059669;color:#fff;border:none;border-radius:5px;padding:2px 8px;font-size:11px;font-weight:700;cursor:pointer;opacity:0.4;">+ Nova</button>
+              <button id="btnCopiarEstructura" disabled style="background:#4f46e5;color:#fff;border:none;border-radius:5px;padding:2px 8px;font-size:11px;font-weight:700;cursor:pointer;opacity:0.4;">📋 Copiar estructura</button>
+              <button id="btnCopiarTots" style="background:#9333ea;color:#fff;border:none;border-radius:5px;padding:2px 8px;font-size:11px;font-weight:700;cursor:pointer;opacity:0.4;"> 🚀 Copiar a tots</button>
          </div>
          </div>
         <div id="col-materies" style="flex:1;overflow-y:auto;display:flex;flex-direction:column;gap:4px;">
