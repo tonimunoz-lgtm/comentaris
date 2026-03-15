@@ -1113,8 +1113,30 @@ function modalAlumne(grup, onRefresh) {
 }
 
 /* ══════════════════════════════════════════════════════
-   MODAL IMPORTAR ALUMNES EXCEL
+   MODAL CONFIRMACIÓ
 ══════════════════════════════════════════════════════ */
+
+function modalConfirmacio(titol, missatge, onConfirm) {
+  crearModal(titol, `
+    <p style="font-size:13px;color:#6b7280;margin-bottom:20px;">${missatge}</p>
+    <div style="display:flex;justify-content:flex-end;gap:8px;">
+      <button id="_btnCancelModal" style="padding:6px 12px;border-radius:6px;border:1px solid #d1d5db;background:#f3f4f6;cursor:pointer;">Cancelar</button>
+      <button id="_btnOkModal" style="padding:6px 12px;border-radius:6px;border:none;background:#4f46e5;color:#fff;font-weight:600;cursor:pointer;">Confirmar</button>
+    </div>
+  `, () => false, '');
+
+  // Esdeveniments dels botons
+  setTimeout(() => {
+    document.getElementById('_btnCancelModal')?.addEventListener('click', () => {
+      document.getElementById('_modalSec')?.remove();
+    });
+    document.getElementById('_btnOkModal')?.addEventListener('click', () => {
+      document.getElementById('_modalSec')?.remove();
+      onConfirm?.();
+    });
+  }, 50);
+}
+   
 /* ══════════════════════════════════════════════════════
    MODAL EDITAR ALUMNE
 ══════════════════════════════════════════════════════ */
