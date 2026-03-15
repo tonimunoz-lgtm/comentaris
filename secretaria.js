@@ -996,36 +996,40 @@ function modalCopiarEstructura(grupDesti, candidats, onRefresh) {
 
   setTimeout(() => {document.getElementById('_btnOkModal')?.style.setProperty('display','none');
     document.querySelectorAll('.btn-copy-estruct').forEach(btn => {
-      btn.addEventListener('click', async () => {
-        const grupFont = candidats.find(x=>x.id===btn.dataset.id);
-        if (!grupFont) return;
-        btn.disabled=true;
-        btn.textContent='⏳ Copiant...';
-        try {
-          const materiesFont = (materiesPer[grupFont.id] || []);
-          let ordre = 1;
-          for (const m of materiesFont) {
-            await window.db.collection('grups_centre').add({
-              nom: m.nom,
-              tipus: m.tipus,
-              parentGrupId: grupDesti.id,
-              nivellId: grupDesti.nivellId,
-              nivellNom: grupDesti.nivellNom,
-              curs: grupDesti.curs,
-              ordre: ordre++,
-              alumnes: []
-            });
-          }
-          document.getElementById('_modalSec')?.remove();
-          window.mostrarToast(`✅ ${materiesFont.length} matèries copiades`);
-          onRefresh?.();
-        } catch(e) {
-          window.mostrarToast('❌ Error: '+e.message);
+     btn.addEventListener('click', () => {
+  const grupFont = candidats.find(x => x.id === btn.dataset.id);
+  if (!grupFont) return;
+
+  modalConfirmacio(
+    '⚠️ Copiar matèries',
+    `Estàs a punt de copiar totes les matèries de "${grupFont.nom}" a "${grupDesti.nom}". Això NO té marxa enrere.`,
+    async () => {
+      btn.disabled = true;
+      btn.textContent = '⏳ Copiant...';
+
+      try {
+        const materiesFont = (materiesPer[grupFont.id] || []);
+        let ordre = 1;
+        for (const m of materiesFont) {
+          await window.db.collection('grups_centre').add({
+            nom: m.nom,
+            tipus: m.tipus,
+            parentGrupId: grupDesti.id,
+            nivellId: grupDesti.nivellId,
+            nivellNom: grupDesti.nivellNom,
+            curs: grupDesti.curs,
+            ordre: ordre++,
+            alumnes: []
+          });
         }
-      });
-    });
-  },100);
-}
+        window.mostrarToast(`✅ ${materiesFont.length} matèries copiades`);
+        onRefresh?.();
+      } catch(e) {
+        window.mostrarToast('❌ Error: ' + e.message);
+      }
+    }
+  );
+});
 
 /* ══════════════════════════════════════════════════════
    MODAL COPIAR ESTRUCTURA A TOTS ELS GRUPS
@@ -1038,36 +1042,36 @@ async function copiarEstructuraATots(grupFont, grupsDesti, materiesPer, onRefres
     return;
   }
 
-  if (!confirm(`Copiar ${materies.length} matèries de "${grupFont.nom}" a ${grupsDesti.length} grups?`)) return;
+ modalConfirmacio(
+  '⚠️ Copiar estructures a tots els grups',
+  `Estàs a punt de copiar ${materies.length} matèries de "${grupFont.nom}" a ${grupsDesti.length} grups.\nAixò NO té marxa enrere.`,
+  async () => {
+    try {
+      for (const g of grupsDesti) {
+        const existents = (materiesPer[g.id] || []).map(x => x.nom.toLowerCase());
+        let ordre = (materiesPer[g.id]?.length || 0) + 1;
 
-  try {
-    for (const g of grupsDesti) {
-      const existents = (materiesPer[g.id] || []).map(x => x.nom.toLowerCase());
-      let ordre = (materiesPer[g.id]?.length || 0) + 1;
-
-      for (const m of materies) {
-        // evitar duplicats
-        if (existents.includes(m.nom.toLowerCase())) continue;
-
-        await window.db.collection('grups_centre').add({
-          nom: m.nom,
-          tipus: m.tipus,
-          parentGrupId: g.id,
-          nivellId: g.nivellId,
-          nivellNom: g.nivellNom,
-          curs: g.curs,
-          ordre: ordre++,
-          alumnes: []
-        });
+        for (const m of materies) {
+          if (existents.includes(m.nom.toLowerCase())) continue;
+          await window.db.collection('grups_centre').add({
+            nom: m.nom,
+            tipus: m.tipus,
+            parentGrupId: g.id,
+            nivellId: g.nivellId,
+            nivellNom: g.nivellNom,
+            curs: g.curs,
+            ordre: ordre++,
+            alumnes: []
+          });
+        }
       }
+      window.mostrarToast(`✅ Estructura copiada a ${grupsDesti.length} grups`);
+      onRefresh?.();
+    } catch(e) {
+      window.mostrarToast('❌ Error: ' + e.message);
     }
-
-    window.mostrarToast(`✅ Estructura copiada a ${grupsDesti.length} grups`);
-    onRefresh?.();
-  } catch(e) {
-    window.mostrarToast('❌ Error: ' + e.message);
   }
-}
+);
 
 /* ══════════════════════════════════════════════════════
    MODAL AFEGIR ALUMNE
