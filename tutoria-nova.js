@@ -65,6 +65,21 @@ const TIPUS_REGLA = {
   assolamentsExcellents: 'Assoliments Excel·lents',
 };
 
+// Cache para materias cargadas
+let _materiesCache = null;
+let _materiesCacheTime = 0;
+
+async function obtenirMateriesPerConfig() {
+  const ara = Date.now();
+  // Cache de 30 segundos para evitar lecturas repetidas
+  if (_materiesCache && (ara - _materiesCacheTime) < 30000) {
+    return _materiesCache;
+  }
+  _materiesCache = await carregarMateriesCentre();
+  _materiesCacheTime = ara;
+  return _materiesCache;
+}
+
 /* ══════════════════════════════════════════════════════
    INJECTAR BOTÓ TUTORIA AL SIDEBAR
 ══════════════════════════════════════════════════════ */
