@@ -1577,7 +1577,7 @@ document.getElementById('btnAbout')?.addEventListener('click', () => {
             <div style="display:flex;align-items:center;gap:10px;">
               <span style="font-size:18px;">👨‍💻</span>
               <div>
-                <div style="font-weight:700;color:#1a1a2e;font-size:14px;">Toni Muñoz -Coordinador informàtic i professor d'economia de l'Institut Matadepera</div>
+                <div style="font-weight:700;color:#1a1a2e;font-size:14px;">Toni Muñoz - Coordinador informàtic i professor d'economia de l'Institut Matadepera</div>
                 <div style="font-size:12px;color:#6b7280;">Desenvolupador</div>
               </div>
             </div>
