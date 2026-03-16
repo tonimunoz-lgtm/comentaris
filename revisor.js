@@ -189,28 +189,55 @@ async function carregarDadesRevisio(curs, matId, grupId, materies, grups) {
     let html = '';
     let totalRegistres = 0;
 
-    for (const mat of materiesToShow) {
-      let query = window.db
-        .collection('avaluacio_centre')
-        .doc(cursFiltrat || 'dummy') // Si no hi ha curs, cal un enfocament diferent
-        .collection(mat.id);
+        // Si no hay curs seleccionado, mostrar mensaje y salir
+    if (!cursFiltrat) {
+      content.innerHTML = `
+        <div style="text-align:center;padding:40px;color:#9ca3af;background:#f9fafb;border-radius:12px;">
+          <div style="font-size:36px;margin-bottom:12px;">📅</div>
+          Selecciona un curs acadèmic per carregar les dades
+        </div>
+      `;
+      return;
+    }
 
-      // Si no hi ha curs seleccionat, per simplicitat mostrem missatge
-      if (!cursFiltrat) {
-        continue; // Requereix curs per evitar lectures massives
-      }
+    // Obtener todos los cursos disponibles en avaluacio_centre si no hay curs específico
+    // (aunque ahora siempre requerimos curs)
+    const cursosALlegir = [cursFiltrat];
 
-      if (grupId) {
-        query = query.where('grupId', '==', grupId);
-      }
+    for (const cursActual of cursosALlegir) {
+      for (const mat of materiesToShow) {
+        let query = window.db
+          .collection('avaluacio_centre')
+          .doc(cursActual)
+          .collection(mat.id);
 
-      let dades;
-      try {
-        const snap = await query.get();
-        dades = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-      } catch (e) {
-        continue;
-      }
+        // Filtrar por grupo si se especificó
+        if (grupId) {
+          query = query.where('grupClasseId', '==', grupId);
+        }
+
+        let dades;
+        try {
+          const snap = await query.get();
+          dades = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+        } catch (e) {
+          // Si falla con grupClasseId, intentar con grupId (campo legacy)
+          if (grupId) {
+            try {
+              const snap2 = await window.db
+                .collection('avaluacio_centre')
+                .doc(cursActual)
+                .collection(mat.id)
+                .where('grupId', '==', grupId)
+                .get();
+              dades = snap2.docs.map(d => ({ id: d.id, ...d.data() }));
+            } catch (e2) {
+              continue;
+            }
+          } else {
+            continue;
+          }
+        }
 
       if (dades.length === 0) continue;
       totalRegistres += dades.length;
@@ -302,17 +329,6 @@ async function carregarDadesRevisio(curs, matId, grupId, materies, grups) {
       `;
     }
 
-    if (!cursFiltrat) {
-      content.innerHTML = `
-        <div style="
-          text-align:center;padding:40px;color:#9ca3af;
-          background:#f9fafb;border-radius:12px;
-        ">
-          Selecciona un curs per carregar les dades
-        </div>
-      `;
-      return;
-    }
 
     content.innerHTML = html || `
       <div style="text-align:center;padding:40px;color:#9ca3af;background:#f9fafb;border-radius:12px;">
@@ -491,9 +507,49 @@ async function obrirEditorRevisio(alumneId, matId, curs, materies) {
 ══════════════════════════════════════════════════════ */
 async function carregarMateriesCentre() {
   try {
-    const snap = await window.db.collection('materies_centre').orderBy('ordre').get();
-    return snap.docs.map(d => ({ id: d.id, ...d.data() }));
-  } catch (e) { return []; }
+    // Las materias están en grups_centre con tipus = 'materia', 'projecte', 'optativa' o 'tutoria'
+    const snap = await window.db.collection('grups_centre')
+      .where('tipus', 'in', ['materia', 'projecte', 'optativa', 'tutoria'])
+      .orderBy('ordre')
+      .get();
+    const totes = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    // DEDUPLICAR: solo una entrada por nombre único de materia
+    const vistes = new Set();
+    const uniques = [];
+    for (const m of totes) {
+      const nomNormalitzat = (m.nom || '').toLowerCase().trim();
+      if (nomNormalitzat && !vistes.has(nomNormalitzat)) {
+        vistes.add(nomNormalitzat);
+        uniques.push(m);
+      }
+    }
+    // Ordenar alfabéticamente
+    uniques.sort((a, b) => (a.nom || '').localeCompare(b.nom || '', 'ca'));
+    return uniques;
+  } catch (e) { 
+    // Fallback sin ordenar si no hay índice compuesto
+    try {
+      const snap = await window.db.collection('grups_centre').get();
+      const totes = snap.docs
+        .map(d => ({ id: d.id, ...d.data() }))
+        .filter(g => ['materia', 'projecte', 'optativa', 'tutoria'].includes(g.tipus))
+        .sort((a, b) => (a.ordre || 99) - (b.ordre || 99));
+      // DEDUPLICAR también en el fallback
+      const vistes = new Set();
+      const uniques = [];
+      for (const m of totes) {
+        const nomNormalitzat = (m.nom || '').toLowerCase().trim();
+        if (nomNormalitzat && !vistes.has(nomNormalitzat)) {
+          vistes.add(nomNormalitzat);
+          uniques.push(m);
+        }
+      }
+      uniques.sort((a, b) => (a.nom || '').localeCompare(b.nom || '', 'ca'));
+      return uniques;
+    } catch (e2) {
+      return []; 
+    }
+  }
 }
 
 async function carregarGrupsCentre() {
