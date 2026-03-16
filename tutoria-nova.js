@@ -1162,11 +1162,25 @@ async function carregarConfigTutor(uid) {
 
 async function carregarMateriesCentre() {
   try {
-    const snap = await window.db.collection('materies_centre').orderBy('ordre').get();
+    // Las materias están en grups_centre con tipus = 'materia', 'projecte', 'optativa' o 'tutoria'
+    const snap = await window.db.collection('grups_centre')
+      .where('tipus', 'in', ['materia', 'projecte', 'optativa', 'tutoria'])
+      .orderBy('ordre')
+      .get();
     return snap.docs.map(d => ({ id: d.id, ...d.data() }));
-  } catch (e) { return []; }
+  } catch (e) { 
+    // Fallback sin ordenar si no hay índice compuesto
+    try {
+      const snap = await window.db.collection('grups_centre').get();
+      return snap.docs
+        .map(d => ({ id: d.id, ...d.data() }))
+        .filter(g => ['materia', 'projecte', 'optativa', 'tutoria'].includes(g.tipus))
+        .sort((a, b) => (a.ordre || 99) - (b.ordre || 99));
+    } catch (e2) {
+      return []; 
+    }
+  }
 }
-
 async function carregarGrupsCentre() {
   try {
     const snap = await window.db.collection('grups_centre').orderBy('ordre').get();
