@@ -88,12 +88,13 @@ async function obrirPanellRevisio() {
   overlay.id = 'panellRevisio';
   overlay.style.cssText = `
     position:fixed;inset:0;z-index:8888;background:rgba(15,23,42,0.7);
-    display:flex;align-items:stretch;justify-content:flex-end;
+    display:flex;align-items:stretch;justify-content:center;
   `;
 
     overlay.innerHTML = `
     <div style="
-      width:min(1000px,100%);background:#fff;
+      width:100%;background:#fff;
+      max-width:1600px;
       display:flex;flex-direction:column;
       height:100vh;max-height:100vh;
       box-shadow:-20px 0 60px rgba(0,0,0,0.3);
