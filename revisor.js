@@ -476,16 +476,17 @@ async function carregarDadesRevisio(curs, matId, grupId, materies, grups) {
           const indexVell = existent ? ordrePeriodes.indexOf(existent.periodeNom) : -1;
           
           // Si no existe, o el nuevo período está después en la lista, o no se reconoce el período
-          if (!existent || indexNou > indexVell || indexNou === -1) {
-            alumnesMap[key].materies[mat.id] = {
-              nom: mat.nom || mat.id,
-              periodeNom: periodeActual,
-              items: data.items || [],
-              descripcioComuna: data.descripcioComuna || '',
-              comentariGlobal: data.comentariGlobal || '',
-              enviatAt: data.enviatAt || data.createdAt || null
-            };
-          }
+         if (!existent || indexNou > indexVell || indexNou === -1) {
+  alumnesMap[key].materies[mat.id] = {
+    docId: docIdReal,   // ← AÑADIR ESTA LÍNEA
+    nom: mat.nom || mat.id,
+    periodeNom: periodeActual,
+    items: data.items || [],
+    descripcioComuna: data.descripcioComuna || '',
+    comentariGlobal: data.comentariGlobal || '',
+    enviatAt: data.enviatAt || data.createdAt || null
+  };
+}
         });
 
       } catch (e) {
