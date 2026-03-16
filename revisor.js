@@ -509,100 +509,105 @@ async function carregarDadesRevisio(curs, matId, grupId, materies, grups) {
     }
 
     // 6. RENDERIZAR RESULTADOS
-    let html = '';
-    
-    for (const mat of materiesToShow) {
-      // Filtrar alumnos que tienen esta materia
-      const alumnesAmbMateria = alumnes.filter(a => a.materies[mat.id]);
-      
-      if (alumnesAmbMateria.length === 0) continue;
+let html = '';
 
-      // Encontrar máximo de ítems
-      const maxItems = Math.max(...alumnesAmbMateria.map(a => 
-        (a.materies[mat.id]?.items || []).length
-      ), 0);
+for (const mat of materiesToShow) {
+  // Filtrar alumnos que tienen esta materia
+  const alumnesAmbMateria = alumnes.filter(a => a.materies[mat.id]);
+  
+  if (alumnesAmbMateria.length === 0) continue;
 
-      // Mostrar período de esta materia (el último enviado)
-      const primerAlumne = alumnesAmbMateria[0];
-      const dadesMat = primerAlumne.materies[mat.id];
-      const periodeMostrat = dadesMat?.periodeNom || '';
+  // Encontrar máximo de ítems
+  const maxItems = Math.max(...alumnesAmbMateria.map(a => 
+    (a.materies[mat.id]?.items || []).length
+  ), 0);
 
-      html += `
-        <div style="margin-bottom:28px;">
-          <div style="
-            display:flex;justify-content:space-between;align-items:center;
-            padding:10px 14px;background:#e0f2fe;border-radius:10px;margin-bottom:12px;
-          ">
-            <div>
-              <h4 style="font-size:14px;font-weight:700;color:#0c4a6e;margin:0;">
-                📚 ${escapeHtml(mat.nom)}
-              </h4>
-              ${periodeMostrat ? `<span style="font-size:11px;color:#0369a1;">${escapeHtml(periodeMostrat)}</span>` : ''}
-            </div>
-            <span style="font-size:12px;color:#0369a1;">${alumnesAmbMateria.length} alumnes</span>
-          </div>
+  // Mostrar período de esta materia (el último enviado)
+  const primerAlumne = alumnesAmbMateria[0];
+  const dadesMat = primerAlumne.materies[mat.id];
+  const periodeMostrat = dadesMat?.periodeNom || '';
 
-          <div style="overflow-x:auto;">
-            <table style="width:100%;border-collapse:collapse;font-size:12px;min-width:600px;">
-              <thead>
-                <tr style="background:#f8fafc;">
-                  <th style="padding:8px 12px;text-align:left;font-weight:700;color:#475569;border-bottom:2px solid #e2e8f0;">Alumne/a</th>
-                  <th style="padding:8px 12px;text-align:left;font-weight:700;color:#475569;border-bottom:2px solid #e2e8f0;">Grup</th>
-                  ${Array.from({length: maxItems}, (_, i) => `
-                    <th style="padding:8px 12px;text-align:center;font-weight:700;color:#475569;border-bottom:2px solid #e2e8f0;">Ítem ${i+1}</th>
-                  `).join('')}
-                  <th style="padding:8px 12px;text-align:center;font-weight:700;color:#475569;border-bottom:2px solid #e2e8f0;">Accions</th>
-                </tr>
-              </thead>
-              <tbody>
-                ${alumnesAmbMateria.map((alumne, idx) => {
-                  const matData = alumne.materies[mat.id];
-                  return `
-                    <tr style="border-bottom:1px solid #f1f5f9;${idx % 2 === 0 ? 'background:#fff;' : 'background:#fafbfc;'}">
-                      <td style="padding:10px 12px;font-weight:600;color:#1e293b;">
-                        ${escapeHtml(alumne.cognoms ? `${alumne.cognoms}, ${alumne.nom}` : alumne.nom)}
-                      </td>
-                      <td style="padding:10px 12px;color:#64748b;">${escapeHtml(alumne.grup || '—')}</td>
-                      ${Array.from({length: maxItems}, (_, i) => {
-                        const item = (matData?.items || [])[i];
-                        const COLORS_SHORT = {
-                          'Assoliment Excel·lent':   { bg:'#22c55e', s:'AE' },
-                          'Assoliment Notable':      { bg:'#84cc16', s:'AN' },
-                          'Assoliment Satisfactori': { bg:'#f59e0b', s:'AS' },
-                          'No Assoliment':           { bg:'#ef4444', s:'NA' },
-                          'No avaluat':              { bg:'#9ca3af', s:'--' }
-                        };
-                        const c = item ? (COLORS_SHORT[item.assoliment] || COLORS_SHORT['No avaluat']) : null;
-                        return `<td style="padding:10px 12px;text-align:center;">
-                          ${item ? `
-                            <span title="${escapeHtml((item.titol||'') + ' — ' + (item.comentari||''))}"
-                              style="display:inline-block;padding:3px 8px;border-radius:6px;font-size:11px;font-weight:700;color:#fff;background:${c.bg};cursor:help;">
-                              ${c.s}
-                            </span>
-                          ` : '<span style="color:#e2e8f0;">—</span>'}
-                        </td>`;
-                      }).join('')}
-                      <td style="padding:10px 12px;text-align:center;">
-                        <button class="btn-editar-revisio"
-                          data-id="${matData.docId}"
-                          data-matid="${mat.id}"
-                          data-curs="${curs}"
-                          data-alumne-nom="${escapeHtml(alumne.nom)}"
-                          data-alumne-cognoms="${escapeHtml(alumne.cognoms || '')}"
-                          data-alumne-ralc="${escapeHtml(alumne.ralc || '')}"
-                          style="padding:4px 12px;background:#0891b2;color:#fff;border:none;border-radius:6px;font-size:11px;font-weight:600;cursor:pointer;">
-                          ✏️ Editar
-                        </button>
-                      </td>
-                    </tr>
-                  `;
-                }).join('')}
-              </tbody>
-            </table>
-          </div>
+  html += `
+    <div style="margin-bottom:28px;">
+      <div style="
+        display:flex;justify-content:space-between;align-items:center;
+        padding:10px 14px;background:#e0f2fe;border-radius:10px;margin-bottom:12px;
+      ">
+        <div>
+          <h4 style="font-size:14px;font-weight:700;color:#0c4a6e;margin:0;">
+            📚 ${escapeHtml(mat.nom)}
+          </h4>
+          ${periodeMostrat ? `<span style="font-size:11px;color:#0369a1;">${escapeHtml(periodeMostrat)}</span>` : ''}
         </div>
-      `;
-    }
+        <span style="font-size:12px;color:#0369a1;">${alumnesAmbMateria.length} alumnes</span>
+      </div>
+
+      <div style="overflow-x:auto;">
+        <table style="width:100%;border-collapse:collapse;font-size:12px;min-width:600px;">
+          <thead>
+            <tr style="background:#f8fafc;">
+              <th style="padding:8px 12px;text-align:left;font-weight:700;color:#475569;border-bottom:2px solid #e2e8f0;">Alumne/a</th>
+              <th style="padding:8px 12px;text-align:left;font-weight:700;color:#475569;border-bottom:2px solid #e2e8f0;">Grup</th>
+              ${Array.from({length: maxItems}, (_, i) => `
+                <th style="padding:8px 12px;text-align:center;font-weight:700;color:#475569;border-bottom:2px solid #e2e8f0;">Ítem ${i+1}</th>
+              `).join('')}
+              <th style="padding:8px 12px;text-align:center;font-weight:700;color:#475569;border-bottom:2px solid #e2e8f0;">Accions</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${alumnesAmbMateria.map((alumne, idx) => {
+              const matData = alumnesAmbMateria[idx].materies[mat.id];
+
+              // Asegurarse de que todos los items tengan 'assoliment'
+              const itemsComplets = (matData?.items || []).map(i => ({
+                ...i,
+                assoliment: i.assoliment || 'No avaluat'
+              }));
+
+              return `
+                <tr style="border-bottom:1px solid #f1f5f9;${idx % 2 === 0 ? 'background:#fff;' : 'background:#fafbfc;'}">
+                  <td style="padding:10px 12px;font-weight:600;color:#1e293b;">
+                    ${escapeHtml(alumne.cognoms ? `${alumne.cognoms}, ${alumne.nom}` : alumne.nom)}
+                  </td>
+                  <td style="padding:10px 12px;color:#64748b;">${escapeHtml(alumne.grup || '—')}</td>
+                  ${Array.from({length: maxItems}, (_, i) => {
+                    const item = itemsComplets[i] || null;
+                    const COLORS_SHORT = {
+                      'Assoliment Excel·lent':   { bg:'#22c55e', s:'AE' },
+                      'Assoliment Notable':      { bg:'#84cc16', s:'AN' },
+                      'Assoliment Satisfactori': { bg:'#f59e0b', s:'AS' },
+                      'No Assoliment':           { bg:'#ef4444', s:'NA' },
+                      'No avaluat':              { bg:'#9ca3af', s:'--' }
+                    };
+                    const c = item ? (COLORS_SHORT[item.assoliment] || COLORS_SHORT['No avaluat']) : COLORS_SHORT['No avaluat'];
+                    return `<td style="padding:10px 12px;text-align:center;">
+                      <span title="${item ? escapeHtml((item.titol||'') + ' — ' + (item.comentari||'')) : ''}"
+                        style="display:inline-block;padding:3px 8px;border-radius:6px;font-size:11px;font-weight:700;color:#fff;background:${c.bg};cursor:help;">
+                        ${c.s}
+                      </span>
+                    </td>`;
+                  }).join('')}
+                  <td style="padding:10px 12px;text-align:center;">
+                    <button class="btn-editar-revisio"
+                      data-id="${matData.docId}"
+                      data-matid="${mat.id}"
+                      data-curs="${curs}"
+                      data-alumne-nom="${escapeHtml(alumne.nom)}"
+                      data-alumne-cognoms="${escapeHtml(alumne.cognoms || '')}"
+                      data-alumne-ralc="${escapeHtml(alumne.ralc || '')}"
+                      style="padding:4px 12px;background:#0891b2;color:#fff;border:none;border-radius:6px;font-size:11px;font-weight:600;cursor:pointer;">
+                      ✏️ Editar
+                    </button>
+                  </td>
+                </tr>
+              `;
+            }).join('')}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  `;
+}
 
     content.innerHTML = html || `
       <div style="text-align:center;padding:40px;color:#9ca3af;background:#f9fafb;border-radius:12px;">
