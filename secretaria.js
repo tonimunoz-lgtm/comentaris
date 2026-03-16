@@ -101,11 +101,11 @@ async function obrirPanellSecretaria() {
   overlay.id = 'panellSecretaria';
   overlay.style.cssText = `
     position:fixed;inset:0;z-index:8888;background:rgba(15,23,42,0.7);
-    display:flex;align-items:stretch;justify-content:center;
+    display:flex;align-items:stretch;
   `;
 
   overlay.innerHTML = `
-    <div style="width:100%;max-width:1600px;background:#fff;display:flex;flex-direction:column;
+    <div style="width:100%;background:#fff;display:flex;flex-direction:column;
                 overflow:hidden;box-shadow:-20px 0 60px rgba(0,0,0,0.3);">
 
       <!-- HEADER -->
