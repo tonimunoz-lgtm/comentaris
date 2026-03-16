@@ -683,10 +683,6 @@ async function obrirEditorRevisio(alumneId, matId, curs, materies) {
     return;
   }
 
-  // Resto de la función igual...
-  const mat = materies.find(m => m.id === matId);
-  const ASSOLIMENTS = [...];
-  // ... etc
   const mat = materies.find(m => m.id === matId);
   const ASSOLIMENTS = [
     'Assoliment Excel·lent',
