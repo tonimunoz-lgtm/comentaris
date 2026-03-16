@@ -629,39 +629,8 @@ async function carregarDadesRevisio(curs, matId, grupId, materies, grups) {
 /* ══════════════════════════════════════════════════════
    EDITOR DE REVISIÓ (editar ítems d'un alumne)
 ══════════════════════════════════════════════════════ */
-async function obrirEditorRevisio(alumneData, matId, curs, materies) {
+async function obrirEditorRevisio(alumneId, matId, curs, materies) {
   document.getElementById('modalEditorRevisio')?.remove();
-
-  // Validar que alumneData sea objeto
-  if (!alumneData || typeof alumneData !== 'object') {
-    window.mostrarToast('❌ Error: dades de l\'alumne incorrectes');
-    console.error('alumneData no és objecte:', alumneData);
-    return;
-  }
-
-  // Asegurar que materies sea array válido
-  const materiesArray = Array.isArray(materies) ? materies : [];
-  if (materiesArray.length === 0) {
-    window.mostrarToast('❌ Error: no hi ha matèries disponibles');
-    return;
-  }
-
-   // Buscar la materia (solo UNA VEZ)
-  const mat = materiesArray.find(m => m && m.id === matId);
-  if (!mat) {
-    window.mostrarToast('❌ Error: no s\'ha trobat la matèria');
-    console.error('Matèria no trobada:', matId, 'en', materiesArray);
-    return;
-  }
-
-    // El ID del documento ya viene en alumneData.id (es el ID real de Firestore)
-  const docId = alumneData.id;
-  
-  if (!docId) {
-    window.mostrarToast('❌ Error: ID de document no vàlid');
-    console.error('alumneData sense ID:', alumneData);
-    return;
-  }
 
   let dades;
   try {
@@ -669,7 +638,7 @@ async function obrirEditorRevisio(alumneData, matId, curs, materies) {
       .collection('avaluacio_centre')
       .doc(curs)
       .collection(matId)
-      .doc(docId)
+      .doc(alumneId)  // ← Usar alumneId directamente (string)
       .get();
     dades = doc.exists ? doc.data() : null;
   } catch (e) {
@@ -682,7 +651,7 @@ async function obrirEditorRevisio(alumneData, matId, curs, materies) {
     return;
   }
 
-  // mat YA ESTÁ DECLARADA ARRIBA, no volver a declarar
+  const mat = materies.find(m => m.id === matId);
   const ASSOLIMENTS = [
     'Assoliment Excel·lent',
     'Assoliment Notable',
