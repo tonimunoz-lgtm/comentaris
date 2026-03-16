@@ -708,9 +708,9 @@ async function obrirEditorRevisio(alumneData, matId, curs, materies) {
           <h3 style="font-size:17px;font-weight:800;color:#1e1b4b;margin:0;">
             ✏️ Editar registre
           </h3>
-          <p style="font-size:13px;color:#9ca3af;margin:4px 0 0;">
-            ${escapeHtml(dades.cognoms ? `${dades.cognoms}, ${dades.nom}` : dades.nom || alumneId)}
-            · ${escapeHtml(mat?.nom || matId)}
+                    <p style="font-size:13px;color:#9ca3af;margin:4px 0 0;">
+            ${escapeHtml(dades.cognoms ? `${dades.cognoms}, ${dades.nom}` : dades.nom || alumneData.nom || docId)}
+            · ${escapeHtml(mat.nom || matId)}
           </p>
         </div>
         <button id="btnTancarEditorRev" style="background:none;border:none;font-size:22px;cursor:pointer;">✕</button>
