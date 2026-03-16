@@ -136,13 +136,21 @@ async function obrirPanellTutoria() {
           <p style="font-size:12px;opacity:0.7;margin:3px 0 0;">Seguiment dels alumnes del grup</p>
         </div>
         <div style="display:flex;gap:8px;align-items:center;">
+                   <!-- Selector nivell -->
+          <select id="selNivellTutoria" style="
+            padding:7px 12px;border-radius:8px;border:none;
+            font-size:13px;background:#fff;color:#1e1b4b;
+            cursor:pointer;outline:none;min-width:140px;
+          " disabled>
+            <option value="">— Nivell —</option>
+          </select>
           <!-- Selector grup -->
           <select id="selGrupTutoria" style="
             padding:7px 12px;border-radius:8px;border:none;
             font-size:13px;background:#fff;color:#1e1b4b;
             cursor:pointer;outline:none;min-width:180px;
-          ">
-            <option value="">— Primer tria un curs —</option>
+          " disabled>
+            <option value="">— Grup —</option>
           </select>
           <button id="btnConfigSemafor" style="
             padding:7px 14px;background:rgba(255,255,255,0.2);
@@ -216,57 +224,106 @@ async function obrirPanellTutoria() {
   );
 
   // Quan canvia el curs, mostrar els grups de tutoria del curs
-  const actualitzarGrupsTutoria = (curs) => {
+   // 1. Cuando cambia el CURSO → cargar NIVELES disponibles
+  const actualitzarNivells = (curs) => {
+    const selNivell = overlay.querySelector('#selNivellTutoria');
     const selGrup = overlay.querySelector('#selGrupTutoria');
+    
     if (!curs) {
-      selGrup.innerHTML = '<option value="">— Primer tria un curs —</option>';
+      selNivell.innerHTML = '<option value="">— Nivell —</option>';
+      selNivell.disabled = true;
+      selGrup.innerHTML = '<option value="">— Grup —</option>';
+      selGrup.disabled = true;
       return;
     }
-    // Mostrar grups classe del curs (A, B, C, D...)
-    // El tutor/pedagog selecciona el grup classe per veure els alumnes
-    let grupsCurs = grups.filter(g =>
+
+    // Filtrar grupos del curs
+    let grupsCurs = grups.filter(g => 
       g.tipus === 'classe' && (g.curs === curs || !g.curs)
     );
-    // Si és tutor amb grups assignats (no pedagog/admin), filtrar per grups permesos
+    
+    // Filtrar por permisos de tutor
     if (!potVeureTots && tutoriaGrups.length > 0) {
       grupsCurs = grupsCurs.filter(g => tutoriaGrups.includes(g.id));
     }
 
-    if (grupsCurs.length === 0) {
-      selGrup.innerHTML = '<option value="">Cap grup de tutoria per a aquest curs</option>';
+    // Extraer niveles únicos
+    const nivells = [...new Set(grupsCurs.map(g => g.nivellNom).filter(Boolean))].sort();
+
+    if (nivells.length === 0) {
+      selNivell.innerHTML = '<option value="">Cap nivell disponible</option>';
+      selNivell.disabled = true;
       return;
     }
-    const perNivell = {};
-    grupsCurs.forEach(g => {
-      const k = g.nivellNom || 'Sense nivell';
-      if (!perNivell[k]) perNivell[k] = [];
-      perNivell[k].push(g);
-    });
-    selGrup.innerHTML = '<option value="">— Tria el grup de tutoria —</option>' +
-      Object.entries(perNivell).map(([nivell, gs]) =>
-        `<optgroup label="${nivell}">` +
-        gs.sort((a,b)=>(a.ordre||99)-(b.ordre||99)).map(g =>
-          `<option value="${g.id}">🧑‍🏫 ${g.nom}</option>`
-        ).join('') +
-        `</optgroup>`
-      ).join('');
+
+    selNivell.innerHTML = '<option value="">— Tria nivell —</option>' +
+      nivells.map(n => `<option value="${n}">${n}</option>`).join('');
+    selNivell.disabled = false;
+    
+    // Resetear grupo
+    selGrup.innerHTML = '<option value="">— Grup —</option>';
+    selGrup.disabled = true;
+    
+    // Guardar grupos disponibles para usar luego
+    selNivell._grupsDisponibles = grupsCurs;
   };
 
-  overlay.querySelector('#selCursTutoria').addEventListener('change', (e) => {
-    actualitzarGrupsTutoria(e.target.value);
+  // 2. Cuando cambia el NIVEL → cargar GRUPOS de ese nivel
+  const actualitzarGrupsPerNivell = (nivell) => {
+    const selGrup = overlay.querySelector('#selGrupTutoria');
+    const selNivell = overlay.querySelector('#selNivellTutoria');
+    const grupsCurs = selNivell._grupsDisponibles || [];
+    
+    if (!nivell) {
+      selGrup.innerHTML = '<option value="">— Grup —</option>';
+      selGrup.disabled = true;
+      return;
+    }
+
+    const grupsNivell = grupsCurs
+      .filter(g => g.nivellNom === nivell)
+      .sort((a, b) => (a.ordre || 99) - (b.ordre || 99));
+
+    if (grupsNivell.length === 0) {
+      selGrup.innerHTML = '<option value="">Cap grup</option>';
+      selGrup.disabled = true;
+      return;
+    }
+
+    selGrup.innerHTML = '<option value="">— Tria grup —</option>' +
+      grupsNivell.map(g => `<option value="${g.id}">🧑‍🏫 ${g.nom}</option>`).join('');
+    selGrup.disabled = false;
+  };
+
+    overlay.querySelector('#selCursTutoria').addEventListener('change', (e) => {
+    actualitzarNivells(e.target.value);
   });
 
-  // Preseleccionar curs actiu
+  overlay.querySelector('#selNivellTutoria').addEventListener('change', (e) => {
+    actualitzarGrupsPerNivell(e.target.value);
+  });
+
+   // Preseleccionar curs actiu
   if (cursActiu) {
     const selCurs = overlay.querySelector('#selCursTutoria');
     if (selCurs) {
       selCurs.value = cursActiu;
-      actualitzarGrupsTutoria(cursActiu);
-      // Si només hi ha un grup disponible, autoseleccionar-lo
+      actualitzarNivells(cursActiu);
+      
+      // Si solo hay un nivel, autoseleccionarlo
       setTimeout(() => {
-        const selGrup = overlay.querySelector('#selGrupTutoria');
-        if (selGrup && selGrup.options.length === 2) { // 1 opció + placeholder
-          selGrup.selectedIndex = 1;
+        const selNivell = overlay.querySelector('#selNivellTutoria');
+        if (selNivell && selNivell.options.length === 2) {
+          selNivell.selectedIndex = 1;
+          actualitzarGrupsPerNivell(selNivell.value);
+          
+          // Si solo hay un grupo, autoseleccionarlo también
+          setTimeout(() => {
+            const selGrup = overlay.querySelector('#selGrupTutoria');
+            if (selGrup && selGrup.options.length === 2) {
+              selGrup.selectedIndex = 1;
+            }
+          }, 50);
         }
       }, 100);
     }
