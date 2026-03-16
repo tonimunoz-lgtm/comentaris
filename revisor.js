@@ -196,7 +196,7 @@ async function carregarDadesRevisio(curs, matId, grupId, materies, grups) {
     let html = '';
     let totalRegistres = 0;
 
-        // Si no hay curs seleccionado, mostrar mensaje y salir
+    // Si no hay curs seleccionado, mostrar mensaje y salir
     if (!cursFiltrat) {
       content.innerHTML = `
         <div style="text-align:center;padding:40px;color:#9ca3af;background:#f9fafb;border-radius:12px;">
@@ -207,18 +207,15 @@ async function carregarDadesRevisio(curs, matId, grupId, materies, grups) {
       return;
     }
 
-    // Obtener todos los cursos disponibles en avaluacio_centre si no hay curs específico
-    // (aunque ahora siempre requerimos curs)
     const cursosALlegir = [cursFiltrat];
 
-        for (const cursActual of cursosALlegir) {
+    for (const cursActual of cursosALlegir) {
       for (const mat of materiesToShow) {
         let query = window.db
           .collection('avaluacio_centre')
           .doc(cursActual)
           .collection(mat.id);
 
-        // Filtrar por grupo si se especificó
         if (grupId) {
           query = query.where('grupClasseId', '==', grupId);
         }
@@ -228,7 +225,6 @@ async function carregarDadesRevisio(curs, matId, grupId, materies, grups) {
           const snap = await query.get();
           dades = snap.docs.map(d => ({ id: d.id, ...d.data() }));
         } catch (e) {
-          // Intentar con grupId (campo legacy) si falla
           if (grupId) {
             try {
               const snap2 = await window.db
@@ -239,7 +235,7 @@ async function carregarDadesRevisio(curs, matId, grupId, materies, grups) {
                 .get();
               dades = snap2.docs.map(d => ({ id: d.id, ...d.data() }));
             } catch (e2) {
-              // Silenciar error
+              // Silenciar
             }
           }
         }
@@ -248,93 +244,82 @@ async function carregarDadesRevisio(curs, matId, grupId, materies, grups) {
         
         totalRegistres += dades.length;
         
-        // Ordenar per grup i cognoms
         dades.sort((a, b) => {
           const gA = a.grup || '', gB = b.grup || '';
           if (gA !== gB) return gA.localeCompare(gB);
           return (a.cognoms || '').localeCompare(b.cognoms || '');
         });
 
-        // Màxim ítems
         const maxItems = Math.max(...dades.map(a => (a.items || []).length), 0);
 
         html += `
-        <div style="margin-bottom:28px;">
-          <div style="
-            display:flex;justify-content:space-between;align-items:center;
-            padding:10px 14px;background:#e0f2fe;border-radius:10px;margin-bottom:12px;
-          ">
-            <h4 style="font-size:14px;font-weight:700;color:#0c4a6e;margin:0;">
-              📚 ${escapeHtml(mat.nom)}
-            </h4>
-            <span style="font-size:12px;color:#0369a1;">${dades.length} alumnes</span>
-          </div>
+          <div style="margin-bottom:28px;">
+            <div style="
+              display:flex;justify-content:space-between;align-items:center;
+              padding:10px 14px;background:#e0f2fe;border-radius:10px;margin-bottom:12px;
+            ">
+              <h4 style="font-size:14px;font-weight:700;color:#0c4a6e;margin:0;">
+                📚 ${escapeHtml(mat.nom)}
+              </h4>
+              <span style="font-size:12px;color:#0369a1;">${dades.length} alumnes</span>
+            </div>
 
-          <div style="overflow-x:auto;">
-            <table style="width:100%;border-collapse:collapse;font-size:12px;min-width:600px;">
-              <thead>
-                <tr style="background:#f8fafc;">
-                  <th style="padding:8px 12px;text-align:left;font-weight:700;color:#475569;
-                              border-bottom:2px solid #e2e8f0;">Alumne/a</th>
-                  <th style="padding:8px 12px;text-align:left;font-weight:700;color:#475569;
-                              border-bottom:2px solid #e2e8f0;">Grup</th>
-                  ${Array.from({length: maxItems}, (_, i) => `
-                    <th style="padding:8px 12px;text-align:center;font-weight:700;color:#475569;
-                                border-bottom:2px solid #e2e8f0;">Ítem ${i+1}</th>
-                  `).join('')}
-                  <th style="padding:8px 12px;text-align:center;font-weight:700;color:#475569;
-                              border-bottom:2px solid #e2e8f0;">Accions</th>
-                </tr>
-              </thead>
-              <tbody>
-                ${dades.map((alumne, idx) => `
-                  <tr style="border-bottom:1px solid #f1f5f9;
-                             ${idx % 2 === 0 ? 'background:#fff;' : 'background:#fafbfc;'}">
-                    <td style="padding:10px 12px;font-weight:600;color:#1e293b;">
-                      ${escapeHtml(alumne.cognoms ? `${alumne.cognoms}, ${alumne.nom}` : alumne.nom)}
-                    </td>
-                    <td style="padding:10px 12px;color:#64748b;">${escapeHtml(alumne.grup || '—')}</td>
-                    ${Array.from({length: maxItems}, (_, i) => {
-                      const item = (alumne.items || [])[i];
-                      const COLORS_SHORT = {
-                        'Assoliment Excel·lent':   { bg:'#22c55e', s:'AE' },
-                        'Assoliment Notable':      { bg:'#84cc16', s:'AN' },
-                        'Assoliment Satisfactori': { bg:'#f59e0b', s:'AS' },
-                        'No Assoliment':           { bg:'#ef4444', s:'NA' },
-                        'No avaluat':              { bg:'#9ca3af', s:'--' }
-                      };
-                      const c = item ? (COLORS_SHORT[item.assoliment] || COLORS_SHORT['No avaluat']) : null;
-                      return `<td style="padding:10px 12px;text-align:center;">
-                        ${item ? `
-                          <span title="${escapeHtml((item.titol||'') + ' — ' + (item.comentari||''))}"
-                            style="
-                              display:inline-block;padding:3px 8px;border-radius:6px;
-                              font-size:11px;font-weight:700;color:#fff;
-                              background:${c.bg};cursor:help;
-                            ">${c.s}</span>
-                        ` : '<span style="color:#e2e8f0;">—</span>'}
-                      </td>`;
-                    }).join('')}
-                    <td style="padding:10px 12px;text-align:center;">
-                      <button class="btn-editar-revisio"
-                        data-id="${alumne.id}"
-                        data-matid="${mat.id}"
-                        data-curs="${cursFiltrat}"
-                        style="
-                          padding:4px 12px;background:#0891b2;color:#fff;border:none;
-                          border-radius:6px;font-size:11px;font-weight:600;cursor:pointer;">
-                        ✏️ Editar
-                      </button>
-                    </td>
+            <div style="overflow-x:auto;">
+              <table style="width:100%;border-collapse:collapse;font-size:12px;min-width:600px;">
+                <thead>
+                  <tr style="background:#f8fafc;">
+                    <th style="padding:8px 12px;text-align:left;font-weight:700;color:#475569;border-bottom:2px solid #e2e8f0;">Alumne/a</th>
+                    <th style="padding:8px 12px;text-align:left;font-weight:700;color:#475569;border-bottom:2px solid #e2e8f0;">Grup</th>
+                    ${Array.from({length: maxItems}, (_, i) => `
+                      <th style="padding:8px 12px;text-align:center;font-weight:700;color:#475569;border-bottom:2px solid #e2e8f0;">Ítem ${i+1}</th>
+                    `).join('')}
+                    <th style="padding:8px 12px;text-align:center;font-weight:700;color:#475569;border-bottom:2px solid #e2e8f0;">Accions</th>
                   </tr>
-                `).join('')}
-              </tbody>
-            </table>
+                </thead>
+                <tbody>
+                  ${dades.map((alumne, idx) => `
+                    <tr style="border-bottom:1px solid #f1f5f9;${idx % 2 === 0 ? 'background:#fff;' : 'background:#fafbfc;'}">
+                      <td style="padding:10px 12px;font-weight:600;color:#1e293b;">
+                        ${escapeHtml(alumne.cognoms ? `${alumne.cognoms}, ${alumne.nom}` : alumne.nom)}
+                      </td>
+                      <td style="padding:10px 12px;color:#64748b;">${escapeHtml(alumne.grup || '—')}</td>
+                      ${Array.from({length: maxItems}, (_, i) => {
+                        const item = (alumne.items || [])[i];
+                        const COLORS_SHORT = {
+                          'Assoliment Excel·lent':   { bg:'#22c55e', s:'AE' },
+                          'Assoliment Notable':      { bg:'#84cc16', s:'AN' },
+                          'Assoliment Satisfactori': { bg:'#f59e0b', s:'AS' },
+                          'No Assoliment':           { bg:'#ef4444', s:'NA' },
+                          'No avaluat':              { bg:'#9ca3af', s:'--' }
+                        };
+                        const c = item ? (COLORS_SHORT[item.assoliment] || COLORS_SHORT['No avaluat']) : null;
+                        return `<td style="padding:10px 12px;text-align:center;">
+                          ${item ? `
+                            <span title="${escapeHtml((item.titol||'') + ' — ' + (item.comentari||''))}"
+                              style="display:inline-block;padding:3px 8px;border-radius:6px;font-size:11px;font-weight:700;color:#fff;background:${c.bg};cursor:help;">
+                              ${c.s}
+                            </span>
+                          ` : '<span style="color:#e2e8f0;">—</span>'}
+                        </td>`;
+                      }).join('')}
+                      <td style="padding:10px 12px;text-align:center;">
+                        <button class="btn-editar-revisio"
+                          data-id="${alumne.id}"
+                          data-matid="${mat.id}"
+                          data-curs="${cursFiltrat}"
+                          style="padding:4px 12px;background:#0891b2;color:#fff;border:none;border-radius:6px;font-size:11px;font-weight:600;cursor:pointer;">
+                          ✏️ Editar
+                        </button>
+                      </td>
+                    </tr>
+                  `).join('')}
+                </tbody>
+              </table>
+            </div>
           </div>
-        </div>
-      `;
-    }
-
+        `;
+      } // ← CIERRE del for (const mat of materiesToShow)
+    } // ← CIERRE del for (const cursActual of cursosALlegir)
 
     content.innerHTML = html || `
       <div style="text-align:center;padding:40px;color:#9ca3af;background:#f9fafb;border-radius:12px;">
@@ -342,7 +327,6 @@ async function carregarDadesRevisio(curs, matId, grupId, materies, grups) {
       </div>
     `;
 
-    // Events editar
     content.querySelectorAll('.btn-editar-revisio').forEach(btn => {
       btn.addEventListener('click', async () => {
         const alumneId = btn.dataset.id;
