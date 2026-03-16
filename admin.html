@@ -116,6 +116,26 @@ firebase.initializeApp(firebaseConfig);
 const auth = firebase.auth();
 const db   = firebase.firestore();
 
+async function loadLastBackupInfo() {
+  try {
+    const snap = await db.collection('_backups')
+      .orderBy('timestamp', 'desc')
+      .limit(1)
+      .get();
+    if (snap.empty) {
+      document.getElementById('lastBackupInfo').textContent = 'Cap còpia realitzada encara.';
+      return;
+    }
+    const d = snap.docs[0].data();
+    const date = d.timestamp?.toDate?.().toLocaleString('ca') || '-';
+    document.getElementById('lastBackupInfo').textContent = `Últim backup: ${date} per ${d.creador}`;
+  } catch(e) {
+    console.error('loadLastBackupInfo:', e);
+    document.getElementById('lastBackupInfo').textContent = 'Error carregant info backup';
+  }
+}
+loadLastBackupInfo();  
+
 // Auth check
 auth.onAuthStateChanged(async user => {
   if (!user) { window.location.href = 'index.html'; return; }
@@ -264,6 +284,65 @@ document.getElementById('btnAddAdmin').onclick = async () => {
 document.getElementById('btnSendEmail').onclick = () => {
   alert('Funcionalitat d\'enviament de correu disponible a través de Firebase Functions o EmailJS.');
 };
+
+document.getElementById('btnBackupNow').onclick = async () => {
+  try {
+    window.mostrarToast('💾 Còpia de seguretat...', 2000);
+    const cols = ['professors','classes','alumnes','grups_centre','materies_centre','nivells_centre'];
+    const snapshot = {};
+    for (const col of cols) {
+      const snap = await db.collection(col).get();
+      snapshot[col] = {};
+      snap.docs.forEach(d => { snapshot[col][d.id] = d.data(); });
+    }
+    const dataStr = JSON.stringify(snapshot);
+    await db.collection('_backups').add({
+      timestamp: firebase.firestore.FieldValue.serverTimestamp(),
+      data: dataStr,
+      versio: '1.0',
+      creador: auth.currentUser.email
+    });
+    window.mostrarToast('✅ Backup realitzat!', 3000);
+    loadLastBackupInfo();
+  } catch(e) {
+    alert('Error realitzant backup: ' + e.message);
+  }
+};
+
+  document.getElementById('btnRestoreBackup').onclick = async () => {
+  const snap = await db.collection('_backups').orderBy('timestamp', 'desc').get();
+  if (snap.empty) return alert('No hi ha còpies per recuperar.');
+  
+  const options = snap.docs.map((d,i) => {
+    const info = d.data();
+    const date = info.timestamp?.toDate?.().toLocaleString('ca') || '-';
+    return `${i+1}. ${date} (${info.creador})`;
+  }).join('\n');
+
+  const choice = prompt(`Tria la còpia a restaurar:\n${options}`);
+  const idx = parseInt(choice)-1;
+  if (isNaN(idx) || idx<0 || idx>=snap.docs.length) return alert('Selecció invàlida');
+  
+  const backupData = JSON.parse(snap.docs[idx].data().data);
+  
+  // Preguntar quines col·leccions restaurar
+  const colList = Object.keys(backupData);
+  const colsToRestore = prompt(`Quines col·leccions vols restaurar? Separa amb comes.\nOpcions: ${colList.join(',')}`);
+  if (!colsToRestore) return;
+  const colsArray = colsToRestore.split(',').map(c=>c.trim()).filter(c=>colList.includes(c));
+
+  if (!confirm(`Segur que vols sobreescriure les col·leccions: ${colsArray.join(', ')}?`)) return;
+
+  for (const col of colsArray) {
+    const docs = backupData[col];
+    for (const id in docs) {
+      await db.collection(col).doc(id).set(docs[id]);
+    }
+  }
+
+  alert('Restauració completada.');
+};
+  
 </script>
 </body>
 </html>
