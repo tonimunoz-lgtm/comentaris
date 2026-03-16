@@ -231,12 +231,15 @@ async function obrirPanellTutoria() {
   document.body.appendChild(overlay);
 
   // Events
+   // Events
   overlay.querySelector('#btnTancarTutoria').addEventListener('click', () => overlay.remove());
-  overlay.querySelector('#btnConfigSemafor').addEventListener('click', () =>
-    obrirConfigSemafor(uid, config, materies, (nova) => {
+  overlay.querySelector('#btnConfigSemafor').addEventListener('click', async () => {
+    // Cargar materias frescas para el configurador
+    const materiesPerConfig = await obtenirMateriesPerConfig();
+    obrirConfigSemafor(uid, config, materiesPerConfig, (nova) => {
       Object.assign(config, nova);
-    })
-  );
+    });
+  });
 
   // Quan canvia el curs, mostrar els grups de tutoria del curs
    // 1. Cuando cambia el CURSO → cargar NIVELES disponibles
