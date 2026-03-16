@@ -117,36 +117,47 @@ async function obrirPanellRevisio() {
           ">✕</button>
         </div>
 
-        <!-- Filtres -->
+               <!-- Filtres: Curs → Nivell → Grup → Matèria -->
         <div style="display:flex;gap:10px;margin-top:16px;flex-wrap:wrap;">
-                    <select id="selCursRevisio" style="
+          <!-- 1. CURS -->
+          <select id="selCursRevisio" style="
             padding:7px 12px;border-radius:8px;border:none;
-            font-size:13px;background:rgba(255,255,255,0.2);color:#fff;outline:none;
+            font-size:13px;background:#fff;color:#1e293b;outline:none;
           ">
             <option value="">— Selecciona curs —</option>
             ${cursos.map(c => `<option value="${c}" ${c === window._cursActiu ? 'selected' : ''}>${c}</option>`).join('')}
           </select>
-          <select id="selMateriaRevisio" style="
+          
+          <!-- 2. NIVELL (depende de curs) -->
+          <select id="selNivellRevisio" style="
             padding:7px 12px;border-radius:8px;border:none;
-            font-size:13px;background:rgba(255,255,255,0.2);color:#fff;outline:none;
-          ">
-            <option value="">— Totes les matèries —</option>
-            ${materiesesPermeses.map(m => `<option value="${m.id}">${m.nom}</option>`).join('')}
+            font-size:13px;background:#fff;color:#1e293b;outline:none;
+          " disabled>
+            <option value="">— Tria nivell —</option>
           </select>
+          
+          <!-- 3. GRUP (depende de nivell) -->
           <select id="selGrupRevisio" style="
             padding:7px 12px;border-radius:8px;border:none;
-            font-size:13px;background:rgba(255,255,255,0.2);color:#fff;outline:none;
-          ">
-            <option value="">— Tots els grups —</option>
-            ${grupsPermesos.map(g => `<option value="${g.id}">${g.nom}</option>`).join('')}
+            font-size:13px;background:#fff;color:#1e293b;outline:none;
+          " disabled>
+            <option value="">— Tria grup —</option>
           </select>
+          
+          <!-- 4. MATÈRIA (depende de grup) -->
+          <select id="selMateriaRevisio" style="
+            padding:7px 12px;border-radius:8px;border:none;
+            font-size:13px;background:#fff;color:#1e293b;outline:none;
+          " disabled>
+            <option value="">— Tria matèria —</option>
+          </select>
+          
           <button id="btnCarregarRevisio" style="
             padding:7px 16px;background:rgba(255,255,255,0.25);
             border:1.5px solid rgba(255,255,255,0.5);color:#fff;
             border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;
           ">🔍 Carregar</button>
         </div>
-      </div>
 
       <!-- CONTINGUT -->
       <div id="revisioContent" style="flex:1;overflow-y:auto;padding:24px;">
