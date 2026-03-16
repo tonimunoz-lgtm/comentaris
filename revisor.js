@@ -661,8 +661,14 @@ async function obrirEditorRevisio(alumneData, matId, curs, materies) {
     return;
   }
 
-  // Construir ID del documento en Firestore
-  const docId = alumneData.ralc || alumneData.id || `${alumneData.cognoms}_${alumneData.nom}`;
+    // El ID del documento ya viene en alumneData.id (es el ID real de Firestore)
+  const docId = alumneData.id;
+  
+  if (!docId) {
+    window.mostrarToast('❌ Error: ID de document no vàlid');
+    console.error('alumneData sense ID:', alumneData);
+    return;
+  }
 
   let dades;
   try {
