@@ -583,7 +583,7 @@ async function carregarDadesRevisio(curs, matId, grupId, materies, grups) {
                       }).join('')}
                       <td style="padding:10px 12px;text-align:center;">
                         <button class="btn-editar-revisio"
-                          data-id="${alumne.id}"
+                          data-id="${matData.docId}"
                           data-matid="${mat.id}"
                           data-curs="${curs}"
                           data-alumne-nom="${escapeHtml(alumne.nom)}"
