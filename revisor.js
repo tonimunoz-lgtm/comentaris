@@ -223,12 +223,12 @@ async function carregarDadesRevisio(curs, matId, grupId, materies, grups) {
           query = query.where('grupClasseId', '==', grupId);
         }
 
-        let dades;
+                let dades = [];
         try {
           const snap = await query.get();
           dades = snap.docs.map(d => ({ id: d.id, ...d.data() }));
         } catch (e) {
-          // Si falla con grupClasseId, intentar con grupId (campo legacy)
+          // Intentar con grupId (campo legacy) si falla
           if (grupId) {
             try {
               const snap2 = await window.db
@@ -239,12 +239,12 @@ async function carregarDadesRevisio(curs, matId, grupId, materies, grups) {
                 .get();
               dades = snap2.docs.map(d => ({ id: d.id, ...d.data() }));
             } catch (e2) {
-              continue;
+              // Silenciar error
             }
-          } else {
-            continue;
           }
         }
+        
+        if (dades.length === 0) continue;
 
       if (dades.length === 0) continue;
       totalRegistres += dades.length;
