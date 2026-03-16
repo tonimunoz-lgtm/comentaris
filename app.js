@@ -300,6 +300,12 @@ document.getElementById('btnRegister').addEventListener('click', () => {
   const email = document.getElementById('loginEmail').value.trim();
   const pw    = document.getElementById('loginPassword').value;
   if (!email || !pw) return alert('Introdueix email i contrasenya');
+
+  // ✅ Afegit: comprovació de domini
+  if (!isDomainAllowed(email)) {
+  return alert('Només els usuaris amb correu @institutmatadepera.cat poden registrar-se.');
+  } 
+ 
   mostrarModalTermes(async () => {
     try {
       const u = await auth.createUserWithEmailAndPassword(email, pw);
