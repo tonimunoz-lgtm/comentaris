@@ -91,10 +91,11 @@ async function obrirPanellRevisio() {
     display:flex;align-items:stretch;justify-content:flex-end;
   `;
 
-  overlay.innerHTML = `
+    overlay.innerHTML = `
     <div style="
       width:min(1000px,100%);background:#fff;
-      display:flex;flex-direction:column;overflow:hidden;
+      display:flex;flex-direction:column;
+      height:100vh;max-height:100vh;
       box-shadow:-20px 0 60px rgba(0,0,0,0.3);
     ">
       <!-- HEADER -->
@@ -117,9 +118,8 @@ async function obrirPanellRevisio() {
           ">✕</button>
         </div>
 
-               <!-- Filtres: Curs → Nivell → Grup → Matèria -->
+        <!-- Filtres -->
         <div style="display:flex;gap:10px;margin-top:16px;flex-wrap:wrap;">
-          <!-- 1. CURS -->
           <select id="selCursRevisio" style="
             padding:7px 12px;border-radius:8px;border:none;
             font-size:13px;background:#fff;color:#1e293b;outline:none;
@@ -128,7 +128,6 @@ async function obrirPanellRevisio() {
             ${cursos.map(c => `<option value="${c}" ${c === window._cursActiu ? 'selected' : ''}>${c}</option>`).join('')}
           </select>
           
-          <!-- 2. NIVELL (depende de curs) -->
           <select id="selNivellRevisio" style="
             padding:7px 12px;border-radius:8px;border:none;
             font-size:13px;background:#fff;color:#1e293b;outline:none;
@@ -136,7 +135,6 @@ async function obrirPanellRevisio() {
             <option value="">— Tria nivell —</option>
           </select>
           
-          <!-- 3. GRUP (depende de nivell) -->
           <select id="selGrupRevisio" style="
             padding:7px 12px;border-radius:8px;border:none;
             font-size:13px;background:#fff;color:#1e293b;outline:none;
@@ -144,7 +142,6 @@ async function obrirPanellRevisio() {
             <option value="">— Tria grup —</option>
           </select>
           
-          <!-- 4. MATÈRIA (depende de grup) -->
           <select id="selMateriaRevisio" style="
             padding:7px 12px;border-radius:8px;border:none;
             font-size:13px;background:#fff;color:#1e293b;outline:none;
@@ -158,9 +155,15 @@ async function obrirPanellRevisio() {
             border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;
           ">🔍 Carregar</button>
         </div>
+      </div>
 
-      <!-- CONTINGUT -->
-      <div id="revisioContent" style="flex:1;overflow-y:auto;padding:24px;">
+      <!-- CONTINGUT CON SCROLL -->
+      <div id="revisioContent" style="
+        flex:1;
+        overflow-y:auto;
+        padding:24px;
+        min-height:0;
+      ">
         <div style="text-align:center;padding:60px;color:#9ca3af;">
           <div style="font-size:36px;margin-bottom:12px;">🔍</div>
           Selecciona els filtres i clica Carregar per veure les dades
