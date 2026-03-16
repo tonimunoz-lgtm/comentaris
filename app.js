@@ -258,6 +258,13 @@ async function signInWithGoogle() {
     const docSnap = await profRef.get();
 
     if (!docSnap.exists) {
+
+    // ✅ Afegit: només permet domini autoritzat
+  if (!isDomainAllowed(user.email)) {
+    await auth.signOut();
+    return alert("Només es permet l'accés amb correu @institutmatadepera.cat");
+  }
+      
       // Usuari nou — cal acceptar les condicions primer
       mostrarModalTermes(async () => {
         try {
