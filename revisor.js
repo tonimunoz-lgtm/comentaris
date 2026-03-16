@@ -315,112 +315,232 @@ async function obrirPanellRevisio() {
 
 /* ══════════════════════════════════════════════════════
    CARREGAR DADES PER REVISAR
+   - Lee las materias del grupo seleccionado (como tutoria-nova.js)
+   - Muestra solo el último período enviado de cada materia
 ══════════════════════════════════════════════════════ */
 async function carregarDadesRevisio(curs, matId, grupId, materies, grups) {
   const content = document.getElementById('revisioContent');
   if (!content) return;
 
+  // Si no hay curs o grupo, mostrar mensaje
+  if (!curs || !grupId) {
+    content.innerHTML = `
+      <div style="text-align:center;padding:40px;color:#9ca3af;background:#f9fafb;border-radius:12px;">
+        <div style="font-size:36px;margin-bottom:12px;">📋</div>
+        Selecciona un curs i un grup per veure les dades
+      </div>
+    `;
+    return;
+  }
+
   content.innerHTML = `<div style="color:#9ca3af;padding:20px;">⏳ Carregant dades...</div>`;
 
   try {
-    const materiesToShow = matId
-      ? materies.filter(m => m.id === matId)
-      : materies;
+    const db = window.db;
+    
+    // 1. OBTENER EL GRUP CLASE (si es tutoria, obtener el padre)
+    let grupDoc = await db.collection('grups_centre').doc(grupId).get();
+    let grupClasseId = grupId;
+    let grupData = grupDoc.exists ? grupDoc.data() : null;
+    
+    if (grupData?.parentGrupId) {
+      grupClasseId = grupData.parentGrupId;
+    }
 
-    const cursFiltrat = curs || '';
+    // 2. OBTENER LAS MATERIAS DE ESTE GRUPO (como hace tutoria-nova.js)
+    let materiesDelGrup = [];
+    
+    // Buscar materias con parentGrupId = grupClasseId
+    const snapMateries = await db.collection('grups_centre')
+      .where('parentGrupId', '==', grupClasseId)
+      .get();
+    materiesDelGrup = snapMateries.docs.map(d => ({ id: d.id, ...d.data() }))
+      .filter(m => m.tipus !== 'tutoria');
 
-    let html = '';
-    let totalRegistres = 0;
+    // Si no hay, intentar buscar por curs (fallback)
+    if (materiesDelGrup.length === 0) {
+      const snapAll = await db.collection('grups_centre').get();
+      materiesDelGrup = snapAll.docs.map(d => ({ id: d.id, ...d.data() }))
+        .filter(m => m.curs === curs && !['classe', 'tutoria'].includes(m.tipus));
+    }
 
-    // Si no hay curs seleccionado, mostrar mensaje y salir
-    if (!cursFiltrat) {
+    // Si se seleccionó una materia específica, filtrar
+    const materiesToShow = matId 
+      ? materiesDelGrup.filter(m => m.id === matId)
+      : materiesDelGrup;
+
+    if (materiesToShow.length === 0) {
       content.innerHTML = `
         <div style="text-align:center;padding:40px;color:#9ca3af;background:#f9fafb;border-radius:12px;">
-          <div style="font-size:36px;margin-bottom:12px;">📅</div>
-          Selecciona un curs acadèmic per carregar les dades
+          No s'han trobat matèries per a aquest grup
         </div>
       `;
       return;
     }
 
-    const cursosALlegir = [cursFiltrat];
+    // 3. LEER LOS ALUMNOS DEL GRUPO (desde grups_centre)
+    let alumnesDelGrup = [];
+    try {
+      const grupCentreDoc = await db.collection('grups_centre').doc(grupId).get();
+      if (grupCentreDoc.exists) {
+        alumnesDelGrup = grupCentreDoc.data().alumnes || [];
+      }
+    } catch(e) {
+      console.warn('Error llegint alumnes del grup:', e);
+    }
 
-    for (const cursActual of cursosALlegir) {
-      for (const mat of materiesToShow) {
-        let query = window.db
-          .collection('avaluacio_centre')
-          .doc(cursActual)
-          .collection(mat.id);
+    // Crear mapa de alumnos por RALC/nombre
+    const alumnesMap = {};
+    alumnesDelGrup.forEach((a, idx) => {
+      const key = a.ralc || `${a.cognoms}_${a.nom}`;
+      alumnesMap[key] = {
+        id: key,
+        nom: a.nom || '',
+        cognoms: a.cognoms || '',
+        ralc: a.ralc || '',
+        grup: grupData?.nom || '',
+        materies: {}
+      };
+    });
 
-        if (grupId) {
-          query = query.where('grupClasseId', '==', grupId);
+    // 4. PARA CADA MATERIA, LEER SU ÚLTIMO ENVÍO
+    for (const mat of materiesToShow) {
+      try {
+        // Leer todos los documentos de esta materia para este grupo
+        const snapAvaluacio = await db.collection('avaluacio_centre')
+          .doc(curs)
+          .collection(mat.id)
+          .where('grupClasseId', '==', grupClasseId)
+          .get();
+
+        // Si no hay con grupClasseId, intentar con grupId (legacy)
+        let docsAvaluacio = snapAvaluacio.docs;
+        
+        if (docsAvaluacio.length === 0) {
+          const snapLegacy = await db.collection('avaluacio_centre')
+            .doc(curs)
+            .collection(mat.id)
+            .where('grupId', '==', grupClasseId)
+            .get();
+          docsAvaluacio = snapLegacy.docs;
         }
 
-        let dades = [];
-        try {
-          const snap = await query.get();
-          dades = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-        } catch (e) {
-          if (grupId) {
-            try {
-              const snap2 = await window.db
-                .collection('avaluacio_centre')
-                .doc(cursActual)
-                .collection(mat.id)
-                .where('grupId', '==', grupId)
-                .get();
-              dades = snap2.docs.map(d => ({ id: d.id, ...d.data() }));
-            } catch (e2) {
-              // Silenciar
-            }
+        // Procesar cada evaluación encontrada
+        docsAvaluacio.forEach(doc => {
+          const data = doc.data();
+          const key = data.ralc || `${data.cognoms}_${data.nom}`;
+          
+          // Si el alumno no está en el grupo, añadirlo (por si es nuevo)
+          if (!alumnesMap[key]) {
+            alumnesMap[key] = {
+              id: key,
+              nom: data.nom || '',
+              cognoms: data.cognoms || '',
+              ralc: data.ralc || '',
+              grup: data.grup || grupData?.nom || '',
+              materies: {}
+            };
           }
-        }
-        
-        if (dades.length === 0) continue;
-        
-        totalRegistres += dades.length;
-        
-        dades.sort((a, b) => {
-          const gA = a.grup || '', gB = b.grup || '';
-          if (gA !== gB) return gA.localeCompare(gB);
-          return (a.cognoms || '').localeCompare(b.cognoms || '');
+
+          // GUARDAR SOLO EL ÚLTIMO PERÍODO (o el más reciente)
+          const periodeActual = data.periodeNom || data.periode || 'Sense període';
+          const existent = alumnesMap[key].materies[mat.id];
+          
+          // Si no existe o el período es más reciente, actualizar
+          // (asumiendo que los períodos van: Pre-avaluació → T1 → T2 → T3 → Final)
+          const ordrePeriodes = ['Pre-avaluació', 'T1', '1r Trimestre', 'T2', '2n Trimestre', 'T3', '3r Trimestre', 'Final', 'Final de curs'];
+          const indexNou = ordrePeriodes.indexOf(periodeActual);
+          const indexVell = existent ? ordrePeriodes.indexOf(existent.periodeNom) : -1;
+          
+          // Si no existe, o el nuevo período está después en la lista, o no se reconoce el período
+          if (!existent || indexNou > indexVell || indexNou === -1) {
+            alumnesMap[key].materies[mat.id] = {
+              nom: mat.nom || mat.id,
+              periodeNom: periodeActual,
+              items: data.items || [],
+              descripcioComuna: data.descripcioComuna || '',
+              comentariGlobal: data.comentariGlobal || '',
+              enviatAt: data.enviatAt || data.createdAt || null
+            };
+          }
         });
 
-        const maxItems = Math.max(...dades.map(a => (a.items || []).length), 0);
+      } catch (e) {
+        console.warn(`Error llegint matèria ${mat.id}:`, e);
+      }
+    }
 
-        html += `
-          <div style="margin-bottom:28px;">
-            <div style="
-              display:flex;justify-content:space-between;align-items:center;
-              padding:10px 14px;background:#e0f2fe;border-radius:10px;margin-bottom:12px;
-            ">
+    // 5. PREPARAR DATOS PARA MOSTRAR
+    const alumnes = Object.values(alumnesMap)
+      .filter(a => Object.keys(a.materies).length > 0) // Solo alumnos con evaluaciones
+      .sort((a, b) => (a.cognoms || a.nom).localeCompare(b.cognoms || b.nom, 'ca'));
+
+    if (alumnes.length === 0) {
+      content.innerHTML = `
+        <div style="text-align:center;padding:40px;color:#9ca3af;background:#f9fafb;border-radius:12px;">
+          No s'han trobat avaluacions per a aquest grup i curs
+        </div>
+      `;
+      return;
+    }
+
+    // 6. RENDERIZAR RESULTADOS
+    let html = '';
+    
+    for (const mat of materiesToShow) {
+      // Filtrar alumnos que tienen esta materia
+      const alumnesAmbMateria = alumnes.filter(a => a.materies[mat.id]);
+      
+      if (alumnesAmbMateria.length === 0) continue;
+
+      // Encontrar máximo de ítems
+      const maxItems = Math.max(...alumnesAmbMateria.map(a => 
+        (a.materies[mat.id]?.items || []).length
+      ), 0);
+
+      // Mostrar período de esta materia (el último enviado)
+      const primerAlumne = alumnesAmbMateria[0];
+      const dadesMat = primerAlumne.materies[mat.id];
+      const periodeMostrat = dadesMat?.periodeNom || '';
+
+      html += `
+        <div style="margin-bottom:28px;">
+          <div style="
+            display:flex;justify-content:space-between;align-items:center;
+            padding:10px 14px;background:#e0f2fe;border-radius:10px;margin-bottom:12px;
+          ">
+            <div>
               <h4 style="font-size:14px;font-weight:700;color:#0c4a6e;margin:0;">
                 📚 ${escapeHtml(mat.nom)}
               </h4>
-              <span style="font-size:12px;color:#0369a1;">${dades.length} alumnes</span>
+              ${periodeMostrat ? `<span style="font-size:11px;color:#0369a1;">${escapeHtml(periodeMostrat)}</span>` : ''}
             </div>
+            <span style="font-size:12px;color:#0369a1;">${alumnesAmbMateria.length} alumnes</span>
+          </div>
 
-            <div style="overflow-x:auto;">
-              <table style="width:100%;border-collapse:collapse;font-size:12px;min-width:600px;">
-                <thead>
-                  <tr style="background:#f8fafc;">
-                    <th style="padding:8px 12px;text-align:left;font-weight:700;color:#475569;border-bottom:2px solid #e2e8f0;">Alumne/a</th>
-                    <th style="padding:8px 12px;text-align:left;font-weight:700;color:#475569;border-bottom:2px solid #e2e8f0;">Grup</th>
-                    ${Array.from({length: maxItems}, (_, i) => `
-                      <th style="padding:8px 12px;text-align:center;font-weight:700;color:#475569;border-bottom:2px solid #e2e8f0;">Ítem ${i+1}</th>
-                    `).join('')}
-                    <th style="padding:8px 12px;text-align:center;font-weight:700;color:#475569;border-bottom:2px solid #e2e8f0;">Accions</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  ${dades.map((alumne, idx) => `
+          <div style="overflow-x:auto;">
+            <table style="width:100%;border-collapse:collapse;font-size:12px;min-width:600px;">
+              <thead>
+                <tr style="background:#f8fafc;">
+                  <th style="padding:8px 12px;text-align:left;font-weight:700;color:#475569;border-bottom:2px solid #e2e8f0;">Alumne/a</th>
+                  <th style="padding:8px 12px;text-align:left;font-weight:700;color:#475569;border-bottom:2px solid #e2e8f0;">Grup</th>
+                  ${Array.from({length: maxItems}, (_, i) => `
+                    <th style="padding:8px 12px;text-align:center;font-weight:700;color:#475569;border-bottom:2px solid #e2e8f0;">Ítem ${i+1}</th>
+                  `).join('')}
+                  <th style="padding:8px 12px;text-align:center;font-weight:700;color:#475569;border-bottom:2px solid #e2e8f0;">Accions</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${alumnesAmbMateria.map((alumne, idx) => {
+                  const matData = alumne.materies[mat.id];
+                  return `
                     <tr style="border-bottom:1px solid #f1f5f9;${idx % 2 === 0 ? 'background:#fff;' : 'background:#fafbfc;'}">
                       <td style="padding:10px 12px;font-weight:600;color:#1e293b;">
                         ${escapeHtml(alumne.cognoms ? `${alumne.cognoms}, ${alumne.nom}` : alumne.nom)}
                       </td>
                       <td style="padding:10px 12px;color:#64748b;">${escapeHtml(alumne.grup || '—')}</td>
                       ${Array.from({length: maxItems}, (_, i) => {
-                        const item = (alumne.items || [])[i];
+                        const item = (matData?.items || [])[i];
                         const COLORS_SHORT = {
                           'Assoliment Excel·lent':   { bg:'#22c55e', s:'AE' },
                           'Assoliment Notable':      { bg:'#84cc16', s:'AN' },
@@ -442,37 +562,51 @@ async function carregarDadesRevisio(curs, matId, grupId, materies, grups) {
                         <button class="btn-editar-revisio"
                           data-id="${alumne.id}"
                           data-matid="${mat.id}"
-                          data-curs="${cursFiltrat}"
+                          data-curs="${curs}"
+                          data-alumne-nom="${escapeHtml(alumne.nom)}"
+                          data-alumne-cognoms="${escapeHtml(alumne.cognoms || '')}"
+                          data-alumne-ralc="${escapeHtml(alumne.ralc || '')}"
                           style="padding:4px 12px;background:#0891b2;color:#fff;border:none;border-radius:6px;font-size:11px;font-weight:600;cursor:pointer;">
                           ✏️ Editar
                         </button>
                       </td>
                     </tr>
-                  `).join('')}
-                </tbody>
-              </table>
-            </div>
+                  `;
+                }).join('')}
+              </tbody>
+            </table>
           </div>
-        `;
-      } // ← CIERRE del for (const mat of materiesToShow)
-    } // ← CIERRE del for (const cursActual of cursosALlegir)
+        </div>
+      `;
+    }
 
     content.innerHTML = html || `
       <div style="text-align:center;padding:40px;color:#9ca3af;background:#f9fafb;border-radius:12px;">
-        No s'han trobat dades per a la selecció realitzada
+        No s'han trobat avaluacions per a la selecció realitzada
       </div>
     `;
 
+    // Events editar
     content.querySelectorAll('.btn-editar-revisio').forEach(btn => {
       btn.addEventListener('click', async () => {
         const alumneId = btn.dataset.id;
         const matId2   = btn.dataset.matid;
         const curs2    = btn.dataset.curs;
-        await obrirEditorRevisio(alumneId, matId2, curs2, materies);
+        
+        // Construir objeto alumne con datos del botón
+        const alumneData = {
+          id: alumneId,
+          nom: btn.dataset.alumneNom,
+          cognoms: btn.dataset.alumneCognoms,
+          ralc: btn.dataset.alumneRalc
+        };
+        
+        await obrirEditorRevisio(alumneData, matId2, curs2, materies);
       });
     });
 
   } catch (e) {
+    console.error('Error carregarDadesRevisio:', e);
     content.innerHTML = `<div style="color:#ef4444;padding:20px;">Error: ${e.message}</div>`;
   }
 }
