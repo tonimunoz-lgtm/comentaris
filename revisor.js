@@ -635,25 +635,58 @@ async function carregarDadesRevisio(curs, matId, grupId, materies, grups) {
 async function obrirEditorRevisio(alumneId, matId, curs, materies) {
   document.getElementById('modalEditorRevisio')?.remove();
 
-  let dades;
+  console.log('Editar:', { alumneId, matId, curs }); // Diagnóstico
+
+  let dades = null;
+  let docRef = null;
+
   try {
-    const doc = await window.db
+    // ESTRATEGIA 1: Intentar leer directamente por ID
+    const docDirecto = await window.db
       .collection('avaluacio_centre')
       .doc(curs)
       .collection(matId)
-      .doc(alumneId)  // ← Usar alumneId directamente (string)
+      .doc(alumneId)
       .get();
-    dades = doc.exists ? doc.data() : null;
+    
+    if (docDirecto.exists) {
+      dades = docDirecto.data();
+      docRef = docDirecto.ref;
+      console.log('Encontrado por ID directo');
+    } else {
+      console.log('No encontrado por ID directo, buscando por RALC/nombre...');
+      
+      // ESTRATEGIA 2: Buscar por RALC (si alumneId parece ser RALC)
+      const snapRalc = await window.db
+        .collection('avaluacio_centre')
+        .doc(curs)
+        .collection(matId)
+        .where('ralc', '==', alumneId)
+        .limit(1)
+        .get();
+      
+      if (!snapRalc.empty) {
+        dades = snapRalc.docs[0].data();
+        docRef = snapRalc.docs[0].ref;
+        console.log('Encontrado por RALC');
+      }
+    }
   } catch (e) {
     window.mostrarToast('❌ Error llegint dades: ' + e.message);
+    console.error('Error:', e);
     return;
   }
 
-  if (!dades) {
+  if (!dades || !docRef) {
     window.mostrarToast('⚠️ No s\'han trobat dades');
+    console.log('No se encontraron datos para:', { alumneId, matId, curs });
     return;
   }
 
+  // Resto de la función igual...
+  const mat = materies.find(m => m.id === matId);
+  const ASSOLIMENTS = [...];
+  // ... etc
   const mat = materies.find(m => m.id === matId);
   const ASSOLIMENTS = [
     'Assoliment Excel·lent',
