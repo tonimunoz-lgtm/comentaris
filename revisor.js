@@ -242,8 +242,8 @@ async function obrirPanellRevisio() {
     selMateria.disabled = true;
   };
 
-  // Función para actualizar materias según grup
-  const actualitzarMateries = (grupId) => {
+    // Función para actualizar materias según grup
+  const actualitzarMateries = async (grupId) => {
     const selMateria = overlay.querySelector('#selMateriaRevisio');
     
     if (!grupId) {
@@ -252,20 +252,36 @@ async function obrirPanellRevisio() {
       return;
     }
     
-    // Buscar materias de este grupo (o todas si no hay filtro específico)
-    // Las materias están en grups_centre con parentGrupId = grupId
-    const materiesDelGrup = materiesesPermeses.filter(m => {
-      // Si la materia tiene parentGrupId, debe coincidir
-      if (m.parentGrupId) return m.parentGrupId === grupId;
-      // Si no tiene parentGrupId, mostrarla (compatibilidad)
-      return true;
-    });
+    // OBTENER GRUP CLASE (si es tutoria, obtener padre)
+    let grupClasseId = grupId;
+    try {
+      const grupDoc = await window.db.collection('grups_centre').doc(grupId).get();
+      if (grupDoc.exists && grupDoc.data().parentGrupId) {
+        grupClasseId = grupDoc.data().parentGrupId;
+      }
+    } catch(e) {}
     
-    // Si no hay materias específicas, mostrar todas las permitidas
+    // Buscar materias con parentGrupId = grupClasseId
+    let materiesDelGrup = [];
+    try {
+      const snap = await window.db.collection('grups_centre')
+        .where('parentGrupId', '==', grupClasseId)
+        .where('tipus', 'in', ['materia', 'projecte', 'optativa'])
+        .get();
+      materiesDelGrup = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    } catch(e) {
+      // Fallback: usar materiesesPermeses filtradas manualmente
+      materiesDelGrup = materiesesPermeses.filter(m => m.parentGrupId === grupClasseId);
+    }
+    
+    // Si no hay, mostrar TODAS las materias permitidas (para no bloquear)
     const materiesMostrar = materiesDelGrup.length > 0 ? materiesDelGrup : materiesesPermeses;
     
+    // Guardar para usar luego en carregarDadesRevisio
+    window._materiesRevisioActual = materiesMostrar;
+    
     selMateria.innerHTML = '<option value="">— Totes les matèries —</option>' +
-      materiesMostrar.map(m => `<option value="${m.id}">${escapeHtml(m.nom)}</option>`).join('');
+      materiesMostrar.map(m => `<option value="${m.id}">${escapeHtml(m.nom || m.id)}</option>`).join('');
     selMateria.disabled = false;
   };
 
