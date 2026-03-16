@@ -928,12 +928,15 @@ function renderReglaHTML(idx, rIdx, regla, materies) {
         ).join('')}
       </select>
 
-      ${esMateria ? `
+           ${esMateria ? `
         <select class="regla-materia" data-idx="${idx}" data-ridx="${rIdx}"
-          style="padding:5px 8px;border:1px solid #e5e7eb;border-radius:6px;font-size:12px;outline:none;">
-          ${materies.map(m =>
-            `<option value="${m.id}" ${m.id === regla.materiaId ? 'selected' : ''}>${m.nom}</option>`
-          ).join('')}
+          style="padding:5px 8px;border:1px solid #e5e7eb;border-radius:6px;font-size:12px;outline:none;min-width:150px;">
+          ${materies.length === 0 
+            ? '<option value="">— Cap matèria disponible —</option>'
+            : materies.map(m =>
+                `<option value="${m.id}" ${m.id === regla.materiaId ? 'selected' : ''}>${esH(m.nom || m.id)}</option>`
+              ).join('')
+          }
         </select>
       ` : `
         <select class="regla-op" data-idx="${idx}" data-ridx="${rIdx}"
