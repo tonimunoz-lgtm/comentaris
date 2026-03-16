@@ -54,6 +54,16 @@ const studentsList  = document.getElementById('studentsList');
 const studentsCount = document.getElementById('studentsCount');
 
 /* ══════════════════════════════════════
+   Dominis PErmesos
+══════════════════════════════════════ */
+const allowedDomains = ['institutmatadepera.cat']; // afegeix més dominis si cal
+
+function isDomainAllowed(email) {
+  const domain = email.split('@')[1]?.toLowerCase();
+  return allowedDomains.includes(domain);
+}
+
+/* ══════════════════════════════════════
    UTILS
 ══════════════════════════════════════ */
 function showLogin() {
