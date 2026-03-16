@@ -444,7 +444,7 @@ async function carregarDadesRevisio(curs, matId, grupId, materies, grups) {
           docsAvaluacio = snapLegacy.docs;
         }
 
-               // Procesar cada evaluación encontrada
+                       // Procesar cada evaluación encontrada
         docsAvaluacio.forEach(doc => {
           const data = doc.data();
           const key = data.ralc || `${data.cognoms}_${data.nom}`;
@@ -460,6 +460,9 @@ async function carregarDadesRevisio(curs, matId, grupId, materies, grups) {
               grup: data.grup || grupData?.nom || '',
               materies: {}
             };
+          } else {
+            // IMPORTANTE: Actualizar el ID al real de Firestore
+            alumnesMap[key].id = docIdReal;
           }
 
           // GUARDAR SOLO EL ÚLTIMO PERÍODO (o el más reciente)
