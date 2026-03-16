@@ -1188,20 +1188,43 @@ async function carregarMateriesCentre() {
       .where('tipus', 'in', ['materia', 'projecte', 'optativa', 'tutoria'])
       .orderBy('ordre')
       .get();
-    return snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    const totes = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    // DEDUPLICAR: solo una entrada por nombre único de materia
+    const vistes = new Set();
+    const uniques = [];
+    for (const m of totes) {
+      const nomNormalitzat = (m.nom || '').toLowerCase().trim();
+      if (nomNormalitzat && !vistes.has(nomNormalitzat)) {
+        vistes.add(nomNormalitzat);
+        uniques.push(m);
+      }
+    }
+    return uniques;
   } catch (e) { 
     // Fallback sin ordenar si no hay índice compuesto
     try {
       const snap = await window.db.collection('grups_centre').get();
-      return snap.docs
+      const totes = snap.docs
         .map(d => ({ id: d.id, ...d.data() }))
         .filter(g => ['materia', 'projecte', 'optativa', 'tutoria'].includes(g.tipus))
         .sort((a, b) => (a.ordre || 99) - (b.ordre || 99));
+      // DEDUPLICAR también en el fallback
+      const vistes = new Set();
+      const uniques = [];
+      for (const m of totes) {
+        const nomNormalitzat = (m.nom || '').toLowerCase().trim();
+        if (nomNormalitzat && !vistes.has(nomNormalitzat)) {
+          vistes.add(nomNormalitzat);
+          uniques.push(m);
+        }
+      }
+      return uniques;
     } catch (e2) {
       return []; 
     }
   }
 }
+
 async function carregarGrupsCentre() {
   try {
     const snap = await window.db.collection('grups_centre').orderBy('ordre').get();
