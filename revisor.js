@@ -444,15 +444,16 @@ async function carregarDadesRevisio(curs, matId, grupId, materies, grups) {
           docsAvaluacio = snapLegacy.docs;
         }
 
-        // Procesar cada evaluación encontrada
+               // Procesar cada evaluación encontrada
         docsAvaluacio.forEach(doc => {
           const data = doc.data();
           const key = data.ralc || `${data.cognoms}_${data.nom}`;
+          const docIdReal = doc.id; // ← ID REAL del documento en Firestore
           
           // Si el alumno no está en el grupo, añadirlo (por si es nuevo)
           if (!alumnesMap[key]) {
             alumnesMap[key] = {
-              id: key,
+              id: docIdReal, // ← Usar el ID REAL del documento
               nom: data.nom || '',
               cognoms: data.cognoms || '',
               ralc: data.ralc || '',
