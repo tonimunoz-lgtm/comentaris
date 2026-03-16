@@ -952,7 +952,7 @@ function renderReglaHTML(idx, rIdx, regla, materies) {
           ${materies.length === 0 
             ? '<option value="">— Cap matèria disponible —</option>'
             : materies.map(m =>
-                `<option value="${m.id}" ${m.id === regla.materiaId ? 'selected' : ''}>${esH(m.nom || m.id)}</option>`
+                `<option value="${m.id}" ${m.id === regla.materiaId ? 'selected' : ''}>${escapeHtml(m.nom || m.id)}</option>`
               ).join('')
           }
         </select>
