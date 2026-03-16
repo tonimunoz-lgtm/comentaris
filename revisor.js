@@ -606,24 +606,17 @@ async function carregarDadesRevisio(curs, matId, grupId, materies, grups) {
       </div>
     `;
 
-        // Events editar - PASAR OBJETO ALUMNE, no string
+            // Events editar - PASAR ID COMO STRING (como en versión anterior)
     content.querySelectorAll('.btn-editar-revisio').forEach(btn => {
       btn.addEventListener('click', async () => {
+        const alumneId = btn.dataset.id;  // ← ID string directo
         const matId2   = btn.dataset.matid;
         const curs2    = btn.dataset.curs;
-        
-        // Construir objeto alumne con datos del botón (IMPORTANTE: pasar como objeto)
-        const alumneData = {
-          id: btn.dataset.id,
-          nom: btn.dataset.alumneNom || '',
-          cognoms: btn.dataset.alumneCognoms || '',
-          ralc: btn.dataset.alumneRalc || ''
-        };
         
         // Usar materiesToShow que tiene las materias correctas del grupo
         const materiesPerEditor = materiesToShow.length > 0 ? materiesToShow : materies;
         
-        await obrirEditorRevisio(alumneData, matId2, curs2, materiesPerEditor);
+        await obrirEditorRevisio(alumneId, matId2, curs2, materiesPerEditor);
       });
     });
 
