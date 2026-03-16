@@ -1220,7 +1220,9 @@ async function carregarMateriesCentre() {
       }
       return uniques;
     } catch (e2) {
-      return []; 
+           // Ordenar alfabéticamente por nombre
+      uniques.sort((a, b) => (a.nom || '').localeCompare(b.nom || '', 'ca'));
+       return []; 
     }
   }
 }
