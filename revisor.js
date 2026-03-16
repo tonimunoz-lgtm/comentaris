@@ -211,7 +211,7 @@ async function carregarDadesRevisio(curs, matId, grupId, materies, grups) {
     // (aunque ahora siempre requerimos curs)
     const cursosALlegir = [cursFiltrat];
 
-    for (const cursActual of cursosALlegir) {
+        for (const cursActual of cursosALlegir) {
       for (const mat of materiesToShow) {
         let query = window.db
           .collection('avaluacio_centre')
@@ -223,7 +223,7 @@ async function carregarDadesRevisio(curs, matId, grupId, materies, grups) {
           query = query.where('grupClasseId', '==', grupId);
         }
 
-                      let dades = [];
+        let dades = [];
         try {
           const snap = await query.get();
           dades = snap.docs.map(d => ({ id: d.id, ...d.data() }));
@@ -247,6 +247,7 @@ async function carregarDadesRevisio(curs, matId, grupId, materies, grups) {
         if (dades.length === 0) continue;
         
         totalRegistres += dades.length;
+        
         // Ordenar per grup i cognoms
         dades.sort((a, b) => {
           const gA = a.grup || '', gB = b.grup || '';
@@ -257,7 +258,7 @@ async function carregarDadesRevisio(curs, matId, grupId, materies, grups) {
         // Màxim ítems
         const maxItems = Math.max(...dades.map(a => (a.items || []).length), 0);
 
-      html += `
+        html += `
         <div style="margin-bottom:28px;">
           <div style="
             display:flex;justify-content:space-between;align-items:center;
