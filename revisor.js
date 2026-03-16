@@ -565,14 +565,7 @@ async function carregarDadesRevisio(curs, matId, grupId, materies, grups) {
                       <td style="padding:10px 12px;color:#64748b;">${escapeHtml(alumne.grup || '—')}</td>
                       ${Array.from({length: maxItems}, (_, i) => {
                         const item = (matData?.items || [])[i];
-                        const COLORS_SHORT = {
-                          'Assoliment Excel·lent':   { bg:'#22c55e', s:'AE' },
-                          'Assoliment Notable':      { bg:'#84cc16', s:'AN' },
-                          'Assoliment Satisfactori': { bg:'#f59e0b', s:'AS' },
-                          'No Assoliment':           { bg:'#ef4444', s:'NA' },
-                          'No avaluat':              { bg:'#9ca3af', s:'--' }
-                        };
-                        const c = item ? (COLORS_SHORT[item.assoliment] || COLORS_SHORT['No avaluat']) : null;
+                        const c = item ? { bg: colorAss(item.assoliment), s: shortAss(item.assoliment) } : null;
                         return `<td style="padding:10px 12px;text-align:center;">
                           ${item ? `
                             <span title="${escapeHtml((item.titol||'') + ' — ' + (item.comentari||''))}"
@@ -874,6 +867,31 @@ function escapeHtml(str) {
     .replace(/</g, '&lt;')
     .replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;');
+}
+
+// ══════════════════════════════════════════════════════
+// NORMALITZACIÓ D'ASSOLIMENTS
+// Retorna color i abreviatura segons text
+function colorAss(text) {
+  if (!text) return '#9ca3af'; // gris per defecte
+  const txt = text.toLowerCase();
+
+  if (txt.includes('excel')) return '#22c55e';       // AE
+  if (txt.includes('notable')) return '#84cc16';     // AN
+  if (txt.includes('satisfact')) return '#f59e0b';   // AS
+  if (txt.includes('no ass')) return '#ef4444';      // NA
+  return '#9ca3af';                                  // -- gris
+}
+
+function shortAss(text) {
+  if (!text) return '--';
+  const txt = text.toLowerCase();
+
+  if (txt.includes('excel')) return 'AE';
+  if (txt.includes('notable')) return 'AN';
+  if (txt.includes('satisfact')) return 'AS';
+  if (txt.includes('no ass')) return 'NA';
+  return '--';
 }
 
 console.log('✅ revisor.js: inicialitzat');
