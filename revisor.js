@@ -119,12 +119,12 @@ async function obrirPanellRevisio() {
 
         <!-- Filtres -->
         <div style="display:flex;gap:10px;margin-top:16px;flex-wrap:wrap;">
-          <select id="selCursRevisio" style="
+                    <select id="selCursRevisio" style="
             padding:7px 12px;border-radius:8px;border:none;
             font-size:13px;background:rgba(255,255,255,0.2);color:#fff;outline:none;
           ">
-            <option value="">— Tots els cursos —</option>
-            ${cursos.map(c => `<option value="${c}">${c}</option>`).join('')}
+            <option value="">— Selecciona curs —</option>
+            ${cursos.map(c => `<option value="${c}" ${c === window._cursActiu ? 'selected' : ''}>${c}</option>`).join('')}
           </select>
           <select id="selMateriaRevisio" style="
             padding:7px 12px;border-radius:8px;border:none;
@@ -158,7 +158,14 @@ async function obrirPanellRevisio() {
     </div>
   `;
 
-  document.body.appendChild(overlay);
+   document.body.appendChild(overlay);
+
+  // Auto-cargar si hay curs preseleccionado
+  if (window._cursActiu && cursos.includes(window._cursActiu)) {
+    setTimeout(() => {
+      overlay.querySelector('#btnCarregarRevisio').click();
+    }, 100);
+  }
 
   overlay.querySelector('#btnTancarRevisio').addEventListener('click', () => overlay.remove());
 
