@@ -710,7 +710,7 @@ async function obrirEditorRevisio(alumneData, matId, curs, materies) {
           </h3>
                     <p style="font-size:13px;color:#9ca3af;margin:4px 0 0;">
             ${escapeHtml(dades.cognoms ? `${dades.cognoms}, ${dades.nom}` : dades.nom || alumneData.nom || docId)}
-            · ${escapeHtml(mat.nom || matId)}
+          · ${escapeHtml(mat.nom || matId)}
           </p>
         </div>
         <button id="btnTancarEditorRev" style="background:none;border:none;font-size:22px;cursor:pointer;">✕</button>
