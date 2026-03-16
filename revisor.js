@@ -223,7 +223,7 @@ async function carregarDadesRevisio(curs, matId, grupId, materies, grups) {
           query = query.where('grupClasseId', '==', grupId);
         }
 
-               let dades = [];
+                      let dades = [];
         try {
           const snap = await query.get();
           dades = snap.docs.map(d => ({ id: d.id, ...d.data() }));
@@ -247,7 +247,6 @@ async function carregarDadesRevisio(curs, matId, grupId, materies, grups) {
         if (dades.length === 0) continue;
         
         totalRegistres += dades.length;
-
         // Ordenar per grup i cognoms
         dades.sort((a, b) => {
           const gA = a.grup || '', gB = b.grup || '';
