@@ -169,13 +169,138 @@ async function obrirPanellRevisio() {
     </div>
   `;
 
-   document.body.appendChild(overlay);
+    document.body.appendChild(overlay);
+
+  // === LÓGICA DE FILTROS DEPENDIENTES ===
+  
+  // Extraer nivells únicos de los grupos permitidos
+  const nivellsUnics = [...new Map(grupsPermesos.map(g => [g.nivellId, { id: g.nivellId, nom: g.nivellNom || g.nivellId }])).values()]
+    .filter(n => n.id)
+    .sort((a, b) => a.nom.localeCompare(b.nom, 'ca'));
+
+  // Función para actualizar nivells según curs
+  const actualitzarNivells = (cursSeleccionat) => {
+    const selNivell = overlay.querySelector('#selNivellRevisio');
+    const selGrup = overlay.querySelector('#selGrupRevisio');
+    const selMateria = overlay.querySelector('#selMateriaRevisio');
+    
+    if (!cursSeleccionat) {
+      selNivell.innerHTML = '<option value="">— Tria nivell —</option>';
+      selNivell.disabled = true;
+      selGrup.innerHTML = '<option value="">— Tria grup —</option>';
+      selGrup.disabled = true;
+      selMateria.innerHTML = '<option value="">— Tria matèria —</option>';
+      selMateria.disabled = true;
+      return;
+    }
+    
+    // Filtrar nivells que tienen grupos en este curs
+    const nivellsDelCurs = nivellsUnics.filter(n => 
+      grupsPermesos.some(g => g.nivellId === n.id && g.curs === cursSeleccionat)
+    );
+    
+    selNivell.innerHTML = '<option value="">— Tria nivell —</option>' +
+      nivellsDelCurs.map(n => `<option value="${n.id}">${escapeHtml(n.nom)}</option>`).join('');
+    selNivell.disabled = false;
+    
+    // Resetear grupos y materias
+    selGrup.innerHTML = '<option value="">— Tria grup —</option>';
+    selGrup.disabled = true;
+    selMateria.innerHTML = '<option value="">— Tria matèria —</option>';
+    selMateria.disabled = true;
+  };
+
+  // Función para actualizar grups según nivell
+  const actualitzarGrups = (cursSeleccionat, nivellId) => {
+    const selGrup = overlay.querySelector('#selGrupRevisio');
+    const selMateria = overlay.querySelector('#selMateriaRevisio');
+    
+    if (!nivellId) {
+      selGrup.innerHTML = '<option value="">— Tria grup —</option>';
+      selGrup.disabled = true;
+      selMateria.innerHTML = '<option value="">— Tria matèria —</option>';
+      selMateria.disabled = true;
+      return;
+    }
+    
+    // Filtrar grupos de este nivell y curs (solo grupos clase)
+    const grupsDelNivell = grupsPermesos.filter(g => 
+      g.nivellId === nivellId && 
+      g.curs === cursSeleccionat &&
+      g.tipus === 'classe'
+    ).sort((a, b) => (a.ordre || 99) - (b.ordre || 99));
+    
+    selGrup.innerHTML = '<option value="">— Tria grup —</option>' +
+      grupsDelNivell.map(g => `<option value="${g.id}">${escapeHtml(g.nom)}</option>`).join('');
+    selGrup.disabled = false;
+    
+    // Guardar referencia para usar en materias
+    selGrup._grupsDisponibles = grupsDelNivell;
+    
+    // Resetear materias
+    selMateria.innerHTML = '<option value="">— Tria matèria —</option>';
+    selMateria.disabled = true;
+  };
+
+  // Función para actualizar materias según grup
+  const actualitzarMateries = (grupId) => {
+    const selMateria = overlay.querySelector('#selMateriaRevisio');
+    
+    if (!grupId) {
+      selMateria.innerHTML = '<option value="">— Tria matèria —</option>';
+      selMateria.disabled = true;
+      return;
+    }
+    
+    // Buscar materias de este grupo (o todas si no hay filtro específico)
+    // Las materias están en grups_centre con parentGrupId = grupId
+    const materiesDelGrup = materiesesPermeses.filter(m => {
+      // Si la materia tiene parentGrupId, debe coincidir
+      if (m.parentGrupId) return m.parentGrupId === grupId;
+      // Si no tiene parentGrupId, mostrarla (compatibilidad)
+      return true;
+    });
+    
+    // Si no hay materias específicas, mostrar todas las permitidas
+    const materiesMostrar = materiesDelGrup.length > 0 ? materiesDelGrup : materiesesPermeses;
+    
+    selMateria.innerHTML = '<option value="">— Totes les matèries —</option>' +
+      materiesMostrar.map(m => `<option value="${m.id}">${escapeHtml(m.nom)}</option>`).join('');
+    selMateria.disabled = false;
+  };
+
+  // Event listeners para los selects
+  overlay.querySelector('#selCursRevisio').addEventListener('change', (e) => {
+    actualitzarNivells(e.target.value);
+  });
+  
+  overlay.querySelector('#selNivellRevisio').addEventListener('change', (e) => {
+    const curs = overlay.querySelector('#selCursRevisio').value;
+    actualitzarGrups(curs, e.target.value);
+  });
+  
+  overlay.querySelector('#selGrupRevisio').addEventListener('change', (e) => {
+    actualitzarMateries(e.target.value);
+  });
 
   // Auto-cargar si hay curs preseleccionado
   if (window._cursActiu && cursos.includes(window._cursActiu)) {
+    actualitzarNivells(window._cursActiu);
     setTimeout(() => {
-      overlay.querySelector('#btnCarregarRevisio').click();
-    }, 100);
+      // Solo auto-cargar si también hay nivell seleccionado automáticamente
+      const selNivell = overlay.querySelector('#selNivellRevisio');
+      if (selNivell.options.length === 2) { // Solo 1 nivell disponible
+        selNivell.selectedIndex = 1;
+        actualitzarGrups(window._cursActiu, selNivell.value);
+        setTimeout(() => {
+          const selGrup = overlay.querySelector('#selGrupRevisio');
+          if (selGrup.options.length === 2) { // Solo 1 grup disponible
+            selGrup.selectedIndex = 1;
+            actualitzarMateries(selGrup.value);
+          }
+        }, 50);
+      }
+    }, 50);
   }
 
   overlay.querySelector('#btnTancarRevisio').addEventListener('click', () => overlay.remove());
