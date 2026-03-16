@@ -652,7 +652,7 @@ async function obrirEditorRevisio(alumneData, matId, curs, materies) {
     return;
   }
 
-  // Buscar la materia
+   // Buscar la materia (solo UNA VEZ)
   const mat = materiesArray.find(m => m && m.id === matId);
   if (!mat) {
     window.mostrarToast('❌ Error: no s\'ha trobat la matèria');
@@ -682,7 +682,7 @@ async function obrirEditorRevisio(alumneData, matId, curs, materies) {
     return;
   }
 
-  const mat = materies.find(m => m.id === matId);
+  // mat YA ESTÁ DECLARADA ARRIBA, no volver a declarar
   const ASSOLIMENTS = [
     'Assoliment Excel·lent',
     'Assoliment Notable',
