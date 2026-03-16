@@ -788,11 +788,11 @@ async function obrirEditorRevisio(alumneData, matId, curs, materies) {
     }));
 
     try {
-      await window.db
+           await window.db
         .collection('avaluacio_centre')
         .doc(curs)
         .collection(matId)
-        .doc(alumneId)
+        .doc(docId)
         .update({
           descripcioComuna: descComuna,
           items: nouItems,
