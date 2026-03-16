@@ -116,7 +116,27 @@ firebase.initializeApp(firebaseConfig);
 const auth = firebase.auth();
 const db   = firebase.firestore();
 
-async function loadLastBackupInfo() {
+function mostrarToast(msg, durada=2000) {
+  // Cream un toast temporal
+  const div = document.createElement('div');
+  div.textContent = msg;
+  div.style.position = 'fixed';
+  div.style.bottom = '20px';
+  div.style.left = '50%';
+  div.style.transform = 'translateX(-50%)';
+  div.style.background = '#4c1d95';
+  div.style.color = '#fff';
+  div.style.padding = '10px 16px';
+  div.style.borderRadius = '8px';
+  div.style.fontSize = '13px';
+  div.style.zIndex = 99999;
+  div.style.boxShadow = '0 4px 12px rgba(0,0,0,0.2)';
+  document.body.appendChild(div);
+  setTimeout(()=>div.remove(), durada);
+}
+  
+  
+  async function loadLastBackupInfo() {
   try {
     const snap = await db.collection('_backups')
       .orderBy('timestamp', 'desc')
@@ -285,9 +305,11 @@ document.getElementById('btnSendEmail').onclick = () => {
   alert('Funcionalitat d\'enviament de correu disponible a través de Firebase Functions o EmailJS.');
 };
 
-document.getElementById('btnBackupNow').onclick = async () => {
+
+  
+  document.getElementById('btnBackupNow').onclick = async () => {
   try {
-    window.mostrarToast('💾 Còpia de seguretat...', 2000);
+    mostrarToast('💾 Còpia de seguretat...', 2000);
     const cols = ['professors','classes','alumnes','grups_centre','materies_centre','nivells_centre'];
     const snapshot = {};
     for (const col of cols) {
@@ -302,7 +324,7 @@ document.getElementById('btnBackupNow').onclick = async () => {
       versio: '1.0',
       creador: auth.currentUser.email
     });
-    window.mostrarToast('✅ Backup realitzat!', 3000);
+    mostrarToast('✅ Backup realitzat!', 3000);
     loadLastBackupInfo();
   } catch(e) {
     alert('Error realitzant backup: ' + e.message);
