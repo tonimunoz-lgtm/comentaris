@@ -9,7 +9,6 @@
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
   <script src="https://cdn.tailwindcss.com"></script>
   <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-  <script src="https://cdn.jsdelivr.net/npm/@emailjs/browser@4/dist/email.min.js"></script>
   <style>
     body { font-family: 'Outfit', sans-serif; background: #f4f4f8; }
     .card { background:#fff; border-radius:12px; border:1px solid #e8e8f0; padding:24px; }
@@ -650,30 +649,48 @@ document.getElementById('btnBackToApp').onclick = () => window.location.href = '
 
 async function loadUsers() {
   const body = document.getElementById('usersTableBody');
-  const snap = await db.collection('professors').orderBy('createdAt', 'desc').get();
-  body.innerHTML = '';
+  body.innerHTML = '<tr><td colspan="6" style="color:#9ca3af;text-align:center;padding:20px;">Carregant...</td></tr>';
+  try {
+    const snap = await db.collection('professors').orderBy('createdAt', 'desc').get();
+    body.innerHTML = '';
+    const docs = snap.docs.filter(doc => !doc.data().deleted);
+    if (!docs.length) {
+      body.innerHTML = '<tr><td colspan="6" style="color:#9ca3af;text-align:center;padding:20px;">Cap usuari</td></tr>';
+      return;
+    }
+    docs.forEach(doc => {
+      const d = doc.data();
+      const tr = document.createElement('tr');
+      const estatBadge = d.suspended
+        ? '<span class="badge badge-red">Suspès</span>'
+        : d.forcePasswordChange
+          ? '<span class="badge badge-gray">🔑 Pendent canvi pw</span>'
+          : '<span class="badge badge-green">Actiu</span>';
+      const rols = Array.isArray(d.rols) ? d.rols : (d.isAdmin ? ['admin'] : ['professor']);
+      tr.innerHTML = `
+        <td>${d.nom || '-'}</td>
+        <td>${d.email || '-'}</td>
+        <td>${d.createdAt ? new Date(d.createdAt.seconds*1000).toLocaleDateString('ca') : '-'}</td>
+        <td>${rols.map(r => `<span class="badge" style="background:${rolColorAdmin(r)};color:#fff;margin-right:2px;">${r}</span>`).join('')}</td>
+        <td>${estatBadge}</td>
+        <td style="display:flex;gap:4px;flex-wrap:wrap;">
+          <button class="btn btn-sm btn-yellow" onclick="toggleSuspend('${doc.id}', ${!!d.suspended})">${d.suspended ? 'Reactivar' : 'Suspendre'}</button>
+          <button class="btn btn-sm btn-blue" onclick="resetPassword('${d.email}')">Reset PW</button>
+          <button class="btn btn-sm btn-purple" onclick="toggleAdmin('${doc.id}', ${!!d.isAdmin})">${d.isAdmin ? 'Treure admin' : 'Fer admin'}</button>
+          <button class="btn btn-sm btn-red" onclick="deleteUser('${doc.id}')">Eliminar</button>
+        </td>
+      `;
+      body.appendChild(tr);
+    });
+  } catch(e) {
+    body.innerHTML = `<tr><td colspan="6" style="color:#ef4444;padding:20px;">Error: ${e.message}</td></tr>`;
+  }
+}
 
-  snap.forEach(doc => {
-    const d = doc.data();
-    const tr = document.createElement('tr');
-    const estatBadge = d.deleted   ? '<span class="badge badge-red">Eliminat</span>'
-                     : d.suspended ? '<span class="badge badge-red">Suspès</span>'
-                                   : '<span class="badge badge-green">Actiu</span>';
-    tr.innerHTML = `
-      <td>${d.nom || '-'}</td>
-      <td>${d.email || '-'}</td>
-      <td>${d.createdAt ? new Date(d.createdAt.seconds*1000).toLocaleDateString('ca') : '-'}</td>
-      <td>${d.isAdmin ? '<span class="badge badge-purple">Admin</span>' : '<span class="badge badge-gray">No</span>'}</td>
-      <td>${estatBadge}</td>
-      <td style="display:flex;gap:4px;flex-wrap:wrap;">
-        <button class="btn btn-sm btn-yellow" onclick="toggleSuspend('${doc.id}', ${!!d.suspended})">${d.suspended ? 'Reactivar' : 'Suspendre'}</button>
-        <button class="btn btn-sm btn-blue" onclick="resetPassword('${d.email}')">Reset PW</button>
-        <button class="btn btn-sm btn-purple" onclick="toggleAdmin('${doc.id}', ${!!d.isAdmin})">${d.isAdmin ? 'Treure admin' : 'Fer admin'}</button>
-        <button class="btn btn-sm btn-red" onclick="deleteUser('${doc.id}')">Eliminar</button>
-      </td>
-    `;
-    body.appendChild(tr);
-  });
+function rolColorAdmin(rol) {
+  const c = {superadmin:'#7c3aed',admin:'#dc2626',secretaria:'#0891b2',
+              tutor:'#059669',professor:'#2563eb',revisor:'#d97706'};
+  return c[rol] || '#6b7280';
 }
 
 async function loadLastLogins() {
@@ -764,9 +781,18 @@ async function toggleAdmin(uid, current) {
 }
 
 async function deleteUser(uid) {
-  if (!confirm('Eliminar aquest usuari?')) return;
-  await db.collection('professors').doc(uid).update({ deleted: true });
-  loadUsers();
+  if (!confirm('Eliminar aquest usuari? Aquesta acció no es pot desfer.')) return;
+  try {
+    // Eliminar document de Firestore completament
+    await db.collection('professors').doc(uid).delete();
+    mostrarToast('✅ Usuari eliminat de Firestore');
+    // Nota: Firebase Auth no es pot eliminar des del client.
+    // L'usuari queda bloquejat perquè no té document a professors.
+    // Per eliminar-lo d'Auth caldria una Cloud Function.
+    loadUsers();
+  } catch(e) {
+    mostrarToast('❌ Error eliminant: ' + e.message, 4000);
+  }
 }
 
 document.getElementById('btnAddAdmin').onclick = async () => {
