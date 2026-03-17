@@ -742,7 +742,7 @@ async function loadLastLogins() {
     cont.innerHTML = top10.map((r, idx) => {
       const fa = temps => {
         const diff = Math.floor((Date.now() - temps) / 1000);
-        if (diff < 60)   return 'Fa menys d'1 min';
+        if (diff < 60)   return "Fa menys d'1 min";
         if (diff < 3600) return `Fa ${Math.floor(diff/60)} min`;
         if (diff < 86400) return `Fa ${Math.floor(diff/3600)}h`;
         if (diff < 604800) return `Fa ${Math.floor(diff/86400)} dies`;
