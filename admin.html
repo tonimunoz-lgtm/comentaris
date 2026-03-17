@@ -697,52 +697,116 @@ async function loadLastLogins() {
   const cont = document.getElementById('lastLoginsContainer');
   cont.innerHTML = '<p style="color:#aaa;font-size:13px;">Carregant...</p>';
   try {
-    // Llegir tots els professors i els seus logins
+    // Carregar tots els professors (sense els eliminats)
     const profSnap = await db.collection('professors').get();
+    const professors = {};
+    profSnap.docs.forEach(d => {
+      if (!d.data().deleted) professors[d.id] = d.data();
+    });
+
+    // Per cada professor, agafar el seu últim login (limit 1)
+    // Fem les consultes en paral·lel però en grups de 10 per no saturar
+    const uids = Object.keys(professors);
     const resultats = [];
 
-    await Promise.all(profSnap.docs.map(async profDoc => {
-      const profData = profDoc.data();
-      if (profData.deleted) return;
-      try {
-        const loginsSnap = await db.collection('professors').doc(profDoc.id)
-          .collection('logins').orderBy('timestamp', 'desc').limit(5).get();
-        if (loginsSnap.empty) return;
-        const times = loginsSnap.docs.map(d => d.data().timestamp?.toDate?.() || new Date());
-        resultats.push({
-          uid:    profDoc.id,
-          nom:    profData.nom || profData.email || profDoc.id.slice(0,12),
-          email:  profData.email || '',
-          ultim:  times[0],
-          total:  times.length,
-        });
-      } catch(e) { /* sense logins */ }
-    }));
+    for (let i = 0; i < uids.length; i += 10) {
+      const chunk = uids.slice(i, i + 10);
+      await Promise.all(chunk.map(async uid => {
+        try {
+          const snap = await db.collection('professors').doc(uid)
+            .collection('logins').orderBy('timestamp', 'desc').limit(10).get();
+          if (snap.empty) return;
+          const prof = professors[uid];
+          const accessos = snap.docs.map(d => d.data().timestamp?.toDate?.() || null).filter(Boolean);
+          if (!accessos.length) return;
+          resultats.push({
+            uid,
+            nom:     prof.nom || prof.email || uid.slice(0, 12),
+            email:   prof.email || '',
+            ultim:   accessos[0],
+            accessos // tots els timestamps per al desplegable
+          });
+        } catch(e) { /* professor sense logins */ }
+      }));
+    }
 
-    // Ordenar per últim accés
+    // Ordenar per últim accés, quedar-nos els 10 primers usuaris
     resultats.sort((a, b) => b.ultim - a.ultim);
+    const top10 = resultats.slice(0, 10);
 
-    if (!resultats.length) {
+    if (!top10.length) {
       cont.innerHTML = '<p style="color:#aaa;font-size:13px;">Cap accés registrat encara.</p>';
       return;
     }
 
-    cont.innerHTML = resultats.slice(0, 15).map(r => `
-      <div style="display:flex;justify-content:space-between;align-items:center;background:#f9f9fb;border-radius:8px;padding:10px 14px;gap:12px;">
-        <div style="flex:1;min-width:0;">
-          <div style="font-size:13px;font-weight:600;color:#3d3d58;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${r.nom}</div>
-          <div style="font-size:11px;color:#9ca3af;">${r.email}</div>
-        </div>
-        <div style="text-align:right;flex-shrink:0;">
-          <div style="font-size:12px;color:#7c7c9a;">Últim: ${r.ultim.toLocaleString('ca')}</div>
-          <div style="font-size:11px;color:#9ca3af;">${r.total} accés${r.total !== 1 ? 'os' : ''} registrats</div>
-        </div>
-      </div>
-    `).join('');
+    cont.innerHTML = top10.map((r, idx) => {
+      const fa = temps => {
+        const diff = Math.floor((Date.now() - temps) / 1000);
+        if (diff < 60)   return 'Fa menys d'1 min';
+        if (diff < 3600) return `Fa ${Math.floor(diff/60)} min`;
+        if (diff < 86400) return `Fa ${Math.floor(diff/3600)}h`;
+        if (diff < 604800) return `Fa ${Math.floor(diff/86400)} dies`;
+        return temps.toLocaleDateString('ca');
+      };
+      const detalls = r.accessos.map((t, i) => `
+        <div style="display:flex;justify-content:space-between;align-items:center;
+                    padding:5px 10px;border-bottom:1px solid #f0f0f6;font-size:11px;
+                    ${i===0?'background:#f0fdf4;':''}">
+          <span style="color:${i===0?'#059669':'#6b7280'};">${i===0?'🟢 Últim accés':'🔵 Accés '+(i+1)}</span>
+          <span style="color:#374151;font-weight:${i===0?'600':'400'};">${t.toLocaleString('ca')}</span>
+          <span style="color:#9ca3af;">${fa(t)}</span>
+        </div>`).join('');
+
+      return `
+        <div style="border:1.5px solid #e8e8f0;border-radius:10px;overflow:hidden;margin-bottom:6px;">
+          <!-- Capçalera clicable -->
+          <div onclick="toggleLoginDetail('detail-${idx}')"
+               style="display:flex;justify-content:space-between;align-items:center;
+                      padding:10px 14px;cursor:pointer;background:#f9f9fb;
+                      transition:background 0.15s;"
+               onmouseenter="this.style.background='#f0f0fa'"
+               onmouseleave="this.style.background='#f9f9fb'">
+            <div style="display:flex;align-items:center;gap:10px;flex:1;min-width:0;">
+              <div style="width:34px;height:34px;border-radius:50%;background:#e0e7ff;
+                          display:flex;align-items:center;justify-content:center;
+                          font-size:14px;font-weight:700;color:#4338ca;flex-shrink:0;">
+                ${(r.nom||'?')[0].toUpperCase()}
+              </div>
+              <div style="min-width:0;">
+                <div style="font-size:13px;font-weight:600;color:#1e1e32;
+                            white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${r.nom}</div>
+                <div style="font-size:11px;color:#9ca3af;">${r.email}</div>
+              </div>
+            </div>
+            <div style="display:flex;align-items:center;gap:12px;flex-shrink:0;">
+              <div style="text-align:right;">
+                <div style="font-size:12px;font-weight:600;color:#059669;">${fa(r.ultim)}</div>
+                <div style="font-size:10px;color:#9ca3af;">${r.accessos.length} accés${r.accessos.length!==1?'os':''}</div>
+              </div>
+              <span id="arrow-${idx}" style="color:#9ca3af;font-size:16px;transition:transform 0.2s;">▼</span>
+            </div>
+          </div>
+          <!-- Detall desplegable -->
+          <div id="detail-${idx}" style="display:none;border-top:1px solid #e8e8f0;">
+            ${detalls}
+          </div>
+        </div>`;
+    }).join('');
+
   } catch(e) {
     cont.innerHTML = `<p style="color:#e53e3e;font-size:13px;">Error: ${e.message}</p>`;
     console.error('loadLastLogins error:', e);
   }
+}
+
+function toggleLoginDetail(id) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  const idx = id.replace('detail-', '');
+  const arrow = document.getElementById('arrow-' + idx);
+  const obert = el.style.display !== 'none';
+  el.style.display = obert ? 'none' : 'block';
+  if (arrow) arrow.style.transform = obert ? '' : 'rotate(180deg)';
 }
 
 async function toggleSuspend(uid, current) {
