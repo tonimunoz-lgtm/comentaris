@@ -1838,6 +1838,10 @@ function modalNouUsuari(onCreat) {
 
         const cred = await auth2.createUserWithEmailAndPassword(email, pw);
         const uid  = cred.user.uid;
+
+        // Enviar email de benvinguda amb link per crear contrasenya pròpia
+        // Ho fem ABANS de signOut perquè auth2 és la instància activa
+        await auth2.sendPasswordResetEmail(email);
         await auth2.signOut();
 
         await window.db.collection('professors').doc(uid).set({
@@ -1845,14 +1849,14 @@ function modalNouUsuari(onCreat) {
           email,
           rols: rols.length > 0 ? rols : ['professor'],
           isAdmin: rols.includes('admin') || rols.includes('superadmin'),
-          forcePasswordChange: force,
+          forcePasswordChange: true, // sempre true, canviarà quan faci el reset
           createdAt: firebase.firestore.FieldValue.serverTimestamp(),
           creatPer: firebase.auth().currentUser?.uid || '',
           suspended: false,
           deleted: false,
         });
 
-        window.mostrarToast(`✅ Usuari creat: ${email}`);
+        window.mostrarToast(`✅ Usuari creat i email enviat a ${email}`, 4000);
         onCreat?.();
         return true;
 
@@ -1887,7 +1891,11 @@ function modalNouUsuari(onCreat) {
         try {
           const cred = await auth2.createUserWithEmailAndPassword(u.email, u.passwordClar);
           const uid  = cred.user.uid;
+
+          // Enviar email per crear contrasenya pròpia
+          await auth2.sendPasswordResetEmail(u.email);
           await auth2.signOut();
+
           await window.db.collection('professors').doc(uid).set({
             nom: u.nom,
             email: u.email,
