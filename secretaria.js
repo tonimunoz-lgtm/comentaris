@@ -1811,7 +1811,60 @@ function modalNouUsuari(onCreat) {
       </div>
       <div id="previewImport" style="max-height:200px;overflow-y:auto;"></div>
     </div>
-  `, () => {}, 'Crear usuari'); // <-- FIX: abans era null, ara funció buida
+  `, async () => {
+    // ── Callback onOk del modal ──────────────────────────
+    const seccioInd = document.getElementById('seccioIndividual');
+    const inpExcel  = document.getElementById('inpExcelUsuaris');
+
+    if (seccioInd && seccioInd.style.display !== 'none') {
+      // Crear individual
+      const nom   = document.getElementById('inpNomUser').value.trim();
+      const email = document.getElementById('inpEmailUser').value.trim();
+      const pw    = document.getElementById('inpPwUser').value.trim();
+      const rols  = [...document.querySelectorAll('.chk-rol-nou:checked')].map(c=>c.value);
+      const force = document.getElementById('chkForcePw').checked;
+      const errEl = document.getElementById('errUser');
+      if (!nom || !email || !pw) { errEl.textContent = '⚠️ Omple els camps obligatoris'; return false; }
+      if (pw.length < 6) { errEl.textContent = '⚠️ Mínim 6 caràcters'; return false; }
+      try {
+        await window.db.collection('_peticions_usuari').add({
+          tipus:'crear', nom, email, passwordClar:pw,
+          rols: rols.length > 0 ? rols : ['professor'],
+          forcePasswordChange: force,
+          creatPer: firebase.auth().currentUser?.uid || '',
+          creatAt: firebase.firestore.FieldValue.serverTimestamp(),
+          processat: false
+        });
+        window.mostrarToast(`✅ Petició creada per a ${email}`);
+        onCreat?.();
+        return true; // tanca el modal
+      } catch(e) {
+        document.getElementById('errUser').textContent = 'Error: ' + e.message;
+        return false; // manté el modal obert
+      }
+    } else {
+      // Import Excel
+      const file = inpExcel?.files[0];
+      if (!file) { window.mostrarToast('⚠️ Selecciona un fitxer Excel'); return false; }
+      const colCfg = JSON.parse(sessionStorage.getItem(cfgKey)||'{}');
+      const usuaris = await parseExcelUsuaris(file, colCfg);
+      if (!usuaris.length) { window.mostrarToast('⚠️ Cap usuari detectat'); return false; }
+      const batch = window.db.batch();
+      usuaris.forEach(u => {
+        const ref = window.db.collection('_peticions_usuari').doc();
+        batch.set(ref, {
+          tipus:'crear', ...u, rols:['professor'], forcePasswordChange:true,
+          creatPer: firebase.auth().currentUser?.uid || '',
+          creatAt: firebase.firestore.FieldValue.serverTimestamp(),
+          processat: false
+        });
+      });
+      await batch.commit();
+      window.mostrarToast(`✅ ${usuaris.length} peticions d'usuaris creades`);
+      onCreat?.();
+      return true; // tanca el modal
+    }
+  }, 'Crear usuari');
 
   setTimeout(() => {
     // Canviar secció
@@ -1825,92 +1878,91 @@ function modalNouUsuari(onCreat) {
     });
 
     // Nova contrasenya
-    document.getElementById('btnGenPw2')?.addEventListener('click',()=> {
+    document.getElementById('btnGenPw2')?.addEventListener('click', () => {
       document.getElementById('inpPwUser').value = generarPassword();
     });
 
     document.getElementById('inpNomUser')?.focus();
 
-    // Import Excel
-    const inpExcel = document.getElementById('inpExcelUsuaris');
+    // Import Excel — helper per processar fitxer
+    const inpExcel  = document.getElementById('inpExcelUsuaris');
     const seccioCols = document.getElementById('seccioCols');
     const previewDiv = document.getElementById('previewImport');
 
-    inpExcel?.addEventListener('change', async e=>{
-      const file = e.target.files[0]; if(!file) return;
+    function processarFitxerExcel(file) {
+      if (!file) return;
       seccioCols.style.display = 'block';
-
       const reader = new FileReader();
       reader.onload = ev => {
         try {
-          const wb = XLSX.read(ev.target.result,{type:'binary'});
+          const wb = XLSX.read(ev.target.result, {type:'binary'});
           const ws = wb.Sheets[wb.SheetNames[0]];
-          const rows = XLSX.utils.sheet_to_json(ws,{header:1,defval:''});
+          const rows = XLSX.utils.sheet_to_json(ws, {header:1, defval:''});
           const nF = rows.length, nC = Math.max(...rows.map(r=>r.length));
-          previewDiv.innerHTML = `<p style="font-size:12px;color:#374151;">Fitxer carregat: ${nF} files × ${nC} columnes</p>`;
-        } catch(e){}
+          previewDiv.innerHTML = `<p style="font-size:12px;color:#374151;">✅ Fitxer carregat: <strong>${file.name}</strong> (${nF} files × ${nC} columnes)</p>`;
+        } catch(e) { previewDiv.innerHTML = '<p style="color:#ef4444;">⚠️ Error llegint el fitxer</p>'; }
       };
       reader.readAsBinaryString(file);
-    });
+    }
 
-    document.getElementById('btnPreview')?.addEventListener('click', async ()=>{
-      const file = inpExcel.files[0]; if(!file) return;
+    // Selecció normal
+    inpExcel?.addEventListener('change', e => processarFitxerExcel(e.target.files[0]));
+
+    // Drag & drop sobre l'input
+    const dropZone = inpExcel?.parentElement || inpExcel;
+    if (dropZone) {
+      dropZone.addEventListener('dragover', e => {
+        e.preventDefault(); e.stopPropagation();
+        if (inpExcel) inpExcel.style.borderColor = '#7c3aed';
+      });
+      dropZone.addEventListener('dragleave', e => {
+        e.stopPropagation();
+        if (inpExcel) inpExcel.style.borderColor = '#7c3aed';
+      });
+      dropZone.addEventListener('drop', e => {
+        e.preventDefault(); e.stopPropagation();
+        if (inpExcel) inpExcel.style.borderColor = '#7c3aed';
+        const file = e.dataTransfer.files[0];
+        if (file) {
+          // Actualitzar l'input amb el fitxer arrossegat
+          const dt = new DataTransfer();
+          dt.items.add(file);
+          inpExcel.files = dt.files;
+          processarFitxerExcel(file);
+        }
+      });
+    }
+
+    document.getElementById('btnPreview')?.addEventListener('click', async () => {
+      const file = inpExcel?.files[0]; if (!file) return;
       const colCfg = {
-        primerFila: parseInt(document.getElementById('cfgFila')?.value||'2')||2,
-        colNom: document.getElementById('cfgNom')?.value || 'B',
-        colCog1: document.getElementById('cfgCog1')?.value || '',
+        primerFila: parseInt(document.getElementById('cfgFila')?.value||'2') || 2,
+        colNom:   document.getElementById('cfgNom')?.value  || 'B',
+        colCog1:  document.getElementById('cfgCog1')?.value || '',
         colEmail: document.getElementById('cfgEmail')?.value || 'C',
       };
       sessionStorage.setItem(cfgKey, JSON.stringify(colCfg));
-      const alumnes = await parseExcelUsuaris(file,colCfg);
-      if(!alumnes.length) previewDiv.innerHTML='<div style="color:#ef4444;">⚠️ Cap usuari detectat</div>';
-      else previewDiv.innerHTML=`<p style="font-size:12px;color:#059669;">✅ ${alumnes.length} usuaris detectats</p>
-        <table style="width:100%;border-collapse:collapse;font-size:11px;">
-        <tr style="background:#f3f4f6;"><th>#</th><th>Nom</th><th>Cognoms</th><th>Email</th></tr>
-        ${alumnes.slice(0,20).map((u,i)=>`<tr><td>${i+1}</td><td>${u.nom}</td><td>${u.cognoms}</td><td>${u.email}</td></tr>`).join('')}
-        ${alumnes.length>20?`<tr><td colspan="4">... i ${alumnes.length-20} més</td></tr>`:''}
-        </table>`;
-    });
-
-    const okBtn = document.querySelector('#_modalSec button:last-child');
-    okBtn?.addEventListener('click', async ()=>{
-      if(document.getElementById('seccioIndividual').style.display==='') {
-        // Crear individual
-        const nom = document.getElementById('inpNomUser').value.trim();
-        const email = document.getElementById('inpEmailUser').value.trim();
-        const pw = document.getElementById('inpPwUser').value.trim();
-        const rols = [...document.querySelectorAll('.chk-rol-nou:checked')].map(c=>c.value);
-        const force = document.getElementById('chkForcePw').checked;
-        const errEl = document.getElementById('errUser');
-        if(!nom||!email||!pw){ errEl.textContent='⚠️ Omple els camps obligatoris'; return; }
-        if(pw.length<6){ errEl.textContent='⚠️ Mínim 6 caràcters'; return; }
-        try {
-          await window.db.collection('_peticions_usuari').add({
-            tipus:'crear',nom,email,passwordClar:pw,rols:rols.length>0?rols:['professor'],
-            forcePasswordChange:force,creatPer:firebase.auth().currentUser?.uid||'',
-            creatAt:firebase.firestore.FieldValue.serverTimestamp(),processat:false
-          });
-          window.mostrarToast(`✅ Petició creada per a ${email}`);
-          onCreat?.();
-        } catch(e){ errEl.textContent='Error: '+e.message; }
+      const alumnes = await parseExcelUsuaris(file, colCfg);
+      if (!alumnes.length) {
+        previewDiv.innerHTML = '<div style="color:#ef4444;">⚠️ Cap usuari detectat. Revisa les columnes.</div>';
       } else {
-        // Import Excel
-        const file = inpExcel.files[0]; if(!file) return;
-        const colCfg = JSON.parse(sessionStorage.getItem(cfgKey)||'{}');
-        const usuaris = await parseExcelUsuaris(file,colCfg);
-        if(!usuaris.length){ window.mostrarToast('⚠️ Cap usuari detectat'); return; }
-        const batch = window.db.batch();
-        usuaris.forEach(u=>{
-          const ref = window.db.collection('_peticions_usuari').doc();
-          batch.set(ref,{tipus:'crear',...u,rols:['professor'],forcePasswordChange:true,creatPer:firebase.auth().currentUser?.uid||'',creatAt:firebase.firestore.FieldValue.serverTimestamp(),processat:false});
-        });
-        await batch.commit();
-        window.mostrarToast(`✅ ${usuaris.length} peticions d'usuaris creades`);
-        onCreat?.();
+        previewDiv.innerHTML = `
+          <p style="font-size:12px;color:#059669;">✅ ${alumnes.length} usuaris detectats</p>
+          <table style="width:100%;border-collapse:collapse;font-size:11px;">
+            <tr style="background:#f3f4f6;"><th style="padding:4px 6px;">#</th><th style="padding:4px 6px;">Nom</th><th style="padding:4px 6px;">Cognoms</th><th style="padding:4px 6px;">Email</th></tr>
+            ${alumnes.slice(0,20).map((u,i)=>`
+              <tr style="border-bottom:1px solid #f3f4f6;">
+                <td style="padding:3px 6px;">${i+1}</td>
+                <td style="padding:3px 6px;">${esH(u.nom)}</td>
+                <td style="padding:3px 6px;">${esH(u.cognoms)}</td>
+                <td style="padding:3px 6px;">${esH(u.email)}</td>
+              </tr>`).join('')}
+            ${alumnes.length > 20 ? `<tr><td colspan="4" style="padding:4px 6px;color:#9ca3af;">... i ${alumnes.length-20} més</td></tr>` : ''}
+          </table>`;
       }
     });
 
-  },200);
+  }, 200);
 }
 
 // Funció parse Excel per usuaris
