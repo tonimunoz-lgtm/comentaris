@@ -1811,60 +1811,7 @@ function modalNouUsuari(onCreat) {
       </div>
       <div id="previewImport" style="max-height:200px;overflow-y:auto;"></div>
     </div>
-  `, async () => {
-    // ── Callback onOk del modal ──────────────────────────
-    const seccioInd = document.getElementById('seccioIndividual');
-    const inpExcel  = document.getElementById('inpExcelUsuaris');
-
-    if (seccioInd && seccioInd.style.display !== 'none') {
-      // Crear individual
-      const nom   = document.getElementById('inpNomUser').value.trim();
-      const email = document.getElementById('inpEmailUser').value.trim();
-      const pw    = document.getElementById('inpPwUser').value.trim();
-      const rols  = [...document.querySelectorAll('.chk-rol-nou:checked')].map(c=>c.value);
-      const force = document.getElementById('chkForcePw').checked;
-      const errEl = document.getElementById('errUser');
-      if (!nom || !email || !pw) { errEl.textContent = '⚠️ Omple els camps obligatoris'; return false; }
-      if (pw.length < 6) { errEl.textContent = '⚠️ Mínim 6 caràcters'; return false; }
-      try {
-        await window.db.collection('_peticions_usuari').add({
-          tipus:'crear', nom, email, passwordClar:pw,
-          rols: rols.length > 0 ? rols : ['professor'],
-          forcePasswordChange: force,
-          creatPer: firebase.auth().currentUser?.uid || '',
-          creatAt: firebase.firestore.FieldValue.serverTimestamp(),
-          processat: false
-        });
-        window.mostrarToast(`✅ Petició creada per a ${email}`);
-        onCreat?.();
-        return true; // tanca el modal
-      } catch(e) {
-        document.getElementById('errUser').textContent = 'Error: ' + e.message;
-        return false; // manté el modal obert
-      }
-    } else {
-      // Import Excel
-      const file = inpExcel?.files[0];
-      if (!file) { window.mostrarToast('⚠️ Selecciona un fitxer Excel'); return false; }
-      const colCfg = JSON.parse(sessionStorage.getItem(cfgKey)||'{}');
-      const usuaris = await parseExcelUsuaris(file, colCfg);
-      if (!usuaris.length) { window.mostrarToast('⚠️ Cap usuari detectat'); return false; }
-      const batch = window.db.batch();
-      usuaris.forEach(u => {
-        const ref = window.db.collection('_peticions_usuari').doc();
-        batch.set(ref, {
-          tipus:'crear', ...u, rols:['professor'], forcePasswordChange:true,
-          creatPer: firebase.auth().currentUser?.uid || '',
-          creatAt: firebase.firestore.FieldValue.serverTimestamp(),
-          processat: false
-        });
-      });
-      await batch.commit();
-      window.mostrarToast(`✅ ${usuaris.length} peticions d'usuaris creades`);
-      onCreat?.();
-      return true; // tanca el modal
-    }
-  }, 'Crear usuari');
+  `, () => {}, 'Crear usuari'); // <-- FIX: abans era null, ara funció buida
 
   setTimeout(() => {
     // Canviar secció
@@ -1878,91 +1825,92 @@ function modalNouUsuari(onCreat) {
     });
 
     // Nova contrasenya
-    document.getElementById('btnGenPw2')?.addEventListener('click', () => {
+    document.getElementById('btnGenPw2')?.addEventListener('click',()=> {
       document.getElementById('inpPwUser').value = generarPassword();
     });
 
     document.getElementById('inpNomUser')?.focus();
 
-    // Import Excel — helper per processar fitxer
-    const inpExcel  = document.getElementById('inpExcelUsuaris');
+    // Import Excel
+    const inpExcel = document.getElementById('inpExcelUsuaris');
     const seccioCols = document.getElementById('seccioCols');
     const previewDiv = document.getElementById('previewImport');
 
-    function processarFitxerExcel(file) {
-      if (!file) return;
+    inpExcel?.addEventListener('change', async e=>{
+      const file = e.target.files[0]; if(!file) return;
       seccioCols.style.display = 'block';
+
       const reader = new FileReader();
       reader.onload = ev => {
         try {
-          const wb = XLSX.read(ev.target.result, {type:'binary'});
+          const wb = XLSX.read(ev.target.result,{type:'binary'});
           const ws = wb.Sheets[wb.SheetNames[0]];
-          const rows = XLSX.utils.sheet_to_json(ws, {header:1, defval:''});
+          const rows = XLSX.utils.sheet_to_json(ws,{header:1,defval:''});
           const nF = rows.length, nC = Math.max(...rows.map(r=>r.length));
-          previewDiv.innerHTML = `<p style="font-size:12px;color:#374151;">✅ Fitxer carregat: <strong>${file.name}</strong> (${nF} files × ${nC} columnes)</p>`;
-        } catch(e) { previewDiv.innerHTML = '<p style="color:#ef4444;">⚠️ Error llegint el fitxer</p>'; }
+          previewDiv.innerHTML = `<p style="font-size:12px;color:#374151;">Fitxer carregat: ${nF} files × ${nC} columnes</p>`;
+        } catch(e){}
       };
       reader.readAsBinaryString(file);
-    }
+    });
 
-    // Selecció normal
-    inpExcel?.addEventListener('change', e => processarFitxerExcel(e.target.files[0]));
-
-    // Drag & drop sobre l'input
-    const dropZone = inpExcel?.parentElement || inpExcel;
-    if (dropZone) {
-      dropZone.addEventListener('dragover', e => {
-        e.preventDefault(); e.stopPropagation();
-        if (inpExcel) inpExcel.style.borderColor = '#7c3aed';
-      });
-      dropZone.addEventListener('dragleave', e => {
-        e.stopPropagation();
-        if (inpExcel) inpExcel.style.borderColor = '#7c3aed';
-      });
-      dropZone.addEventListener('drop', e => {
-        e.preventDefault(); e.stopPropagation();
-        if (inpExcel) inpExcel.style.borderColor = '#7c3aed';
-        const file = e.dataTransfer.files[0];
-        if (file) {
-          // Actualitzar l'input amb el fitxer arrossegat
-          const dt = new DataTransfer();
-          dt.items.add(file);
-          inpExcel.files = dt.files;
-          processarFitxerExcel(file);
-        }
-      });
-    }
-
-    document.getElementById('btnPreview')?.addEventListener('click', async () => {
-      const file = inpExcel?.files[0]; if (!file) return;
+    document.getElementById('btnPreview')?.addEventListener('click', async ()=>{
+      const file = inpExcel.files[0]; if(!file) return;
       const colCfg = {
-        primerFila: parseInt(document.getElementById('cfgFila')?.value||'2') || 2,
-        colNom:   document.getElementById('cfgNom')?.value  || 'B',
-        colCog1:  document.getElementById('cfgCog1')?.value || '',
+        primerFila: parseInt(document.getElementById('cfgFila')?.value||'2')||2,
+        colNom: document.getElementById('cfgNom')?.value || 'B',
+        colCog1: document.getElementById('cfgCog1')?.value || '',
         colEmail: document.getElementById('cfgEmail')?.value || 'C',
       };
       sessionStorage.setItem(cfgKey, JSON.stringify(colCfg));
-      const alumnes = await parseExcelUsuaris(file, colCfg);
-      if (!alumnes.length) {
-        previewDiv.innerHTML = '<div style="color:#ef4444;">⚠️ Cap usuari detectat. Revisa les columnes.</div>';
+      const alumnes = await parseExcelUsuaris(file,colCfg);
+      if(!alumnes.length) previewDiv.innerHTML='<div style="color:#ef4444;">⚠️ Cap usuari detectat</div>';
+      else previewDiv.innerHTML=`<p style="font-size:12px;color:#059669;">✅ ${alumnes.length} usuaris detectats</p>
+        <table style="width:100%;border-collapse:collapse;font-size:11px;">
+        <tr style="background:#f3f4f6;"><th>#</th><th>Nom</th><th>Cognoms</th><th>Email</th></tr>
+        ${alumnes.slice(0,20).map((u,i)=>`<tr><td>${i+1}</td><td>${u.nom}</td><td>${u.cognoms}</td><td>${u.email}</td></tr>`).join('')}
+        ${alumnes.length>20?`<tr><td colspan="4">... i ${alumnes.length-20} més</td></tr>`:''}
+        </table>`;
+    });
+
+    const okBtn = document.querySelector('#_modalSec button:last-child');
+    okBtn?.addEventListener('click', async ()=>{
+      if(document.getElementById('seccioIndividual').style.display==='') {
+        // Crear individual
+        const nom = document.getElementById('inpNomUser').value.trim();
+        const email = document.getElementById('inpEmailUser').value.trim();
+        const pw = document.getElementById('inpPwUser').value.trim();
+        const rols = [...document.querySelectorAll('.chk-rol-nou:checked')].map(c=>c.value);
+        const force = document.getElementById('chkForcePw').checked;
+        const errEl = document.getElementById('errUser');
+        if(!nom||!email||!pw){ errEl.textContent='⚠️ Omple els camps obligatoris'; return; }
+        if(pw.length<6){ errEl.textContent='⚠️ Mínim 6 caràcters'; return; }
+        try {
+          await window.db.collection('_peticions_usuari').add({
+            tipus:'crear',nom,email,passwordClar:pw,rols:rols.length>0?rols:['professor'],
+            forcePasswordChange:force,creatPer:firebase.auth().currentUser?.uid||'',
+            creatAt:firebase.firestore.FieldValue.serverTimestamp(),processat:false
+          });
+          window.mostrarToast(`✅ Petició creada per a ${email}`);
+          onCreat?.();
+        } catch(e){ errEl.textContent='Error: '+e.message; }
       } else {
-        previewDiv.innerHTML = `
-          <p style="font-size:12px;color:#059669;">✅ ${alumnes.length} usuaris detectats</p>
-          <table style="width:100%;border-collapse:collapse;font-size:11px;">
-            <tr style="background:#f3f4f6;"><th style="padding:4px 6px;">#</th><th style="padding:4px 6px;">Nom</th><th style="padding:4px 6px;">Cognoms</th><th style="padding:4px 6px;">Email</th></tr>
-            ${alumnes.slice(0,20).map((u,i)=>`
-              <tr style="border-bottom:1px solid #f3f4f6;">
-                <td style="padding:3px 6px;">${i+1}</td>
-                <td style="padding:3px 6px;">${esH(u.nom)}</td>
-                <td style="padding:3px 6px;">${esH(u.cognoms)}</td>
-                <td style="padding:3px 6px;">${esH(u.email)}</td>
-              </tr>`).join('')}
-            ${alumnes.length > 20 ? `<tr><td colspan="4" style="padding:4px 6px;color:#9ca3af;">... i ${alumnes.length-20} més</td></tr>` : ''}
-          </table>`;
+        // Import Excel
+        const file = inpExcel.files[0]; if(!file) return;
+        const colCfg = JSON.parse(sessionStorage.getItem(cfgKey)||'{}');
+        const usuaris = await parseExcelUsuaris(file,colCfg);
+        if(!usuaris.length){ window.mostrarToast('⚠️ Cap usuari detectat'); return; }
+        const batch = window.db.batch();
+        usuaris.forEach(u=>{
+          const ref = window.db.collection('_peticions_usuari').doc();
+          batch.set(ref,{tipus:'crear',...u,rols:['professor'],forcePasswordChange:true,creatPer:firebase.auth().currentUser?.uid||'',creatAt:firebase.firestore.FieldValue.serverTimestamp(),processat:false});
+        });
+        await batch.commit();
+        window.mostrarToast(`✅ ${usuaris.length} peticions d'usuaris creades`);
+        onCreat?.();
       }
     });
 
-  }, 200);
+  },200);
 }
 
 // Funció parse Excel per usuaris
@@ -3104,48 +3052,180 @@ function esH(s) {
 }
 
 /* ══════════════════════════════════════════════════════
-   CÒPIA DE SEGURETAT
+   CÒPIA DE SEGURETAT v2
+   - Genera JSON local (sense escriure a Firestore)
+   - Descàrrega directa al navegador
+   - Opció d'enviar per email via EmailJS
+   - Col·leccions completes de l'app
 ══════════════════════════════════════════════════════ */
-window.realitzarCopiaSeguretat = async function() {
-  const rols = window._userRols || [];
-  if (!rols.some(r=>['admin','superadmin'].includes(r))) return; // Només admin
-  try {
-    window.mostrarToast('💾 Còpia de seguretat...', 2000);
-    const db = window.db;
-    const cols = ['professors','classes','alumnes','grups_centre','materies_centre','nivells_centre'];
-    const snapshot = {};
-    for (const col of cols) {
+
+// Totes les col·leccions de l'aplicació
+const BACKUP_COLS = [
+  'professors',
+  'classes',
+  'alumnes',
+  'grups_centre',
+  'materies_centre',
+  'nivells_centre',
+  'activitats',
+  'avaluacio_centre',
+  'tutoria_config',
+  'ultracomentator_plantilles',
+  '_sistema',
+  '_peticions_usuari',
+];
+
+// Col·leccions que tenen sub-col·leccions conegudes
+const BACKUP_SUBCOLS = {
+  professors: ['logins'],
+  classes: ['comentaris', 'periodes', 'alumnes'],
+};
+
+// Funció principal: exporta tot a JSON
+window.generarBackupJSON = async function(onProgress) {
+  const db = window.db;
+  const snapshot = {
+    _meta: {
+      versio: '2.0',
+      app: 'ComentaIA',
+      timestamp: new Date().toISOString(),
+      creador: firebase.auth().currentUser?.email || 'sistema',
+    }
+  };
+
+  const totalCols = BACKUP_COLS.length;
+  let done = 0;
+
+  for (const col of BACKUP_COLS) {
+    try {
       const snap = await db.collection(col).get();
       snapshot[col] = {};
-      snap.docs.forEach(d => { snapshot[col][d.id] = d.data(); });
+      for (const docRef of snap.docs) {
+        snapshot[col][docRef.id] = docRef.data();
+        // Sub-col·leccions
+        if (BACKUP_SUBCOLS[col]) {
+          snapshot[col][docRef.id]._subcols = {};
+          for (const sub of BACKUP_SUBCOLS[col]) {
+            try {
+              const subSnap = await docRef.ref.collection(sub).get();
+              if (!subSnap.empty) {
+                snapshot[col][docRef.id]._subcols[sub] = {};
+                subSnap.docs.forEach(sd => {
+                  snapshot[col][docRef.id]._subcols[sub][sd.id] = sd.data();
+                });
+              }
+            } catch(e) { /* sub-col sense permisos o inexistent */ }
+          }
+          if (!Object.keys(snapshot[col][docRef.id]._subcols).length) {
+            delete snapshot[col][docRef.id]._subcols;
+          }
+        }
+      }
+    } catch(e) {
+      snapshot[col] = { _error: e.message };
     }
-    const dataStr = JSON.stringify(snapshot);
-    // Dividir en chunks si > 1MB
-    if (dataStr.length < 900000) {
-      await db.collection('_backups').add({
-        timestamp: firebase.firestore.FieldValue.serverTimestamp(),
-        data: dataStr, versio: '1.0',
-        creador: firebase.auth().currentUser?.email||'sistema'
-      });
-    }
-    window.mostrarToast('✅ Còpia realitzada', 3000);
+    done++;
+    onProgress?.(Math.round((done/totalCols)*100), col);
+  }
+
+  return snapshot;
+};
+
+// Descarregar JSON al navegador
+window.descarregarBackup = function(snapshot) {
+  const dataStr = JSON.stringify(snapshot, null, 2);
+  const blob = new Blob([dataStr], { type: 'application/json' });
+  const url  = URL.createObjectURL(blob);
+  const a    = document.createElement('a');
+  const data = snapshot._meta?.timestamp?.slice(0,10) || new Date().toISOString().slice(0,10);
+  a.href = url;
+  a.download = `comentaIA_backup_${data}.json`;
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(url), 3000);
+};
+
+// Enviar backup per email via EmailJS
+window.enviarBackupEmail = async function(snapshot, destinatari) {
+  // Comprova que emailjs està carregat
+  if (typeof emailjs === 'undefined') {
+    throw new Error('EmailJS no carregat. Afegeix el script a index.html');
+  }
+  const cfgSnap = await window.db.collection('_sistema').doc('emailjs').get().catch(()=>null);
+  const cfg = cfgSnap?.data() || {};
+  if (!cfg.serviceId || !cfg.templateId || !cfg.publicKey) {
+    throw new Error('EmailJS no configurat. Configura\'l des del panell d\'administrador.');
+  }
+
+  const dataStr = JSON.stringify(snapshot, null, 2);
+  const kb = Math.round(dataStr.length / 1024);
+  const data = snapshot._meta?.timestamp?.slice(0,10) || new Date().toISOString().slice(0,10);
+
+  // EmailJS té límit de ~50KB per missatge — adjuntem resum + avís de descàrrega
+  const resum = {
+    data: data,
+    creador: snapshot._meta?.creador,
+    cols: Object.keys(snapshot).filter(k=>!k.startsWith('_')).map(col => ({
+      col,
+      docs: Object.keys(snapshot[col]||{}).length
+    })),
+    mida_kb: kb,
+  };
+
+  await emailjs.init(cfg.publicKey);
+  await emailjs.send(cfg.serviceId, cfg.templateId, {
+    to_email: destinatari,
+    subject: `📦 Backup ComentaIA — ${data}`,
+    resum: JSON.stringify(resum, null, 2),
+    mida: `${kb} KB`,
+    data_backup: data,
+    creador: snapshot._meta?.creador || 'Sistema',
+  });
+};
+
+// Realitzar còpia completa: genera + descarrega + envia email si configurat
+window.realitzarCopiaSeguretat = async function(silenciosa = false) {
+  const rols = window._userRols || [];
+  if (!rols.some(r=>['admin','superadmin'].includes(r))) return;
+
+  try {
+    if (!silenciosa) window.mostrarToast('💾 Generant còpia...', 60000);
+
+    const snapshot = await window.generarBackupJSON();
+    window.descarregarBackup(snapshot);
+
+    // Intentar enviar per email (si configurat) sense bloquejar
+    try {
+      const cfgSnap = await window.db.collection('_sistema').doc('emailjs').get();
+      const cfg = cfgSnap?.data() || {};
+      if (cfg.serviceId && cfg.adminEmails?.length) {
+        for (const mail of cfg.adminEmails) {
+          await window.enviarBackupEmail(snapshot, mail);
+        }
+      }
+    } catch(e) { /* email opcional, no bloquejar */ }
+
+    if (!silenciosa) window.mostrarToast('✅ Còpia generada i descarregada!', 4000);
+    return snapshot;
   } catch(e) {
-    console.warn('Còpia seguretat:', e.message);
+    console.warn('CòpiaSeguretat:', e.message);
+    if (!silenciosa) window.mostrarToast('❌ Error: ' + e.message, 4000);
   }
 };
 
-// Còpia setmanal (només admin)
+// Còpia setmanal automàtica (silenciosa, només descarrega)
 firebase.auth().onAuthStateChanged(user => {
   if (!user) return;
   setTimeout(() => {
     if (!window._userRols?.some(r=>['admin','superadmin'].includes(r))) return;
-    const KEY = '_ultima_copia';
+    const KEY = '_ultima_copia_v2';
     const ara = Date.now();
     const ultima = parseInt(localStorage.getItem(KEY)||'0');
     if (ara - ultima > 7*24*60*60*1000) {
-      window.realitzarCopiaSeguretat?.().then(()=>localStorage.setItem(KEY,String(ara)));
+      window.realitzarCopiaSeguretat(true)
+        .then(() => localStorage.setItem(KEY, String(ara)))
+        .catch(() => {});
     }
-  }, 5000);
+  }, 8000);
 });
 
 console.log('✅ secretaria.js v2: inicialitzat');
