@@ -9,6 +9,7 @@
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
   <script src="https://cdn.tailwindcss.com"></script>
   <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <script src="https://cdn.jsdelivr.net/npm/@emailjs/browser@4/dist/email.min.js"></script>
   <style>
     body { font-family: 'Outfit', sans-serif; background: #f4f4f8; }
     .card { background:#fff; border-radius:12px; border:1px solid #e8e8f0; padding:24px; }
@@ -77,11 +78,140 @@
   </div>
 
   <div class="card" style="margin-bottom:20px;">
-  <h2 style="font-size:17px;font-weight:700;color:#0f0f1a;margin-bottom:16px;">Còpia de seguretat</h2>
-  <div style="display:flex;gap:8px;flex-wrap:wrap;">
-    <button id="btnBackupNow" class="btn btn-purple">Fer backup manual</button>
-    <button id="btnRestoreBackup" class="btn btn-yellow">Recuperar còpia</button>
-    <span id="lastBackupInfo" style="font-size:13px;color:#555;align-self:center;"></span>
+  <h2 style="font-size:17px;font-weight:700;color:#0f0f1a;margin-bottom:4px;">💾 Còpia de seguretat</h2>
+  <p style="font-size:13px;color:#7c7c9a;margin-bottom:16px;">El backup es genera localment i es descarrega com a JSON. Cap escriptura a Firestore.</p>
+
+  <!-- Tabs -->
+  <div style="display:flex;gap:2px;margin-bottom:16px;border-bottom:2px solid #f0f0f6;">
+    <button class="backup-tab active" data-tab="fer" style="padding:8px 16px;background:none;border:none;font-size:13px;font-weight:600;cursor:pointer;color:#7c3aed;border-bottom:2px solid #7c3aed;margin-bottom:-2px;">📦 Fer backup</button>
+    <button class="backup-tab" data-tab="restaurar" style="padding:8px 16px;background:none;border:none;font-size:13px;font-weight:600;cursor:pointer;color:#9ca3af;border-bottom:2px solid transparent;margin-bottom:-2px;">🔄 Restaurar</button>
+    <button class="backup-tab" data-tab="config" style="padding:8px 16px;background:none;border:none;font-size:13px;font-weight:600;cursor:pointer;color:#9ca3af;border-bottom:2px solid transparent;margin-bottom:-2px;">⚙️ Config email</button>
+  </div>
+
+  <!-- TAB: FER BACKUP -->
+  <div id="tab-fer">
+    <div style="background:#f9f9fb;border-radius:10px;padding:14px;margin-bottom:14px;">
+      <div style="font-size:13px;font-weight:600;color:#374151;margin-bottom:10px;">📋 Col·leccions incloses</div>
+      <div id="colsCheckboxes" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:6px;">
+        <!-- generat per JS -->
+      </div>
+      <div style="margin-top:8px;display:flex;gap:8px;">
+        <button onclick="selectAllCols(true)" class="btn btn-sm btn-gray">✅ Totes</button>
+        <button onclick="selectAllCols(false)" class="btn btn-sm btn-gray">☐ Cap</button>
+      </div>
+    </div>
+
+    <!-- Barra de progrés -->
+    <div id="backupProgress" style="display:none;margin-bottom:14px;">
+      <div style="font-size:12px;color:#6b7280;margin-bottom:4px;" id="backupProgressLabel">Carregant...</div>
+      <div style="background:#e5e7eb;border-radius:99px;height:8px;overflow:hidden;">
+        <div id="backupProgressBar" style="background:#7c3aed;height:100%;width:0%;transition:width .3s;border-radius:99px;"></div>
+      </div>
+    </div>
+
+    <!-- Opcions d'enviament -->
+    <div style="background:#ede9fe;border-radius:10px;padding:12px;margin-bottom:14px;">
+      <label style="display:flex;align-items:center;gap:8px;font-size:13px;color:#4c1d95;cursor:pointer;">
+        <input type="checkbox" id="chkEnviarEmail" style="width:15px;height:15px;accent-color:#7c3aed;">
+        <span>Enviar còpia per email</span>
+      </label>
+      <div id="emailDestForm" style="display:none;margin-top:10px;">
+        <div style="font-size:12px;color:#6b7280;margin-bottom:6px;">Destinataris (separats per comes):</div>
+        <input id="inpEmailsDest" type="text" placeholder="admin@escola.cat, director@escola.cat"
+          style="width:100%;box-sizing:border-box;padding:8px 10px;border:1.5px solid #c4b5fd;border-radius:8px;font-size:13px;outline:none;">
+        <div style="font-size:11px;color:#9ca3af;margin-top:4px;">⚠️ Requereix EmailJS configurat a la pestanya "Config email"</div>
+      </div>
+    </div>
+
+    <div style="display:flex;gap:8px;flex-wrap:wrap;">
+      <button id="btnBackupNow" class="btn btn-purple">
+        📥 Generar i descarregar backup
+      </button>
+      <span id="backupStatus" style="font-size:12px;color:#6b7280;align-self:center;"></span>
+    </div>
+  </div>
+
+  <!-- TAB: RESTAURAR -->
+  <div id="tab-restaurar" style="display:none;">
+    <div style="background:#fef3c7;border:1.5px solid #fcd34d;border-radius:10px;padding:12px;margin-bottom:14px;">
+      <div style="font-size:13px;font-weight:700;color:#92400e;">⚠️ Atenció</div>
+      <div style="font-size:12px;color:#78350f;margin-top:4px;">La restauració sobreescriu dades existents. Fes un backup primer si no en tens un de recent.</div>
+    </div>
+
+    <!-- Pujar fitxer JSON -->
+    <div style="margin-bottom:16px;">
+      <div style="font-size:13px;font-weight:600;color:#374151;margin-bottom:8px;">1. Selecciona el fitxer de backup (.json)</div>
+      <input type="file" id="inpBackupFile" accept=".json"
+        style="width:100%;padding:10px;border:2px dashed #c4b5fd;border-radius:10px;font-size:13px;cursor:pointer;background:#f9fafb;box-sizing:border-box;">
+      <div id="backupFileMeta" style="font-size:12px;color:#6b7280;margin-top:6px;"></div>
+    </div>
+
+    <!-- Selector de col·leccions -->
+    <div id="restoreSelectorWrap" style="display:none;margin-bottom:16px;">
+      <div style="font-size:13px;font-weight:600;color:#374151;margin-bottom:8px;">2. Tria quines col·leccions restaurar</div>
+      <div id="restoreColsGrid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:6px;background:#f9f9fb;padding:12px;border-radius:10px;margin-bottom:8px;">
+        <!-- generat per JS -->
+      </div>
+      <div style="display:flex;gap:8px;margin-bottom:12px;">
+        <button onclick="selectAllRestoreCols(true)" class="btn btn-sm btn-gray">✅ Totes</button>
+        <button onclick="selectAllRestoreCols(false)" class="btn btn-sm btn-gray">☐ Cap</button>
+      </div>
+
+      <!-- Preview estadístic -->
+      <div id="restorePreview" style="background:#f9fafb;border-radius:10px;padding:12px;margin-bottom:12px;overflow-x:auto;"></div>
+
+      <!-- Barra restauració -->
+      <div id="restoreProgress" style="display:none;margin-bottom:12px;">
+        <div style="font-size:12px;color:#6b7280;margin-bottom:4px;" id="restoreProgressLabel">Restaurant...</div>
+        <div style="background:#e5e7eb;border-radius:99px;height:8px;overflow:hidden;">
+          <div id="restoreProgressBar" style="background:#d97706;height:100%;width:0%;transition:width .3s;border-radius:99px;"></div>
+        </div>
+      </div>
+
+      <button id="btnRestoreNow" class="btn btn-yellow">🔄 Restaurar col·leccions seleccionades</button>
+    </div>
+  </div>
+
+  <!-- TAB: CONFIG EMAIL -->
+  <div id="tab-config" style="display:none;">
+    <div style="background:#f0fdf4;border:1.5px solid #86efac;border-radius:10px;padding:12px;margin-bottom:14px;">
+      <div style="font-size:13px;font-weight:700;color:#166534;">ℹ️ Com configurar EmailJS</div>
+      <ol style="font-size:12px;color:#14532d;margin:8px 0 0 16px;line-height:1.8;">
+        <li>Crea un compte gratuït a <strong>emailjs.com</strong></li>
+        <li>Crea un "Email Service" (Gmail, Outlook...)</li>
+        <li>Crea un "Email Template" amb les variables: <code>{{subject}}</code>, <code>{{resum}}</code>, <code>{{mida}}</code>, <code>{{data_backup}}</code></li>
+        <li>Copia les claus aquí baix i guarda</li>
+        <li>Afegeix a index.html: <code>&lt;script src="https://cdn.jsdelivr.net/npm/@emailjs/browser@4/dist/email.min.js"&gt;&lt;/script&gt;</code></li>
+      </ol>
+    </div>
+
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px;">
+      <div>
+        <label style="font-size:12px;font-weight:600;color:#374151;display:block;margin-bottom:4px;">Service ID</label>
+        <input id="ejsServiceId" type="text" placeholder="service_xxxxxx"
+          style="width:100%;box-sizing:border-box;padding:9px 11px;border:1.5px solid #e5e7eb;border-radius:9px;font-size:13px;outline:none;">
+      </div>
+      <div>
+        <label style="font-size:12px;font-weight:600;color:#374151;display:block;margin-bottom:4px;">Template ID</label>
+        <input id="ejsTemplateId" type="text" placeholder="template_xxxxxx"
+          style="width:100%;box-sizing:border-box;padding:9px 11px;border:1.5px solid #e5e7eb;border-radius:9px;font-size:13px;outline:none;">
+      </div>
+    </div>
+    <div style="margin-bottom:12px;">
+      <label style="font-size:12px;font-weight:600;color:#374151;display:block;margin-bottom:4px;">Public Key</label>
+      <input id="ejsPublicKey" type="text" placeholder="xxxxxxxxxxxxxxxxx"
+        style="width:100%;box-sizing:border-box;padding:9px 11px;border:1.5px solid #e5e7eb;border-radius:9px;font-size:13px;outline:none;">
+    </div>
+    <div style="margin-bottom:14px;">
+      <label style="font-size:12px;font-weight:600;color:#374151;display:block;margin-bottom:4px;">Emails admins (separats per comes)</label>
+      <input id="ejsAdminEmails" type="text" placeholder="admin@escola.cat, director@escola.cat"
+        style="width:100%;box-sizing:border-box;padding:9px 11px;border:1.5px solid #e5e7eb;border-radius:9px;font-size:13px;outline:none;">
+    </div>
+    <div style="display:flex;gap:8px;">
+      <button id="btnSaveEjsCfg" class="btn btn-purple">💾 Guardar configuració</button>
+      <button id="btnTestEjs" class="btn btn-gray">🧪 Enviar email de prova</button>
+    </div>
+    <div id="ejsStatus" style="font-size:12px;margin-top:10px;min-height:16px;"></div>
   </div>
 </div>
   
@@ -136,25 +266,371 @@ function mostrarToast(msg, durada=2000) {
 }
   
   
-  async function loadLastBackupInfo() {
+
+// ═══════════════════════════════════════════════
+// BACKUP / RESTORE — admin.html
+// ═══════════════════════════════════════════════
+
+const BACKUP_COLS_ADMIN = [
+  'professors','classes','alumnes',
+  'grups_centre','materies_centre','nivells_centre',
+  'activitats','avaluacio_centre','tutoria_config',
+  'ultracomentator_plantilles','_sistema','_peticions_usuari',
+];
+
+const BACKUP_SUBCOLS_ADMIN = {
+  professors: ['logins'],
+  classes:    ['comentaris','periodes','alumnes'],
+};
+
+// ── Tabs ──────────────────────────────────────
+document.querySelectorAll('.backup-tab').forEach(tab => {
+  tab.addEventListener('click', () => {
+    document.querySelectorAll('.backup-tab').forEach(t => {
+      t.style.color = '#9ca3af'; t.style.borderBottomColor = 'transparent';
+    });
+    tab.style.color = '#7c3aed'; tab.style.borderBottomColor = '#7c3aed';
+    ['fer','restaurar','config'].forEach(id => {
+      const el = document.getElementById('tab-'+id);
+      if (el) el.style.display = (id === tab.dataset.tab) ? '' : 'none';
+    });
+  });
+});
+
+// ── Checkbox columnes backup ──────────────────
+function renderColsCheckboxes() {
+  const cont = document.getElementById('colsCheckboxes');
+  if (!cont) return;
+  cont.innerHTML = BACKUP_COLS_ADMIN.map(col => `
+    <label style="display:flex;align-items:center;gap:6px;font-size:13px;cursor:pointer;
+                  background:#fff;border:1.5px solid #e5e7eb;border-radius:7px;padding:6px 10px;">
+      <input type="checkbox" class="chk-col-backup" value="${col}" checked
+        style="width:14px;height:14px;accent-color:#7c3aed;">
+      <span style="font-family:monospace;font-size:12px;">${col}</span>
+    </label>
+  `).join('');
+}
+renderColsCheckboxes();
+
+function selectAllCols(val) {
+  document.querySelectorAll('.chk-col-backup').forEach(c => c.checked = val);
+}
+
+// ── Email checkbox toggle ──────────────────
+document.getElementById('chkEnviarEmail')?.addEventListener('change', e => {
+  document.getElementById('emailDestForm').style.display = e.target.checked ? '' : 'none';
+});
+
+// ── Generar i descarregar backup ─────────────
+document.getElementById('btnBackupNow').onclick = async () => {
+  const cols = [...document.querySelectorAll('.chk-col-backup:checked')].map(c=>c.value);
+  if (!cols.length) { mostrarToast('⚠️ Selecciona almenys una col·lecció'); return; }
+
+  const btn = document.getElementById('btnBackupNow');
+  const progWrap = document.getElementById('backupProgress');
+  const progBar  = document.getElementById('backupProgressBar');
+  const progLabel= document.getElementById('backupProgressLabel');
+  const status   = document.getElementById('backupStatus');
+
+  btn.disabled = true; btn.textContent = '⏳ Generant...';
+  progWrap.style.display = ''; progBar.style.width = '0%';
+  status.textContent = '';
+
   try {
-    const snap = await db.collection('_backups')
-      .orderBy('timestamp', 'desc')
-      .limit(1)
-      .get();
-    if (snap.empty) {
-      document.getElementById('lastBackupInfo').textContent = 'Cap còpia realitzada encara.';
-      return;
+    const snapshot = { _meta: {
+      versio: '2.0', app: 'ComentaIA',
+      timestamp: new Date().toISOString(),
+      creador: auth.currentUser?.email || 'admin',
+    }};
+
+    for (let i=0; i<cols.length; i++) {
+      const col = cols[i];
+      const pct = Math.round(((i+1)/cols.length)*100);
+      progLabel.textContent = `Exportant ${col}... (${i+1}/${cols.length})`;
+      progBar.style.width = pct + '%';
+      try {
+        const snap = await db.collection(col).get();
+        snapshot[col] = {};
+        for (const docRef of snap.docs) {
+          snapshot[col][docRef.id] = docRef.data();
+          if (BACKUP_SUBCOLS_ADMIN[col]) {
+            snapshot[col][docRef.id]._subcols = {};
+            for (const sub of BACKUP_SUBCOLS_ADMIN[col]) {
+              try {
+                const subSnap = await docRef.ref.collection(sub).get();
+                if (!subSnap.empty) {
+                  snapshot[col][docRef.id]._subcols[sub] = {};
+                  subSnap.docs.forEach(sd => {
+                    snapshot[col][docRef.id]._subcols[sub][sd.id] = sd.data();
+                  });
+                }
+              } catch(e) {}
+            }
+            if (!Object.keys(snapshot[col][docRef.id]._subcols).length) {
+              delete snapshot[col][docRef.id]._subcols;
+            }
+          }
+        }
+      } catch(e) {
+        snapshot[col] = { _error: e.message };
+      }
     }
-    const d = snap.docs[0].data();
-    const date = d.timestamp?.toDate?.().toLocaleString('ca') || '-';
-    document.getElementById('lastBackupInfo').textContent = `Últim backup: ${date} per ${d.creador}`;
+
+    progLabel.textContent = '✅ Finalitzat! Descarregant...';
+    progBar.style.width = '100%';
+
+    // Descarregar JSON
+    const dataStr = JSON.stringify(snapshot, null, 2);
+    const blob = new Blob([dataStr], {type:'application/json'});
+    const url  = URL.createObjectURL(blob);
+    const a    = document.createElement('a');
+    const data = snapshot._meta.timestamp.slice(0,10);
+    a.href = url; a.download = `comentaIA_backup_${data}.json`;
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(url), 3000);
+
+    const kb = Math.round(dataStr.length/1024);
+    status.textContent = `✅ ${kb} KB · ${cols.length} col·leccions · ${data}`;
+
+    // Enviar email si marcat
+    const enviarEmail = document.getElementById('chkEnviarEmail')?.checked;
+    if (enviarEmail) {
+      const mails = (document.getElementById('inpEmailsDest')?.value||'')
+        .split(',').map(m=>m.trim()).filter(Boolean);
+      if (mails.length && typeof emailjs !== 'undefined') {
+        try {
+          const cfgSnap = await db.collection('_sistema').doc('emailjs').get();
+          const cfg = cfgSnap.data() || {};
+          if (cfg.serviceId && cfg.templateId && cfg.publicKey) {
+            await emailjs.init(cfg.publicKey);
+            for (const mail of mails) {
+              await emailjs.send(cfg.serviceId, cfg.templateId, {
+                to_email: mail, subject: `📦 Backup ComentaIA — ${data}`,
+                resum: JSON.stringify({cols, docs: Object.fromEntries(cols.map(c=>[c,Object.keys(snapshot[c]||{}).length]))}, null, 2),
+                mida: `${kb} KB`, data_backup: data, creador: auth.currentUser?.email,
+              });
+            }
+            mostrarToast('✅ Email enviat a ' + mails.join(', '), 3000);
+          }
+        } catch(e) { mostrarToast('⚠️ Error email: ' + e.message, 4000); }
+      } else if (!mails.length) {
+        mostrarToast('⚠️ Cap email de destinatari especificat');
+      }
+    }
+
   } catch(e) {
-    console.error('loadLastBackupInfo:', e);
-    document.getElementById('lastBackupInfo').textContent = 'Error carregant info backup';
+    mostrarToast('❌ Error: ' + e.message, 5000);
+    progLabel.textContent = '❌ Error: ' + e.message;
+  } finally {
+    btn.disabled = false; btn.textContent = '📥 Generar i descarregar backup';
+    setTimeout(() => { progWrap.style.display = 'none'; }, 3000);
+  }
+};
+
+// ── Restaurar: carregar fitxer ────────────────
+let _backupData = null;
+
+document.getElementById('inpBackupFile')?.addEventListener('change', e => {
+  const file = e.target.files[0]; if (!file) return;
+  const reader = new FileReader();
+  reader.onload = ev => {
+    try {
+      _backupData = JSON.parse(ev.target.result);
+      const meta = _backupData._meta || {};
+      const cols = Object.keys(_backupData).filter(k => !k.startsWith('_'));
+      const totalDocs = cols.reduce((s,c) => s + Object.keys(_backupData[c]||{}).length, 0);
+      document.getElementById('backupFileMeta').innerHTML = `
+        <span style="color:#059669;font-weight:600;">✅ Fitxer vàlid</span> ·
+        ${meta.timestamp?.slice(0,19)||'data desconeguda'} · creat per ${meta.creador||'?'} ·
+        ${cols.length} col·leccions · ${totalDocs} documents
+      `;
+      renderRestoreCols(cols);
+      document.getElementById('restoreSelectorWrap').style.display = '';
+    } catch(e) {
+      document.getElementById('backupFileMeta').innerHTML = `<span style="color:#ef4444;">❌ Fitxer invàlid: ${e.message}</span>`;
+      _backupData = null;
+    }
+  };
+  reader.readAsText(file);
+});
+
+function renderRestoreCols(cols) {
+  const cont = document.getElementById('restoreColsGrid');
+  if (!cont) return;
+  cont.innerHTML = cols.map(col => {
+    const ndocs = Object.keys(_backupData[col]||{}).length;
+    return `
+      <label style="display:flex;align-items:center;gap:6px;font-size:13px;cursor:pointer;
+                    background:#fff;border:1.5px solid #e5e7eb;border-radius:7px;padding:6px 10px;">
+        <input type="checkbox" class="chk-col-restore" value="${col}" checked
+          style="width:14px;height:14px;accent-color:#d97706;">
+        <div>
+          <span style="font-family:monospace;font-size:12px;">${col}</span>
+          <span style="font-size:11px;color:#9ca3af;"> · ${ndocs} docs</span>
+        </div>
+      </label>`;
+  }).join('');
+
+  // Preview taula
+  const prev = document.getElementById('restorePreview');
+  prev.innerHTML = `
+    <table style="width:100%;border-collapse:collapse;font-size:12px;">
+      <thead><tr style="background:#f3f4f6;">
+        <th style="padding:6px 8px;text-align:left;">Col·lecció</th>
+        <th style="padding:6px 8px;text-align:right;">Documents</th>
+        <th style="padding:6px 8px;text-align:left;">Estat</th>
+      </tr></thead>
+      <tbody>
+        ${cols.map(col => {
+          const ndocs = Object.keys(_backupData[col]||{}).length;
+          const hasErr = _backupData[col]?._error;
+          return `<tr style="border-bottom:1px solid #f3f4f6;">
+            <td style="padding:5px 8px;font-family:monospace;">${col}</td>
+            <td style="padding:5px 8px;text-align:right;color:#374151;">${ndocs}</td>
+            <td style="padding:5px 8px;">${hasErr
+              ? `<span style="color:#ef4444;font-size:11px;">⚠️ ${_backupData[col]._error}</span>`
+              : '<span style="color:#059669;font-size:11px;">✅ OK</span>'}</td>
+          </tr>`;
+        }).join('')}
+      </tbody>
+    </table>`;
+
+  document.querySelectorAll('.chk-col-restore').forEach(c => c.addEventListener('change', updateRestorePreview));
+}
+
+function updateRestorePreview() {
+  // Refresc visual simple
+}
+
+function selectAllRestoreCols(val) {
+  document.querySelectorAll('.chk-col-restore').forEach(c => c.checked = val);
+}
+
+document.getElementById('btnRestoreNow')?.addEventListener('click', async () => {
+  if (!_backupData) return;
+  const cols = [...document.querySelectorAll('.chk-col-restore:checked')].map(c=>c.value);
+  if (!cols.length) { mostrarToast('⚠️ Selecciona almenys una col·lecció'); return; }
+
+  const totalDocs = cols.reduce((s,c) => s + Object.keys(_backupData[c]||{}).length, 0);
+  if (!confirm(`Restaurar ${cols.length} col·leccions (${totalDocs} documents)?\n\nAixò SOBREESCRIURÀ les dades actuals. Continuar?`)) return;
+
+  const btn = document.getElementById('btnRestoreNow');
+  const progWrap  = document.getElementById('restoreProgress');
+  const progBar   = document.getElementById('restoreProgressBar');
+  const progLabel = document.getElementById('restoreProgressLabel');
+
+  btn.disabled = true; btn.textContent = '⏳ Restaurant...';
+  progWrap.style.display = ''; progBar.style.width = '0%';
+
+  let doneTotal = 0;
+  try {
+    for (let ci=0; ci<cols.length; ci++) {
+      const col = cols[ci];
+      const docs = _backupData[col] || {};
+      const docIds = Object.keys(docs).filter(id => id !== '_error');
+      progLabel.textContent = `Restaurant ${col}... (${ci+1}/${cols.length})`;
+
+      // Escriure en batches de 400
+      const BATCH_SIZE = 400;
+      for (let i=0; i<docIds.length; i+=BATCH_SIZE) {
+        const batch = db.batch();
+        const chunk = docIds.slice(i, i+BATCH_SIZE);
+        for (const id of chunk) {
+          const docData = {...docs[id]};
+          const subcols = docData._subcols;
+          delete docData._subcols;
+          batch.set(db.collection(col).doc(id), docData);
+          // Sub-col·leccions: s'han de fer fora del batch principal
+          if (subcols) {
+            for (const sub of Object.keys(subcols)) {
+              for (const subId of Object.keys(subcols[sub])) {
+                try {
+                  await db.collection(col).doc(id).collection(sub).doc(subId).set(subcols[sub][subId]);
+                } catch(e) {}
+              }
+            }
+          }
+        }
+        await batch.commit();
+        doneTotal += chunk.length;
+        const pct = Math.round((doneTotal/totalDocs)*100);
+        progBar.style.width = pct + '%';
+      }
+    }
+
+    progLabel.textContent = '✅ Restauració completada!';
+    progBar.style.width = '100%';
+    mostrarToast(`✅ Restauració completada: ${doneTotal} documents`, 4000);
+
+  } catch(e) {
+    mostrarToast('❌ Error: ' + e.message, 5000);
+    progLabel.textContent = '❌ Error: ' + e.message;
+  } finally {
+    btn.disabled = false; btn.textContent = '🔄 Restaurar col·leccions seleccionades';
+    setTimeout(() => { progWrap.style.display = 'none'; }, 4000);
+  }
+});
+
+// ── Config EmailJS ─────────────────────────────
+async function carregarCfgEmailJS() {
+  try {
+    const snap = await db.collection('_sistema').doc('emailjs').get();
+    if (snap.exists) {
+      const d = snap.data();
+      if (d.serviceId) document.getElementById('ejsServiceId').value = d.serviceId;
+      if (d.templateId) document.getElementById('ejsTemplateId').value = d.templateId;
+      if (d.publicKey) document.getElementById('ejsPublicKey').value = d.publicKey;
+      if (d.adminEmails) document.getElementById('ejsAdminEmails').value = (d.adminEmails||[]).join(', ');
+    }
+  } catch(e) {}
+}
+carregarCfgEmailJS();
+
+document.getElementById('btnSaveEjsCfg')?.addEventListener('click', async () => {
+  const sId  = document.getElementById('ejsServiceId').value.trim();
+  const tId  = document.getElementById('ejsTemplateId').value.trim();
+  const pk   = document.getElementById('ejsPublicKey').value.trim();
+  const mails = (document.getElementById('ejsAdminEmails').value||'').split(',').map(m=>m.trim()).filter(Boolean);
+  const st = document.getElementById('ejsStatus');
+  try {
+    await db.collection('_sistema').doc('emailjs').set({ serviceId:sId, templateId:tId, publicKey:pk, adminEmails:mails }, { merge:true });
+    st.innerHTML = '<span style="color:#059669;">✅ Configuració guardada</span>';
+  } catch(e) { st.innerHTML = `<span style="color:#ef4444;">❌ ${e.message}</span>`; }
+});
+
+document.getElementById('btnTestEjs')?.addEventListener('click', async () => {
+  const st = document.getElementById('ejsStatus');
+  const pk = document.getElementById('ejsPublicKey').value.trim();
+  const sId = document.getElementById('ejsServiceId').value.trim();
+  const tId = document.getElementById('ejsTemplateId').value.trim();
+  const mail = auth.currentUser?.email;
+  if (!pk || !sId || !tId) { st.innerHTML = '<span style="color:#ef4444;">⚠️ Omple tots els camps primer</span>'; return; }
+  if (typeof emailjs === 'undefined') { st.innerHTML = '<span style="color:#ef4444;">⚠️ EmailJS no carregat al HTML</span>'; return; }
+  try {
+    st.innerHTML = '<span style="color:#6b7280;">⏳ Enviant...</span>';
+    await emailjs.init(pk);
+    await emailjs.send(sId, tId, {
+      to_email: mail, subject: '🧪 Test ComentaIA EmailJS',
+      resum: 'Prova de configuració EmailJS', mida: '0 KB',
+      data_backup: new Date().toISOString().slice(0,10), creador: mail,
+    });
+    st.innerHTML = `<span style="color:#059669;">✅ Email de prova enviat a ${mail}</span>`;
+  } catch(e) { st.innerHTML = `<span style="color:#ef4444;">❌ ${e.message}</span>`; }
+});
+
+// ── Eliminar backup antic a Firestore (migració) ──
+async function loadLastBackupInfo() {
+  // Ja no s'usa Firestore per backups — mostrar info de l'últim backup local
+  const KEY = '_ultima_copia_v2';
+  const ultima = parseInt(localStorage.getItem(KEY)||'0');
+  const el = document.getElementById('backupStatus');
+  if (el && ultima) {
+    el.textContent = `Últim backup local: ${new Date(ultima).toLocaleString('ca')}`;
   }
 }
-loadLastBackupInfo();  
+loadLastBackupInfo();
+
+
 
 // Auth check
 auth.onAuthStateChanged(async user => {
@@ -307,64 +783,8 @@ document.getElementById('btnSendEmail').onclick = () => {
 
 
   
-  document.getElementById('btnBackupNow').onclick = async () => {
-  try {
-    mostrarToast('💾 Còpia de seguretat...', 2000);
-    const cols = ['professors','classes','alumnes','grups_centre','materies_centre','nivells_centre'];
-    const snapshot = {};
-    for (const col of cols) {
-      const snap = await db.collection(col).get();
-      snapshot[col] = {};
-      snap.docs.forEach(d => { snapshot[col][d.id] = d.data(); });
-    }
-    const dataStr = JSON.stringify(snapshot);
-    await db.collection('_backups').add({
-      timestamp: firebase.firestore.FieldValue.serverTimestamp(),
-      data: dataStr,
-      versio: '1.0',
-      creador: auth.currentUser.email
-    });
-    mostrarToast('✅ Backup realitzat!', 3000);
-    loadLastBackupInfo();
-  } catch(e) {
-    alert('Error realitzant backup: ' + e.message);
-  }
-};
 
-  document.getElementById('btnRestoreBackup').onclick = async () => {
-  const snap = await db.collection('_backups').orderBy('timestamp', 'desc').get();
-  if (snap.empty) return alert('No hi ha còpies per recuperar.');
-  
-  const options = snap.docs.map((d,i) => {
-    const info = d.data();
-    const date = info.timestamp?.toDate?.().toLocaleString('ca') || '-';
-    return `${i+1}. ${date} (${info.creador})`;
-  }).join('\n');
 
-  const choice = prompt(`Tria la còpia a restaurar:\n${options}`);
-  const idx = parseInt(choice)-1;
-  if (isNaN(idx) || idx<0 || idx>=snap.docs.length) return alert('Selecció invàlida');
-  
-  const backupData = JSON.parse(snap.docs[idx].data().data);
-  
-  // Preguntar quines col·leccions restaurar
-  const colList = Object.keys(backupData);
-  const colsToRestore = prompt(`Quines col·leccions vols restaurar? Separa amb comes.\nOpcions: ${colList.join(',')}`);
-  if (!colsToRestore) return;
-  const colsArray = colsToRestore.split(',').map(c=>c.trim()).filter(c=>colList.includes(c));
-
-  if (!confirm(`Segur que vols sobreescriure les col·leccions: ${colsArray.join(', ')}?`)) return;
-
-  for (const col of colsArray) {
-    const docs = backupData[col];
-    for (const id in docs) {
-      await db.collection(col).doc(id).set(docs[id]);
-    }
-  }
-
-  alert('Restauració completada.');
-};
-  
 </script>
 </body>
 </html>
