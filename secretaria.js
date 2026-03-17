@@ -1838,11 +1838,8 @@ function modalNouUsuari(onCreat) {
 
         const cred = await auth2.createUserWithEmailAndPassword(email, pw);
         const uid  = cred.user.uid;
-
-        // Tancar sessió de la instància secundària (no afecta l'admin)
         await auth2.signOut();
 
-        // Crear document a Firestore
         await window.db.collection('professors').doc(uid).set({
           nom,
           email,
@@ -1879,7 +1876,7 @@ function modalNouUsuari(onCreat) {
       if (!usuaris.length) { window.mostrarToast('⚠️ Cap usuari detectat'); return false; }
 
       const errEl = document.getElementById('errUser');
-      errEl && (errEl.textContent = `⏳ Creant ${usuaris.length} usuaris...`);
+      if (errEl) errEl.textContent = `⏳ Creant ${usuaris.length} usuaris...`;
 
       const app2 = firebase.apps.find(a=>a.name==='_sec_create') ||
                    firebase.initializeApp(firebase.app().options, '_sec_create');
@@ -1933,7 +1930,6 @@ function modalNouUsuari(onCreat) {
 
     document.getElementById('inpNomUser')?.focus();
 
-    // Import Excel
     const inpExcel   = document.getElementById('inpExcelUsuaris');
     const seccioCols = document.getElementById('seccioCols');
     const previewDiv = document.getElementById('previewImport');
@@ -3140,48 +3136,180 @@ function esH(s) {
 }
 
 /* ══════════════════════════════════════════════════════
-   CÒPIA DE SEGURETAT
+   CÒPIA DE SEGURETAT v2
+   - Genera JSON local (sense escriure a Firestore)
+   - Descàrrega directa al navegador
+   - Opció d'enviar per email via EmailJS
+   - Col·leccions completes de l'app
 ══════════════════════════════════════════════════════ */
-window.realitzarCopiaSeguretat = async function() {
-  const rols = window._userRols || [];
-  if (!rols.some(r=>['admin','superadmin'].includes(r))) return; // Només admin
-  try {
-    window.mostrarToast('💾 Còpia de seguretat...', 2000);
-    const db = window.db;
-    const cols = ['professors','classes','alumnes','grups_centre','materies_centre','nivells_centre'];
-    const snapshot = {};
-    for (const col of cols) {
+
+// Totes les col·leccions de l'aplicació
+const BACKUP_COLS = [
+  'professors',
+  'classes',
+  'alumnes',
+  'grups_centre',
+  'materies_centre',
+  'nivells_centre',
+  'activitats',
+  'avaluacio_centre',
+  'tutoria_config',
+  'ultracomentator_plantilles',
+  '_sistema',
+  '_peticions_usuari',
+];
+
+// Col·leccions que tenen sub-col·leccions conegudes
+const BACKUP_SUBCOLS = {
+  professors: ['logins'],
+  classes: ['comentaris', 'periodes', 'alumnes'],
+};
+
+// Funció principal: exporta tot a JSON
+window.generarBackupJSON = async function(onProgress) {
+  const db = window.db;
+  const snapshot = {
+    _meta: {
+      versio: '2.0',
+      app: 'ComentaIA',
+      timestamp: new Date().toISOString(),
+      creador: firebase.auth().currentUser?.email || 'sistema',
+    }
+  };
+
+  const totalCols = BACKUP_COLS.length;
+  let done = 0;
+
+  for (const col of BACKUP_COLS) {
+    try {
       const snap = await db.collection(col).get();
       snapshot[col] = {};
-      snap.docs.forEach(d => { snapshot[col][d.id] = d.data(); });
+      for (const docRef of snap.docs) {
+        snapshot[col][docRef.id] = docRef.data();
+        // Sub-col·leccions
+        if (BACKUP_SUBCOLS[col]) {
+          snapshot[col][docRef.id]._subcols = {};
+          for (const sub of BACKUP_SUBCOLS[col]) {
+            try {
+              const subSnap = await docRef.ref.collection(sub).get();
+              if (!subSnap.empty) {
+                snapshot[col][docRef.id]._subcols[sub] = {};
+                subSnap.docs.forEach(sd => {
+                  snapshot[col][docRef.id]._subcols[sub][sd.id] = sd.data();
+                });
+              }
+            } catch(e) { /* sub-col sense permisos o inexistent */ }
+          }
+          if (!Object.keys(snapshot[col][docRef.id]._subcols).length) {
+            delete snapshot[col][docRef.id]._subcols;
+          }
+        }
+      }
+    } catch(e) {
+      snapshot[col] = { _error: e.message };
     }
-    const dataStr = JSON.stringify(snapshot);
-    // Dividir en chunks si > 1MB
-    if (dataStr.length < 900000) {
-      await db.collection('_backups').add({
-        timestamp: firebase.firestore.FieldValue.serverTimestamp(),
-        data: dataStr, versio: '1.0',
-        creador: firebase.auth().currentUser?.email||'sistema'
-      });
-    }
-    window.mostrarToast('✅ Còpia realitzada', 3000);
+    done++;
+    onProgress?.(Math.round((done/totalCols)*100), col);
+  }
+
+  return snapshot;
+};
+
+// Descarregar JSON al navegador
+window.descarregarBackup = function(snapshot) {
+  const dataStr = JSON.stringify(snapshot, null, 2);
+  const blob = new Blob([dataStr], { type: 'application/json' });
+  const url  = URL.createObjectURL(blob);
+  const a    = document.createElement('a');
+  const data = snapshot._meta?.timestamp?.slice(0,10) || new Date().toISOString().slice(0,10);
+  a.href = url;
+  a.download = `comentaIA_backup_${data}.json`;
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(url), 3000);
+};
+
+// Enviar backup per email via EmailJS
+window.enviarBackupEmail = async function(snapshot, destinatari) {
+  // Comprova que emailjs està carregat
+  if (typeof emailjs === 'undefined') {
+    throw new Error('EmailJS no carregat. Afegeix el script a index.html');
+  }
+  const cfgSnap = await window.db.collection('_sistema').doc('emailjs').get().catch(()=>null);
+  const cfg = cfgSnap?.data() || {};
+  if (!cfg.serviceId || !cfg.templateId || !cfg.publicKey) {
+    throw new Error('EmailJS no configurat. Configura\'l des del panell d\'administrador.');
+  }
+
+  const dataStr = JSON.stringify(snapshot, null, 2);
+  const kb = Math.round(dataStr.length / 1024);
+  const data = snapshot._meta?.timestamp?.slice(0,10) || new Date().toISOString().slice(0,10);
+
+  // EmailJS té límit de ~50KB per missatge — adjuntem resum + avís de descàrrega
+  const resum = {
+    data: data,
+    creador: snapshot._meta?.creador,
+    cols: Object.keys(snapshot).filter(k=>!k.startsWith('_')).map(col => ({
+      col,
+      docs: Object.keys(snapshot[col]||{}).length
+    })),
+    mida_kb: kb,
+  };
+
+  await emailjs.init(cfg.publicKey);
+  await emailjs.send(cfg.serviceId, cfg.templateId, {
+    to_email: destinatari,
+    subject: `📦 Backup ComentaIA — ${data}`,
+    resum: JSON.stringify(resum, null, 2),
+    mida: `${kb} KB`,
+    data_backup: data,
+    creador: snapshot._meta?.creador || 'Sistema',
+  });
+};
+
+// Realitzar còpia completa: genera + descarrega + envia email si configurat
+window.realitzarCopiaSeguretat = async function(silenciosa = false) {
+  const rols = window._userRols || [];
+  if (!rols.some(r=>['admin','superadmin'].includes(r))) return;
+
+  try {
+    if (!silenciosa) window.mostrarToast('💾 Generant còpia...', 60000);
+
+    const snapshot = await window.generarBackupJSON();
+    window.descarregarBackup(snapshot);
+
+    // Intentar enviar per email (si configurat) sense bloquejar
+    try {
+      const cfgSnap = await window.db.collection('_sistema').doc('emailjs').get();
+      const cfg = cfgSnap?.data() || {};
+      if (cfg.serviceId && cfg.adminEmails?.length) {
+        for (const mail of cfg.adminEmails) {
+          await window.enviarBackupEmail(snapshot, mail);
+        }
+      }
+    } catch(e) { /* email opcional, no bloquejar */ }
+
+    if (!silenciosa) window.mostrarToast('✅ Còpia generada i descarregada!', 4000);
+    return snapshot;
   } catch(e) {
-    console.warn('Còpia seguretat:', e.message);
+    console.warn('CòpiaSeguretat:', e.message);
+    if (!silenciosa) window.mostrarToast('❌ Error: ' + e.message, 4000);
   }
 };
 
-// Còpia setmanal (només admin)
+// Còpia setmanal automàtica (silenciosa, només descarrega)
 firebase.auth().onAuthStateChanged(user => {
   if (!user) return;
   setTimeout(() => {
     if (!window._userRols?.some(r=>['admin','superadmin'].includes(r))) return;
-    const KEY = '_ultima_copia';
+    const KEY = '_ultima_copia_v2';
     const ara = Date.now();
     const ultima = parseInt(localStorage.getItem(KEY)||'0');
     if (ara - ultima > 7*24*60*60*1000) {
-      window.realitzarCopiaSeguretat?.().then(()=>localStorage.setItem(KEY,String(ara)));
+      window.realitzarCopiaSeguretat(true)
+        .then(() => localStorage.setItem(KEY, String(ara)))
+        .catch(() => {});
     }
-  }, 5000);
+  }, 8000);
 });
 
 console.log('✅ secretaria.js v2: inicialitzat');
