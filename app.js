@@ -1309,7 +1309,7 @@ function _renderCommentPanel(nom, comentari, assolamentsHTML, studentId, histori
     // Context ja configurat: window._tcStudentId, _tcStudentName, _tcClassId
     // Cridem openMevesPlantillesModal directament (NO openUltracomentatorModal que neteja el context)
     if (typeof window.openMevesPlantillesModal === 'function') {
-      window.openUltracomentatorModal(true);
+      window.openMevesPlantillesModal();
     } else {
       alert('Ultracomentator no disponible. Refresca la pàgina.');
     }
