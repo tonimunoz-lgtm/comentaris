@@ -2999,6 +2999,18 @@ async function renderQuadreDades(body) {
       (!nivellId || g.nivellId === nivellId)
     ).sort((a,b)=>(a.ordre||99)-(b.ordre||99));
 
+    // Carregar classes creades per professors per mostrar qui ha creat cada grup
+    const classesSnap = await window.db.collection('classes').get();
+    const classePerGrup = {};
+    classesSnap.docs.forEach(doc => {
+      const d = doc.data();
+      if (d.grupCentreId) {
+        const email = d.ownerEmail || '';
+        const nom = email ? email.split('@')[0] : (d.ownerUid ? '(usuari)' : '—');
+        classePerGrup[d.grupCentreId] = nom;
+      }
+    });
+
     if (grupsFilt.length === 0) {
       res.innerHTML = `<p style="color:#9ca3af;text-align:center;padding:30px;">Cap dada trobada per a aquest filtre.</p>`;
       return;
@@ -3023,6 +3035,7 @@ async function renderQuadreDades(body) {
                 <th style="padding:7px 10px;text-align:left;font-weight:600;">Tipus</th>
                 <th style="padding:7px 10px;text-align:left;font-weight:600;">Nom</th>
                 <th style="padding:7px 10px;text-align:center;font-weight:600;">Alumnes</th>
+                <th style="padding:7px 10px;text-align:center;font-weight:600;">Classe creada per</th>
                 <th style="padding:7px 10px;text-align:center;font-weight:600;">Accions</th>
               </tr>
             </thead>
@@ -3035,6 +3048,9 @@ async function renderQuadreDades(body) {
                   <td style="padding:7px 10px;font-weight:600;color:#1e1b4b;">${esH(g.nom||'—')}</td>
                   <td style="padding:7px 10px;text-align:center;color:#6b7280;">
                     ${(g.alumnes||[]).length}
+                  </td>
+                  <td style="padding:7px 10px;text-align:center;color:#6b7280;font-size:11px;">
+                    ${classePerGrup[g.id] ? `<span style="background:#e0e7ff;color:#4338ca;padding:2px 8px;border-radius:99px;font-weight:600;">${esH(classePerGrup[g.id])}</span>` : '<span style="color:#d1d5db;">—</span>'}
                   </td>
                   <td style="padding:7px 10px;text-align:center;">
                     <button class="btn-del-qd" data-id="${g.id}" data-nom="${esH(g.nom)}"
