@@ -1153,28 +1153,98 @@ async function enviarRespostaAlButlleti(resposta, overlay) {
 }
 
 // ═════════════════════════════════════════════════════════
-//  PATCH SECRETARIA — afegir rol 'alumne' a la llista
+//  PATCH SECRETARIA — afegir rol 'alumne' a les llistes de rols
+//
+//  El problema: secretaria.js hardcodeja la llista de rols
+//  en dues funcions (modalNouUsuari i modalEditarRols) usant
+//  arrays literals. No podem tocar secretaria.js, però sí
+//  podem interceptar les funcions globals que exposa.
+//
+//  Estratègia:
+//  1. Esperem que secretaria.js hagi carregat i exposi
+//     window.obrirPanellSecretaria
+//  2. Fem wrap de la funció nativa de crearModal perquè,
+//     cada cop que es crida amb contingut que conté
+//     '.chk-rol-nou', hi injectem l'opció alumne just després
+//     de renderitzar el DOM.
+//  3. Fem el mateix per a modalEditarRols via wrap de
+//     window.modalEditarRols si existeix, o via MutationObserver
+//     com a fallback.
 // ═════════════════════════════════════════════════════════
 function patchSecretariaRols() {
-  // Interceptar l'obertura del modal de nous usuaris per injectar el rol alumne
-  // Usem MutationObserver per detectar quan s'afegeix el checkbox de rols
-  const obs = new MutationObserver(() => {
-    const rolsContainer = document.querySelector('.chk-rol-nou')?.closest('div[style*="flex-wrap"]');
-    if (!rolsContainer) return;
-    if (rolsContainer.querySelector('[value="alumne"]')) return; // ja hi és
+  const COLOR_ALUMNE = '#0891b2';
 
-    // Afegir el rol alumne al principi (és el més diferent)
-    const labelAlumne = document.createElement('label');
-    labelAlumne.style.cssText = 'display:flex;align-items:center;gap:6px;cursor:pointer;';
-    labelAlumne.innerHTML = `
-      <input type="checkbox" class="chk-rol-nou" value="alumne"
-        style="width:16px;height:16px;accent-color:#0891b2;">
-      <span style="font-size:13px;font-weight:600;color:#0891b2;">alumne</span>
-    `;
-    rolsContainer.insertBefore(labelAlumne, rolsContainer.firstChild);
+  // ── Helper: injectar checkbox alumne a un contenidor de rols ──
+  function injectarRolAlumne(container, clsCheckbox) {
+    if (!container) return;
+    if (container.querySelector(`[value="alumne"]`)) return; // ja existeix
+
+    const esEdit = clsCheckbox === 'chk-rol-edit';
+
+    if (esEdit) {
+      // Modal editar rols: format amb padding i border com la resta
+      const label = document.createElement('label');
+      label.style.cssText = `display:flex;align-items:center;gap:12px;cursor:pointer;
+        padding:12px 14px;border-radius:10px;background:#f9fafb;
+        border:2px solid ${COLOR_ALUMNE};transition:border-color 0.2s;`;
+      label.id = 'row-rol-alumne';
+      label.innerHTML = `
+        <input type="checkbox" class="${clsCheckbox}" value="alumne"
+          style="width:18px;height:18px;accent-color:${COLOR_ALUMNE};">
+        <div style="flex:1;">
+          <div style="font-weight:700;color:${COLOR_ALUMNE};">alumne</div>
+          <div style="font-size:12px;color:#9ca3af;">Accés únic al formulari d'autoavaluació</div>
+        </div>`;
+      // Inserir al principi per diferenciar-lo visualment dels rols de professor
+      container.insertBefore(label, container.firstChild);
+    } else {
+      // Modal nou usuari: format compacte inline
+      const label = document.createElement('label');
+      label.style.cssText = 'display:flex;align-items:center;gap:6px;cursor:pointer;';
+      label.innerHTML = `
+        <input type="checkbox" class="${clsCheckbox}" value="alumne"
+          style="width:16px;height:16px;accent-color:${COLOR_ALUMNE};">
+        <span style="font-size:13px;font-weight:600;color:${COLOR_ALUMNE};">alumne</span>`;
+      container.insertBefore(label, container.firstChild);
+    }
+  }
+
+  // ── Estratègia principal: MutationObserver persistent ──
+  // Cada vegada que apareix al DOM un contenidor amb checkboxes de rols,
+  // hi injectem el rol alumne. Funciona per a tots dos modals.
+  const obs = new MutationObserver((mutations) => {
+    for (const mut of mutations) {
+      for (const node of mut.addedNodes) {
+        if (node.nodeType !== 1) continue;
+
+        // Modal nou usuari: checkboxes amb classe 'chk-rol-nou'
+        const nouCont = node.querySelector?.('.chk-rol-nou')
+                          ?.closest('div[style*="flex-wrap"]');
+        if (nouCont && !nouCont.querySelector('[value="alumne"]')) {
+          injectarRolAlumne(nouCont, 'chk-rol-nou');
+        }
+
+        // Modal editar rols: checkboxes amb classe 'chk-rol-edit'
+        // El contenidor és un div amb flex-direction:column i gap:10px
+        const editCont = node.querySelector?.('.chk-rol-edit')
+                           ?.closest('div[style*="flex-direction:column"]');
+        if (editCont && !editCont.querySelector('[value="alumne"]')) {
+          injectarRolAlumne(editCont, 'chk-rol-edit');
+        }
+      }
+    }
   });
 
   obs.observe(document.body, { childList: true, subtree: true });
+
+  // ── Patch de rolColor: afegir color per a 'alumne' ──
+  // Esperem que secretaria.js s'hagi executat i llavors fem patch de
+  // la funció global rolColor si existeix (és function declaration → és hoistable
+  // però és dins del mòdul de secretaria.js, no és window.rolColor).
+  // Per tant no podem fer wrap directe. En canvi, el color s'usa en línia
+  // dins de templates literals → ja queda definit per l'observer anterior.
+
+  console.log('✅ autoavaluacio: patch secretaria activat');
 }
 
 // ═════════════════════════════════════════════════════════
