@@ -404,10 +404,10 @@ async function carregarTabPlantilles() {
   try {
     const snap = await _aaDB.collection('autoaval_plantilles')
       .where('tutorUID', '==', _aaUID)
-      .orderBy('createdAt', 'desc')
+
       .get();
 
-    const plantilles = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    const plantilles = snap.docs.map(d => ({ id: d.id, ...d.data() })).sort((a,b) => (b.createdAt?.seconds||0) - (a.createdAt?.seconds||0));
 
     cont.innerHTML = `
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
@@ -826,10 +826,10 @@ async function carregarTabEnviaments() {
   try {
     const snap = await _aaDB.collection('autoaval_pendents')
       .where('tutorUID', '==', _aaUID)
-      .orderBy('enviatAt', 'desc')
+
       .get();
 
-    const pendents = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    const pendents = snap.docs.map(d => ({ id: d.id, ...d.data() })).sort((a,b) => (b.enviatAt?.seconds||0) - (a.enviatAt?.seconds||0));
 
     if (pendents.length === 0) {
       cont.innerHTML = `<div style="text-align:center;padding:40px;background:#f9fafb;border-radius:12px;border:2px dashed #e5e7eb;">
@@ -901,10 +901,10 @@ async function carregarTabRespostes() {
   try {
     const snap = await _aaDB.collection('autoaval_respostes')
       .where('tutorUID', '==', _aaUID)
-      .orderBy('enviatAt', 'desc')
+
       .get();
 
-    const respostes = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    const respostes = snap.docs.map(d => ({ id: d.id, ...d.data() })).sort((a,b) => (b.enviatAt?.seconds||0) - (a.enviatAt?.seconds||0));
 
     if (respostes.length === 0) {
       cont.innerHTML = `<div style="text-align:center;padding:40px;background:#f9fafb;border-radius:12px;border:2px dashed #e5e7eb;">
