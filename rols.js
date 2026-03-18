@@ -309,36 +309,12 @@ function actualitzarUIRols() {
     nav.appendChild(adminBtn);
   }
 
-  // Botó Secretaria
-  if (window.teRol('secretaria')) {
-    if (!document.getElementById('secretariaNavBtn')) {
-      const secBtn = document.createElement('button');
-      secBtn.id = 'secretariaNavBtn';
-      secBtn.className = 'nav-item nav-item-rol';
-      secBtn.innerHTML = '<span class="nav-icon">📋</span><span>Secretaria</span>';
-      secBtn.addEventListener('click', () => {
-        if (typeof window.obrirPanellSecretaria === 'function') window.obrirPanellSecretaria();
-        else mostrarToast('Mòdul Secretaria no carregat');
-      });
-      nav.appendChild(secBtn);
-    }
-  }
+  // Botó Secretaria — injectat per secretaria.js via injectarBotoSecretaria() (cridat des d'app-patch.js)
+  // NO creem aquí el botó per evitar duplicats.
 
 
-  // Botó Tutoria (per a tutors i pedagogs)
-  if ((window.teRol('tutor') || window.teRol('pedagog')) && !window.teRol('secretaria')) {
-    if (!document.getElementById('tutoriaNavBtn')) {
-      const tutBtn = document.createElement('button');
-      tutBtn.id = 'tutoriaNavBtn';
-      tutBtn.className = 'nav-item nav-item-rol';
-      tutBtn.innerHTML = '<span class="nav-icon">🧑‍🏫</span><span>Tutoria</span>';
-      tutBtn.addEventListener('click', () => {
-        if (typeof window.obrirPanellTutoria === 'function') window.obrirPanellTutoria();
-        else mostrarToast('Mòdul Tutoria no carregat');
-      });
-      nav.appendChild(tutBtn);
-    }
-  }
+  // Botó Tutoria — injectat per tutoria-nova.js via injectarBotoTutoria() (cridat des d'app-patch.js)
+  // NO creem aquí el botó per evitar duplicats.
 
   // Botó Revisor — injectat per revisor.js via injectarBotoRevisor() (cridat des d'app-patch.js)
   // NO creem aquí el botó per evitar duplicats. revisor.js usa id="btnRevisorSidebar"
