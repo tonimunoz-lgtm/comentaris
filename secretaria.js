@@ -2998,23 +2998,23 @@ async function renderQuadreDades(body) {
     <div id="resultatsQD"></div>
   `;
 
-  // Cascada: quan canvia curs o nivell, actualitzar grups classe
+  // Cascada: el desplegable de grup mostra NOMÉS grups classe (tipus='classe')
   const actualitzarGrups = () => {
-    const curs    = document.getElementById('qdCurs').value;
+    const curs     = document.getElementById('qdCurs').value;
     const nivellId = document.getElementById('qdNivell').value;
-    const selGrup = document.getElementById('qdGrup');
+    const selGrup  = document.getElementById('qdGrup');
     const grupsFilt = grups.filter(g =>
       g.tipus === 'classe' &&
-      (!curs    || g.curs     === curs) &&
+      (!curs     || g.curs     === curs) &&
       (!nivellId || g.nivellId === nivellId)
-    );
+    ).sort((a,b) => (a.ordre||99) - (b.ordre||99));
     selGrup.innerHTML = '<option value="">— Tots —</option>' +
-      grupsFilt.map(g=>`<option value="${g.id}">${esH(g.nom)} (${esH(g.nivellNom||'')})</option>`).join('');
+      grupsFilt.map(g => `<option value="${g.id}">${esH(g.nom)} (${esH(g.nivellNom||'')})</option>`).join('');
   };
 
   document.getElementById('qdCurs').addEventListener('change', actualitzarGrups);
   document.getElementById('qdNivell').addEventListener('change', actualitzarGrups);
-  actualitzarGrups(); // Poblar grups inicialment
+  actualitzarGrups();
 
   document.getElementById('qdCarregar').addEventListener('click', async () => {
     const curs     = document.getElementById('qdCurs').value;
@@ -3023,7 +3023,7 @@ async function renderQuadreDades(body) {
     const res = document.getElementById('resultatsQD');
     res.innerHTML = `<p style="color:#9ca3af;">⏳ Carregant...</p>`;
 
-    // Carregar classes creades per professors per mostrar qui ha creat cada grup
+    // Carregar classes creades per professors (per columna "Classe creada per")
     const classesSnap = await window.db.collection('classes').get();
     const classePerGrup = {};
     classesSnap.docs.forEach(doc => {
@@ -3035,67 +3035,73 @@ async function renderQuadreDades(body) {
       }
     });
 
-    const grupsFilt = grups.filter(g =>
-      (!curs     || g.curs      === curs) &&
-      (!nivellId || g.nivellId  === nivellId) &&
-      (!grupId   || g.id        === grupId)
-    ).sort((a,b)=>(a.ordre||99)-(b.ordre||99));
+    // Grups classe filtrats (tipus='classe')
+    const grupesClasse = grups.filter(g =>
+      g.tipus === 'classe' &&
+      (!curs     || g.curs     === curs) &&
+      (!nivellId || g.nivellId === nivellId) &&
+      (!grupId   || g.id       === grupId)
+    ).sort((a,b) => (a.ordre||99) - (b.ordre||99));
 
-    if (grupsFilt.length === 0) {
-      res.innerHTML = `<p style="color:#9ca3af;text-align:center;padding:30px;">Cap dada trobada per a aquest filtre.</p>`;
+    if (grupesClasse.length === 0) {
+      res.innerHTML = `<p style="color:#9ca3af;text-align:center;padding:30px;">Cap grup trobat per a aquest filtre.</p>`;
       return;
     }
 
-    // Agrupar per nivell
-    const perNivell = {};
-    grupsFilt.forEach(g => {
-      const clau = g.nivellNom || g.nivellId || 'Sense nivell';
-      if (!perNivell[clau]) perNivell[clau] = [];
-      perNivell[clau].push(g);
-    });
+    // Per cada grup classe, agafar les seves matèries (parentGrupId === grup.id)
+    res.innerHTML = grupesClasse.map(gc => {
+      const materies = grups.filter(g =>
+        g.parentGrupId === gc.id &&
+        g.tipus !== 'classe'
+      ).sort((a,b) => (a.ordre||99) - (b.ordre||99));
 
-    res.innerHTML = Object.entries(perNivell).map(([nom, gs]) => `
-      <div style="margin-bottom:20px;">
-        <h4 style="font-size:13px;font-weight:700;color:#1e1b4b;padding:8px 12px;
-                   background:#e0e7ff;border-radius:8px;margin-bottom:10px;">${esH(nom)}</h4>
-        <div style="overflow-x:auto;">
-          <table style="width:100%;border-collapse:collapse;font-size:12px;">
-            <thead>
-              <tr style="background:#f3f4f6;">
-                <th style="padding:7px 10px;text-align:left;font-weight:600;">Tipus</th>
-                <th style="padding:7px 10px;text-align:left;font-weight:600;">Nom</th>
-                <th style="padding:7px 10px;text-align:center;font-weight:600;">Alumnes</th>
-                <th style="padding:7px 10px;text-align:center;font-weight:600;">Classe creada per</th>
-                <th style="padding:7px 10px;text-align:center;font-weight:600;">Accions</th>
-              </tr>
-            </thead>
-            <tbody>
-              ${gs.map(g => `
-                <tr style="border-bottom:1px solid #f3f4f6;">
-                  <td style="padding:7px 10px;font-size:11px;color:#9ca3af;">
-                    ${TIPUS_GRUP[g.tipus]?.icon||'📁'} ${TIPUS_GRUP[g.tipus]?.label||g.tipus||'—'}
-                  </td>
-                  <td style="padding:7px 10px;font-weight:600;color:#1e1b4b;">${esH(g.nom||'—')}</td>
-                  <td style="padding:7px 10px;text-align:center;color:#6b7280;">
-                    ${(g.alumnes||[]).length}
-                  </td>
-                  <td style="padding:7px 10px;text-align:center;color:#6b7280;font-size:11px;">
-                    ${classePerGrup[g.id] ? `<span style="background:#e0e7ff;color:#4338ca;padding:2px 8px;border-radius:99px;font-weight:600;">${esH(classePerGrup[g.id])}</span>` : '<span style="color:#d1d5db;">—</span>'}
-                  </td>
-                  <td style="padding:7px 10px;text-align:center;">
-                    <button class="btn-del-qd" data-id="${g.id}" data-nom="${esH(g.nom)}"
-                      style="padding:3px 10px;background:#fee2e2;color:#dc2626;border:none;
-                             border-radius:6px;font-size:11px;font-weight:600;cursor:pointer;">
-                      🗑️ Eliminar
-                    </button>
-                  </td>
+      const filesMateries = materies.map(m => `
+        <tr style="border-bottom:1px solid #f3f4f6;">
+          <td style="padding:7px 10px;font-size:11px;color:#9ca3af;">
+            ${TIPUS_GRUP[m.tipus]?.icon||'📁'} ${TIPUS_GRUP[m.tipus]?.label||m.tipus||'—'}
+          </td>
+          <td style="padding:7px 10px;color:#374151;">${esH(m.nom||'—')}</td>
+          <td style="padding:7px 10px;text-align:center;color:#6b7280;">${(m.alumnes||[]).length}</td>
+          <td style="padding:7px 10px;text-align:center;color:#6b7280;font-size:11px;">
+            ${classePerGrup[m.id] ? `<span style="background:#e0e7ff;color:#4338ca;padding:2px 8px;border-radius:99px;font-weight:600;">${esH(classePerGrup[m.id])}</span>` : '<span style="color:#d1d5db;">—</span>'}
+          </td>
+          <td style="padding:7px 10px;text-align:center;">
+            <button class="btn-del-qd" data-id="${m.id}" data-nom="${esH(m.nom)}"
+              style="padding:3px 10px;background:#fee2e2;color:#dc2626;border:none;
+                     border-radius:6px;font-size:11px;font-weight:600;cursor:pointer;">
+              🗑️ Eliminar
+            </button>
+          </td>
+        </tr>
+      `).join('');
+
+      return `
+        <div style="margin-bottom:24px;">
+          <!-- Capçalera grup classe -->
+          <div style="display:flex;align-items:center;gap:10px;padding:10px 14px;
+                      background:#e0e7ff;border-radius:8px;margin-bottom:10px;">
+            <span style="font-size:14px;">🏫</span>
+            <span style="font-size:13px;font-weight:700;color:#1e1b4b;">${esH(gc.nom)} — ${esH(gc.nivellNom||'')}</span>
+            <span style="font-size:11px;color:#6366f1;margin-left:auto;">${materies.length} matèrie${materies.length!==1?'s':''}</span>
+          </div>
+          ${materies.length > 0 ? `
+          <div style="overflow-x:auto;">
+            <table style="width:100%;border-collapse:collapse;font-size:12px;">
+              <thead>
+                <tr style="background:#f3f4f6;">
+                  <th style="padding:7px 10px;text-align:left;font-weight:600;">Tipus</th>
+                  <th style="padding:7px 10px;text-align:left;font-weight:600;">Nom</th>
+                  <th style="padding:7px 10px;text-align:center;font-weight:600;">Alumnes</th>
+                  <th style="padding:7px 10px;text-align:center;font-weight:600;">Classe creada per</th>
+                  <th style="padding:7px 10px;text-align:center;font-weight:600;">Accions</th>
                 </tr>
-              `).join('')}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>${filesMateries}</tbody>
+            </table>
+          </div>` : `<p style="color:#9ca3af;font-size:12px;padding:8px 14px;">Cap matèria afegida a aquest grup.</p>`}
         </div>
-      </div>
-    `).join('');
+      `;
+    }).join('');
 
     // Events eliminar
     res.querySelectorAll('.btn-del-qd').forEach(btn => {
