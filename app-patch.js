@@ -407,6 +407,22 @@ async function crearClasseDesDeGrupCentre() {
     // Nombre completo de la clase: "Matemàtiques 1r ESO - A"
     const nomClasse = `${nomMateria} ${nivellNom} - ${nomGrupClasse}`;
 
+    // Comprovar si ja existeix una classe amb el mateix nom i grupCentreId
+    const classesExistents = await db.collection('classes')
+      .where('grupCentreId', '==', materiaId)
+      .get();
+
+    if (!classesExistents.empty) {
+      const existent = classesExistents.docs[0].data();
+      const creatPer = existent.ownerEmail
+        ? existent.ownerEmail.split('@')[0]
+        : (existent.ownerUid || 'un altre professor/a');
+      btn.disabled = false;
+      btn.textContent = 'Crear classe';
+      window.mostrarToast(`⚠️ Aquesta classe ja ha estat creada per ${creatPer}`, 5000);
+      return;
+    }
+
     // Crear la clase
     const classeRef = db.collection('classes').doc();
 
@@ -440,6 +456,7 @@ async function crearClasseDesDeGrupCentre() {
       parentGrupCentreId: grupClasseId, // El ID del grupo clase padre (el grupo clase A, B, C...)
       alumnes:     alumneIds,
       ownerUid:    professorUID,
+      ownerEmail:  firebase.auth().currentUser?.email || '',
       creatAt:     firebase.firestore.FieldValue.serverTimestamp(),
     });
 
