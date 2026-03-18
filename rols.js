@@ -340,20 +340,9 @@ function actualitzarUIRols() {
     }
   }
 
-  // Botó Revisor
-  if (window.esRevisor() && !window.teRol('secretaria')) {
-    if (!document.getElementById('revisorNavBtn')) {
-      const revBtn = document.createElement('button');
-      revBtn.id = 'revisorNavBtn';
-      revBtn.className = 'nav-item nav-item-rol';
-      revBtn.innerHTML = '<span class="nav-icon">🔍</span><span>Revisió</span>';
-      revBtn.addEventListener('click', () => {
-        if (typeof window.obrirPanellRevisor === 'function') window.obrirPanellRevisor();
-        else mostrarToast('Mòdul Revisor no carregat');
-      });
-      nav.appendChild(revBtn);
-    }
-  }
+  // Botó Revisor — injectat per revisor.js via injectarBotoRevisor() (cridat des d'app-patch.js)
+  // NO creem aquí el botó per evitar duplicats. revisor.js usa id="btnRevisorSidebar"
+  // i crida obrirPanellRevisio() que és la funció correcta amb suport de nivells/grups.
 }
 
 /* ══════════════════════════════════════════════════════
