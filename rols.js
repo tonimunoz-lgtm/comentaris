@@ -392,6 +392,10 @@ window.mostrarToast = function(msg, durada = 3000) {
    INICIALITZACIÓ — Esperar auth
 ══════════════════════════════════════════════════════ */
 document.addEventListener('DOMContentLoaded', () => {
+  // Amagar el nav fins que els rols estiguin carregats
+  const nav = document.querySelector('.sidebar-nav');
+  if (nav) nav.style.visibility = 'hidden';
+
   // Esperar que Firebase estigui disponible
   const waitForFirebase = setInterval(() => {
     if (!window.firebase || !window.db) return;
@@ -401,6 +405,8 @@ document.addEventListener('DOMContentLoaded', () => {
       if (!user) {
         window._userRol  = null;
         window._userRols = [];
+        const nav = document.querySelector('.sidebar-nav');
+        if (nav) nav.style.visibility = 'visible';
         return;
       }
 
@@ -410,7 +416,10 @@ document.addEventListener('DOMContentLoaded', () => {
         if (perfil.data?.forcePasswordChange && !sessionStorage.getItem('pwChangeDone')) {
           mostrarModalCambioPassword();
         }
-        setTimeout(actualitzarUIRols, 500);
+        // Sense setTimeout: els rols ja estan carregats aquí
+        actualitzarUIRols();
+        const nav = document.querySelector('.sidebar-nav');
+        if (nav) nav.style.visibility = 'visible';
       }
     });
   }, 200);
