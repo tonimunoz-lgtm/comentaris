@@ -2968,36 +2968,60 @@ async function renderQuadreDades(body) {
 
   body.innerHTML = `
     <h3 style="font-size:16px;font-weight:700;color:#1e1b4b;margin-bottom:16px;">📊 Quadre de dades</h3>
-    <div style="display:flex;gap:12px;margin-bottom:20px;flex-wrap:wrap;align-items:flex-end;">
-      <div>
-        <label style="font-size:12px;font-weight:600;color:#374151;display:block;margin-bottom:4px;">Curs</label>
-        <select id="selCursQD" style="padding:9px 12px;border:1.5px solid #e5e7eb;border-radius:9px;font-size:13px;outline:none;">
-          ${cursos.length ? cursos.map(c=>`<option value="${c}" ${c===cursActiu?'selected':''}>${c}</option>`).join('') : '<option value="">Cap curs</option>'}
-        </select>
+    <div style="background:#f9fafb;border:1.5px solid #e5e7eb;border-radius:12px;padding:16px;margin-bottom:16px;">
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr auto;gap:12px;align-items:end;">
+        <div>
+          <label style="font-size:12px;font-weight:600;color:#374151;display:block;margin-bottom:5px;">Curs</label>
+          <select id="qdCurs" style="width:100%;padding:8px 10px;border:1.5px solid #e5e7eb;border-radius:8px;font-size:13px;outline:none;">
+            <option value="">— Tots —</option>
+            ${cursos.map(c=>`<option value="${c}" ${c===cursActiu?'selected':''}>${c}</option>`).join('')}
+          </select>
+        </div>
+        <div>
+          <label style="font-size:12px;font-weight:600;color:#374151;display:block;margin-bottom:5px;">Nivell</label>
+          <select id="qdNivell" style="width:100%;padding:8px 10px;border:1.5px solid #e5e7eb;border-radius:8px;font-size:13px;outline:none;">
+            <option value="">— Tots —</option>
+            ${nivells.map(n=>`<option value="${n.id}">${esH(n.nom)}</option>`).join('')}
+          </select>
+        </div>
+        <div>
+          <label style="font-size:12px;font-weight:600;color:#374151;display:block;margin-bottom:5px;">Grup classe</label>
+          <select id="qdGrup" style="width:100%;padding:8px 10px;border:1.5px solid #e5e7eb;border-radius:8px;font-size:13px;outline:none;">
+            <option value="">— Tots —</option>
+          </select>
+        </div>
+        <button id="qdCarregar" style="padding:8px 18px;background:#7c3aed;color:#fff;border:none;border-radius:8px;font-weight:600;cursor:pointer;white-space:nowrap;">
+          🔍 Carregar
+        </button>
       </div>
-      <div>
-        <label style="font-size:12px;font-weight:600;color:#374151;display:block;margin-bottom:4px;">Nivell</label>
-        <select id="selNivellQD" style="padding:9px 12px;border:1.5px solid #e5e7eb;border-radius:9px;font-size:13px;outline:none;">
-          <option value="">— Tots els nivells —</option>
-          ${nivells.map(n=>`<option value="${n.id}">${esH(n.nom)}</option>`).join('')}
-        </select>
-      </div>
-      <button id="btnCarregarQD" style="padding:9px 18px;background:#7c3aed;color:#fff;
-        border:none;border-radius:9px;font-weight:600;cursor:pointer;">🔍 Carregar</button>
     </div>
     <div id="resultatsQD"></div>
   `;
 
-  document.getElementById('btnCarregarQD').addEventListener('click', async () => {
-    const curs    = document.getElementById('selCursQD').value;
-    const nivellId= document.getElementById('selNivellQD').value;
+  // Cascada: quan canvia curs o nivell, actualitzar grups classe
+  const actualitzarGrups = () => {
+    const curs    = document.getElementById('qdCurs').value;
+    const nivellId = document.getElementById('qdNivell').value;
+    const selGrup = document.getElementById('qdGrup');
+    const grupsFilt = grups.filter(g =>
+      g.tipus === 'classe' &&
+      (!curs    || g.curs     === curs) &&
+      (!nivellId || g.nivellId === nivellId)
+    );
+    selGrup.innerHTML = '<option value="">— Tots —</option>' +
+      grupsFilt.map(g=>`<option value="${g.id}">${esH(g.nom)} (${esH(g.nivellNom||'')})</option>`).join('');
+  };
+
+  document.getElementById('qdCurs').addEventListener('change', actualitzarGrups);
+  document.getElementById('qdNivell').addEventListener('change', actualitzarGrups);
+  actualitzarGrups(); // Poblar grups inicialment
+
+  document.getElementById('qdCarregar').addEventListener('click', async () => {
+    const curs     = document.getElementById('qdCurs').value;
+    const nivellId = document.getElementById('qdNivell').value;
+    const grupId   = document.getElementById('qdGrup').value;
     const res = document.getElementById('resultatsQD');
     res.innerHTML = `<p style="color:#9ca3af;">⏳ Carregant...</p>`;
-
-    const grupsFilt = grups.filter(g =>
-      (!curs || g.curs === curs) &&
-      (!nivellId || g.nivellId === nivellId)
-    ).sort((a,b)=>(a.ordre||99)-(b.ordre||99));
 
     // Carregar classes creades per professors per mostrar qui ha creat cada grup
     const classesSnap = await window.db.collection('classes').get();
@@ -3010,6 +3034,12 @@ async function renderQuadreDades(body) {
         classePerGrup[d.grupCentreId] = nom;
       }
     });
+
+    const grupsFilt = grups.filter(g =>
+      (!curs     || g.curs      === curs) &&
+      (!nivellId || g.nivellId  === nivellId) &&
+      (!grupId   || g.id        === grupId)
+    ).sort((a,b)=>(a.ordre||99)-(b.ordre||99));
 
     if (grupsFilt.length === 0) {
       res.innerHTML = `<p style="color:#9ca3af;text-align:center;padding:30px;">Cap dada trobada per a aquest filtre.</p>`;
@@ -3073,15 +3103,14 @@ async function renderQuadreDades(body) {
         if (!confirm(`Eliminar "${btn.dataset.nom}" i totes les dades associades?`)) return;
         btn.disabled = true; btn.textContent = '⏳';
         await eliminarGrupComplet(btn.dataset.id, btn.dataset.nom);
-        // Recarregar
-        document.getElementById('btnCarregarQD')?.click();
+        document.getElementById('qdCarregar')?.click();
       });
     });
   });
 
-  // Auto-carregar si hi ha curs
+  // Auto-carregar
   if (cursos.length > 0) {
-    setTimeout(() => document.getElementById('btnCarregarQD')?.click(), 100);
+    setTimeout(() => document.getElementById('qdCarregar')?.click(), 100);
   }
 }
 
