@@ -2713,7 +2713,6 @@ async function carregarDadesButlletins(grups) {
   const matLlista = document.getElementById('bLlistaMateries');
   matDiv.style.display = 'none';
 
-  // Funció helper per actualitzar la barra de progrés
   function mostrarProgres(actual, total, fase) {
     const pct = total > 0 ? Math.round((actual / total) * 100) : 0;
     resDiv.innerHTML = `
@@ -2726,21 +2725,15 @@ async function carregarDadesButlletins(grups) {
           </div>
         </div>
         <div style="background:#e5e7eb;border-radius:99px;height:10px;overflow:hidden;">
-          <div style="
-            height:100%;border-radius:99px;
-            background:linear-gradient(90deg,#7c3aed,#4f46e5);
-            width:${pct}%;
-            transition:width .3s ease;
-          "></div>
+          <div style="height:100%;border-radius:99px;background:linear-gradient(90deg,#7c3aed,#4f46e5);
+                      width:${pct}%;transition:width .3s ease;"></div>
         </div>
         <div style="display:flex;justify-content:space-between;margin-top:6px;font-size:11px;color:#9ca3af;">
           <span>${actual} de ${total} matèries consultades</span>
           <span>${pct}%</span>
         </div>
       </div>
-      <style>
-        @keyframes spin { from{transform:rotate(0deg)} to{transform:rotate(360deg)} }
-      </style>
+      <style>@keyframes spin{from{transform:rotate(0deg)}to{transform:rotate(360deg)}}</style>
     `;
   }
 
@@ -2751,10 +2744,12 @@ async function carregarDadesButlletins(grups) {
     const grupDoc = grups.find(g=>g.id===grupId);
     let alumnesCentre = grupDoc?.alumnes || [];
 
-    // Estratègia: llegir totes les subcoleccions de avaluacio_centre/{curs}
-    // que tinguin dades per a aquest grup classe
+    // Estratègia: llegir NOMÉS les matèries del grup classe seleccionat
+    // (parentGrupId === grupId), no tots els grups del centre
     const totsGrups = await carregarGrupsCentre();
-    const candidats = totsGrups.filter(g => !g.curs || g.curs === curs);
+    const candidats = totsGrups.filter(g =>
+      g.parentGrupId === grupId && g.tipus !== 'tutoria'
+    );
 
     const materiesAmbDades = [];
     const alumnesAmbDades  = {};
@@ -2769,11 +2764,9 @@ async function carregarDadesButlletins(grups) {
       };
     });
 
-    // Inicialitzar progrés amb el total real de candidats
-    mostrarProgres(0, candidats.length, `Consultant ${candidats.length} matèries...`);
-    let comptador = 0;
-
     // Llegir cada candidat com a possible subcolecció
+    mostrarProgres(0, candidats.length, `Consultant ${candidats.length} matèries del grup...`);
+    let comptador = 0;
     for (const cand of candidats) {
       try {
         // Buscar documents que pertanyin al grup classe seleccionat
@@ -2795,19 +2788,13 @@ async function carregarDadesButlletins(grups) {
 
         if (!snap.empty) {
           const nomMat = cand.nom || cand.id;
-
-          // Comptar quants docs corresponen al periode seleccionat
-          // ABANS de marcar la matèria com "enviada" per a l'estat d'enviament
-          const docsDelPeriode = trimestre
-            ? snap.docs.filter(doc => doc.data().periodeNom === trimestre)
-            : snap.docs;
-          if (docsDelPeriode.length > 0) {
-            materiesAmbDades.push({ id: cand.id, nom: nomMat });
-          }
+          materiesAmbDades.push({ id: cand.id, nom: nomMat });
 
           snap.docs.forEach(doc => {
             const d = doc.data();
             // Filtrar per trimestre (mode estricte):
+            // Si trimestre seleccionat → NOMÉS mostrar docs amb periodeNom igual
+            // Docs sense periodeNom (dades antigues) → s'ignoren quan hi ha filtre
             if (trimestre) {
               if (!d.periodeNom || d.periodeNom !== trimestre) return;
             }
@@ -2831,13 +2818,12 @@ async function carregarDadesButlletins(grups) {
         // Nota: eliminat el fallback sense grupId per evitar barreja entre grups
       } catch(e) { /* ignorem errors de subcoleccions que no existeixen */ }
 
-      // Actualitzar progrés
       comptador++;
-      const matTrobades = materiesAmbDades.length;
-      const fase = matTrobades > 0
-        ? `Trobades ${matTrobades} matèries amb dades...`
-        : `Consultant matèries del centre...`;
-      mostrarProgres(comptador, candidats.length, fase);
+      mostrarProgres(comptador, candidats.length,
+        materiesAmbDades.length > 0
+          ? `Trobades ${materiesAmbDades.length} matèries amb dades...`
+          : `Consultant matèries del grup...`
+      );
     }
 
     // Deduplicar matèries
