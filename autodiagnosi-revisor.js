@@ -15,6 +15,30 @@
 
 console.log('🧠 autodiagnosi-revisor.js carregat');
 
+// Carregar períodes des de Firestore (compartit amb autodiagnosi-butlletins.js)
+async function carregarPeriodesADR() {
+  const BASE = [
+    { codi:'preav', nom:'Pre-avaluació' },
+    { codi:'T1',    nom:'1r Trimestre'  },
+    { codi:'T2',    nom:'2n Trimestre'  },
+    { codi:'T3',    nom:'3r Trimestre'  },
+    { codi:'final', nom:'Final de curs' },
+  ];
+  try {
+    const doc = await window.db.collection('_sistema').doc('periodes_tancats').get();
+    if (!doc.exists) return BASE;
+    const data = doc.data();
+    const noms = data.noms || {};
+    const ordre = data.ordre || BASE.map(p => p.codi);
+    return ordre.map(codi => {
+      const base = BASE.find(p => p.codi === codi) || { codi, nom: codi };
+      return { codi, nom: noms[codi] || base.nom };
+    });
+  } catch(e) { return BASE; }
+}
+
+
+
 // ─────────────────────────────────────────────
 // UTILS
 // ─────────────────────────────────────────────
@@ -165,6 +189,9 @@ async function renderPanellAutodiagRevisor(cont, panell) {
           <option value="">— Tria grup tutoria —</option>
           ${grupsTutoria.map(g => `<option value="${g.id}">${adRH(etiqueta(g))}</option>`).join('')}
         </select>
+        <select id="adRevPeriode" style="padding:8px 12px;border:1.5px solid #e5e7eb;border-radius:8px;font-size:13px;outline:none;min-width:160px;">
+          <option value="">⏳ Carregant períodes...</option>
+        </select>
         <button id="adRevCarregar" style="padding:8px 18px;background:#0891b2;color:#fff;border:none;border-radius:8px;font-weight:700;cursor:pointer;">
           🔍 Carregar
         </button>
@@ -176,11 +203,21 @@ async function renderPanellAutodiagRevisor(cont, panell) {
       </div>
     `;
 
+    // Carregar períodes reals
+    carregarPeriodesADR().then(periodes => {
+      const sel = document.getElementById('adRevPeriode');
+      if (sel) {
+        sel.innerHTML = '<option value="">— Tots els períodes —</option>' +
+          periodes.map(p => `<option value="${p.nom}">${p.nom}</option>`).join('');
+      }
+    });
+
     document.getElementById('adRevCarregar').addEventListener('click', () => {
       const grupId = document.getElementById('adRevGrup').value;
+      const periodeSelec = document.getElementById('adRevPeriode')?.value || '';
       if (!grupId) { window.mostrarToast?.('⚠️ Tria un grup', 3000); return; }
       const g = totsGrups.find(x => x.id === grupId);
-      carregarAutodiagRevisor(grupId, etiqueta(g || {}), grupsPerId);
+      carregarAutodiagRevisor(grupId, etiqueta(g || {}), grupsPerId, periodeSelec);
     });
 
   } catch(e) {
@@ -188,7 +225,7 @@ async function renderPanellAutodiagRevisor(cont, panell) {
   }
 }
 
-async function carregarAutodiagRevisor(grupId, grupEtiqueta, grupsPerId) {
+async function carregarAutodiagRevisor(grupId, grupEtiqueta, grupsPerId, periodeFiltre = '') {
   const resDiv = document.getElementById('adRevResultats');
   resDiv.innerHTML = '<div style="padding:20px;text-align:center;color:#9ca3af;">⏳ Carregant...</div>';
 
@@ -234,7 +271,19 @@ async function carregarAutodiagRevisor(grupId, grupEtiqueta, grupsPerId) {
       return { ...a, uid: au?.uid || null, resposta: au?.uid ? resPerAlumne[au.uid] : null };
     }).sort((a, b) => (a.cognoms||a.nom).localeCompare(b.cognoms||b.nom, 'ca'));
 
-    const ambResp = llista.filter(a => a.resposta);
+    // Filtrar per periode si s'ha seleccionat
+    const llistaFiltrada = periodeFiltre
+      ? llista.map(a => {
+          if (!a.resposta) return a;
+          const periodeResp = a.resposta.periodeNom || a.resposta.plantillaTitol || '';
+          if (periodeFiltre && periodeResp && !periodeResp.includes(periodeFiltre) && periodeResp !== periodeFiltre) {
+            return { ...a, resposta: null };
+          }
+          return a;
+        })
+      : llista;
+
+    const ambResp = llistaFiltrada.filter(a => a.resposta);
 
     const estatBadge = r => {
       if (!r) return '<span style="background:#f3f4f6;color:#9ca3af;padding:3px 8px;border-radius:99px;font-size:11px;">⏳ Pendent</span>';
@@ -261,7 +310,7 @@ async function carregarAutodiagRevisor(grupId, grupEtiqueta, grupsPerId) {
           </tr>
         </thead>
         <tbody>
-          ${llista.map((a, idx) => {
+          ${llistaFiltrada.map((a, idx) => {
             const nom = a.cognoms ? `${a.cognoms}, ${a.nom}` : a.nom;
             const teComent = !!(a.resposta?.comentariTutor);
             return `
