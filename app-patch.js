@@ -791,36 +791,35 @@ function iniciarEscoltaCanvisGrup() {
     const grupCentreId = doc.data()?.grupCentreId;
     if (!grupCentreId) return;
 
+    // Clau localStorage per recordar quan el professor va veure per última vegada els alumnes del grup
+    const vistaKey = `_alumnesVistAt_${grupCentreId}`;
+
     // Escoltar canvis al grup del centre
     const unsub = window.db.collection('grups_centre').doc(grupCentreId)
       .onSnapshot(snap => {
         if (!snap.metadata.hasPendingWrites && !snap.metadata.fromCache && snap.exists) {
           const alumnesCentre = snap.data()?.alumnes || [];
           if (!alumnesCentre.length) return;
-          // Async check en IIFE
-          (async () => {
-            try {
-              const classId = window.currentClassId;
-              if (!classId) return;
-              const classeDoc2 = await window.db.collection('classes').doc(classId).get();
-              const alumnesIds = classeDoc2?.data()?.alumnes || [];
-              // Carregar RALCs dels alumnes actuals (mostra de 5 per velocitat)
-              const sampleDocs = await Promise.all(
-                alumnesIds.slice(0,10).map(id => window.db.collection('alumnes').doc(id).get())
-              );
-              const ralcsClasse = new Set(sampleDocs.map(d=>d.data()?.ralc).filter(Boolean));
-              const ralcsCentre = alumnesCentre.map(a=>a.ralc).filter(Boolean);
-              const novsRalcs = ralcsCentre.filter(r => r && !ralcsClasse.has(r));
-              if (novsRalcs.length > 0 && !document.getElementById('_bannerActualitzacio')) {
-                // Verificar que no s'hagi ja resolt per a aquest grup+classe
-                const resolKey = `_bannerResolt_${window.currentClassId}_${grupCentreId}`;
-                const jaResolt = sessionStorage.getItem(resolKey);
-                if (!jaResolt) {
-                  mostrarBannerActualitzacio(alumnesCentre.length, alumnesIds.length, grupCentreId);
-                }
-              }
-            } catch(e) {}
-          })();
+
+          // Comprovar si secretaria ha actualitzat DESPRÉS de l'última vegada que el professor va veure el grup
+          const updatedAt = snap.data()?.alumnesUpdatedAt?.toMillis?.() || 0;
+          if (!updatedAt) return; // Sense timestamp = canvi antic, no mostrar
+
+          const vistaAt = parseInt(localStorage.getItem(vistaKey) || '0');
+          if (updatedAt <= vistaAt) return; // Ja ho havia vist
+
+          // Nou canvi de secretaria! Mostrar banner
+          if (!document.getElementById('_bannerActualitzacio')) {
+            (async () => {
+              try {
+                const classId = window.currentClassId;
+                if (!classId) return;
+                const classeDoc2 = await window.db.collection('classes').doc(classId).get();
+                const alumnesIds = classeDoc2?.data()?.alumnes || [];
+                mostrarBannerActualitzacio(alumnesCentre.length, alumnesIds.length, grupCentreId, vistaKey, updatedAt);
+              } catch(e) {}
+            })();
+          }
         }
       }, () => {});
 
@@ -829,7 +828,7 @@ function iniciarEscoltaCanvisGrup() {
   }).catch(()=>{});
 }
 
-function mostrarBannerActualitzacio(nCentre, nClasse, grupCentreId) {
+function mostrarBannerActualitzacio(nCentre, nClasse, grupCentreId, vistaKey, updatedAt) {
   if (document.getElementById('_bannerActualitzacio')) return;
 
   const banner = document.createElement('div');
@@ -865,12 +864,14 @@ function mostrarBannerActualitzacio(nCentre, nClasse, grupCentreId) {
   document.body.appendChild(banner);
 
   document.getElementById('_btnTancarBanner').addEventListener('click', () => {
-    // Marcar com ignorat per a aquesta sessió
-    sessionStorage.setItem(`_bannerResolt_${window.currentClassId}_${grupCentreId}`, '1');
+    // Marcar com vist — no tornarà a sortir fins al pròxim canvi de secretaria
+    if (vistaKey && updatedAt) localStorage.setItem(vistaKey, String(updatedAt));
     banner.remove();
   });
 
   document.getElementById('_btnActualitzarClasse').addEventListener('click', async () => {
+    // Marcar com vist
+    if (vistaKey && updatedAt) localStorage.setItem(vistaKey, String(updatedAt));
     banner.innerHTML = '<div style="padding:4px 20px;">⏳ Actualitzant alumnes...</div>';
     try {
       const grupDoc = await window.db.collection('grups_centre').doc(grupCentreId).get();
