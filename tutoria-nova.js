@@ -261,13 +261,48 @@ async function obrirPanellTutoria() {
     }
 
     // Filtrar grupos del curs
-    let grupsCurs = grups.filter(g => 
-      g.tipus === 'classe' && (g.curs === curs || !g.curs)
+    // Prioritat: grups tutoria (tenen els alumnes del grup classe per 2n i 3r ESO)
+    // Fallback: grups classe si no hi ha grups tutoria per a aquest curs
+    let grupsTutoriaCurs = grups.filter(g =>
+      g.tipus === 'tutoria' && (g.curs === curs || !g.curs) && g.parentGrupId
     );
+    let grupsCurs;
+    if (grupsTutoriaCurs.length > 0) {
+      // Usar grups tutoria, però mostrar el nom del grup classe pare (A, B, C...)
+      const grupsPerId = {};
+      grups.forEach(g => { grupsPerId[g.id] = g; });
+      grupsCurs = grupsTutoriaCurs.map(g => {
+        const pare = grupsPerId[g.parentGrupId];
+        return {
+          ...g,
+          nom: pare?.nom || g.nom,           // ex: "A", "B", "C"
+          nivellNom: g.nivellNom || pare?.nivellNom || '',
+          _idOriginal: g.id,
+        };
+      });
+      // Afegir també els grups classe que NO tinguin grup tutoria associat
+      const idsAmbTutoria = new Set(grupsTutoriaCurs.map(g => g.parentGrupId));
+      const classesSenseTutoria = grups.filter(g =>
+        g.tipus === 'classe' && (g.curs === curs || !g.curs) &&
+        !idsAmbTutoria.has(g.id) && (g.alumnes||[]).length > 0
+      );
+      grupsCurs = [...grupsCurs, ...classesSenseTutoria];
+    } else {
+      // Fallback: grups classe
+      grupsCurs = grups.filter(g =>
+        g.tipus === 'classe' && (g.curs === curs || !g.curs)
+      );
+    }
     
     // Filtrar por permisos de tutor
+    // tutoriaGrups conté IDs de grups classe (A,B,C...)
+    // grupsCurs pot contenir grups tutoria (id = id tutoria, parentGrupId = id classe)
+    // Cal comprovar tant l'id directe com el parentGrupId
     if (!potVeureTots && tutoriaGrups.length > 0) {
-      grupsCurs = grupsCurs.filter(g => tutoriaGrups.includes(g.id));
+      grupsCurs = grupsCurs.filter(g =>
+        tutoriaGrups.includes(g.id) ||
+        (g.parentGrupId && tutoriaGrups.includes(g.parentGrupId))
+      );
     }
 
     // Extraer niveles únicos
@@ -1155,12 +1190,9 @@ async function llegirAlumnesGrupCentre(curs, grupId, _materiesLlegat, periodeFil
 
       snap.docs.forEach(d => {
         const data = d.data();
-
-        // Filtre per periode: si s'ha seleccionat, ignorar docs d'altres períodes
+        // Filtre per periode
         if (periodeFiltre && data.periodeNom && data.periodeNom !== periodeFiltre) return;
-        // Si periodeFiltre i el doc no té periodeNom (dades antigues): mostrar si no hi ha filtre
         if (periodeFiltre && !data.periodeNom) return;
-
         const key = data.ralc || `alumne_${Object.keys(resultat).length}_${data.nom}`;
         const alumneKey = Object.keys(resultat).find(k =>
           (data.ralc && resultat[k].ralc === data.ralc) ||
