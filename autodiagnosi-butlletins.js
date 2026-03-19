@@ -139,9 +139,11 @@ async function renderAutodiagnosiPanel(cont) {
     grups.forEach(g => { grupsPerId[g.id] = g; });
 
     // Grups de tutoria (on hi ha alumnes del grup classe)
-    const grupsTutoria = grups.filter(g =>
-      g.tipus === 'tutoria' || (g.tipus === 'classe' && (g.alumnes||[]).length > 0)
-    );
+    const grupsTutoria = grups.filter(g => g.tipus === 'tutoria');
+    // Fallback: si no hi ha grups tutoria, usar grups classe amb alumnes
+    if (grupsTutoria.length === 0) {
+      grupsTutoria.push(...grups.filter(g => g.tipus === 'classe' && (g.alumnes||[]).length > 0));
+    }
     const cursos = [...new Set(grups.map(g => g.curs).filter(Boolean))].sort().reverse();
 
     // Etiqueta llegible: "1r ESO A", "3r ESO C", etc.
