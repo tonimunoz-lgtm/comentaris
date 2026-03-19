@@ -578,7 +578,8 @@ window.actualitzarUIRols = function() {
   // Actualitzar UI segons rols
   if (rols.some(r=>['secretaria','admin','superadmin'].includes(r)))
     window.injectarBotoSecretaria?.();
-  if (rols.some(r=>['tutor','admin','superadmin'].includes(r)))
+  // 'pedagog' afegit: pot veure tots els grups de tutoria (igual que admin)
+  if (rols.some(r=>['tutor','pedagog','admin','superadmin'].includes(r)))
     window.injectarBotoTutoria?.();
   if (rols.some(r=>['revisor','admin','superadmin'].includes(r)))
     window.injectarBotoRevisor?.();
@@ -622,19 +623,8 @@ firebase.auth().onAuthStateChanged(user => {
 });
 
 /* ══════════════════════════════════════════════════════
-   ACTUALITZAR UI ROLS — estén rols.js per cridar injectadors
+   ACTUALITZAR UI ROLS — eliminat bloc duplicat (fusionat al bloc superior)
 ══════════════════════════════════════════════════════ */
-const _origActUIRols = window.actualitzarUIRols;
-window.actualitzarUIRols = function() {
-  _origActUIRols?.();
-  const rols = window._userRols || [];
-  if (rols.some(r=>['secretaria','admin','superadmin'].includes(r)))
-    window.injectarBotoSecretaria?.();
-  if (rols.some(r=>['tutor','admin','superadmin'].includes(r)))
-    window.injectarBotoTutoria?.();
-  if (rols.some(r=>['revisor','admin','superadmin'].includes(r)))
-    window.injectarBotoRevisor?.();
-};
 
 /* ══════════════════════════════════════════════════════
    INICIALITZAR COL·LECCIONS BASE (primera vegada)
