@@ -2152,17 +2152,25 @@ async function modalEditarRols(usuari, onGuardat) {
      const uRols = window._userRols || [];
      if (uRols.includes('superadmin')) return true;
      if (uRols.includes('admin')) return r !== 'superadmin';
-     if (uRols.includes('secretaria')) return r !== 'admin' && r !== 'superadmin';
+     // Secretaria veu tots els rols però no pot modificar admin/superadmin
+     if (uRols.includes('secretaria')) return true;
      return false;
    })
-).map(r=>`
-        <label style="display:flex;align-items:center;gap:12px;cursor:pointer;
+).map(r=>{
+    const uRols2 = window._userRols || [];
+    const esRestringit = uRols2.includes('secretaria') &&
+      !uRols2.some(x => ['admin','superadmin'].includes(x)) &&
+      ['admin','superadmin'].includes(r);
+    return `
+        <label style="display:flex;align-items:center;gap:12px;
+                      ${esRestringit ? 'cursor:not-allowed;opacity:0.55;' : 'cursor:pointer;'}
                       padding:12px 14px;border-radius:10px;background:#f9fafb;
                       border:2px solid ${rolsActuals.includes(r)?rolColor(r):'#e5e7eb'};
                       transition:border-color 0.2s;"
                id="row-rol-${r}">
           <input type="checkbox" class="chk-rol-edit" value="${r}"
             ${rolsActuals.includes(r)?'checked':''}
+            ${esRestringit ? 'disabled title="No pots modificar rols dadministrador"' : ''}
             style="width:18px;height:18px;accent-color:${rolColor(r)};"
             onchange="window._aaOnRolEditChange && window._aaOnRolEditChange(this)">
           <div style="flex:1;">
@@ -2170,7 +2178,8 @@ async function modalEditarRols(usuari, onGuardat) {
             <div style="font-size:12px;color:#9ca3af;">${descrip[r]||''}</div>
           </div>
         </label>
-      `).join('')}
+      `;
+  }).join('')}
     </div>
 
     <!-- Camp RALC editar rols — visible només quan es marca alumne -->
@@ -2264,13 +2273,24 @@ async function modalEditarRols(usuari, onGuardat) {
     }
 
     const ralcEdit = document.getElementById('inpRalcEdit')?.value?.trim()?.toUpperCase() || '';
+
+    // Preservar rols admin/superadmin si qui edita és secretaria (sense poders admin)
+    const uRolsEditor = window._userRols || [];
+    const potEditarAdmin = uRolsEditor.some(r => ['admin','superadmin'].includes(r));
+    let rolsFinals = [...rols];
+    if (!potEditarAdmin) {
+      (usuari.rols || [])
+        .filter(r => ['admin','superadmin'].includes(r))
+        .forEach(r => { if (!rolsFinals.includes(r)) rolsFinals.push(r); });
+    }
+
     await window.db.collection('professors').doc(usuari.id).update({
-      rols: rols.length>0?rols:[],
-      isAdmin: rols.includes('admin'),
+      rols: rolsFinals.length > 0 ? rolsFinals : [],
+      isAdmin: rolsFinals.includes('admin') || rolsFinals.includes('superadmin'),
       revisio_nivells: revisioNivells,
       revisio_tot: revisioNivells.includes('_tot'),
       tutoria_grups: tutoriaGrups,
-      ...(rols.includes('alumne') && ralcEdit ? { ralc: ralcEdit } : {}),
+      ...(rolsFinals.includes('alumne') && ralcEdit ? { ralc: ralcEdit } : {}),
     });
     window.mostrarToast('✅ Rols actualitzats');
     // Actualitzar el badge de pendents
