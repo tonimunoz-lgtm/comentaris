@@ -2732,18 +2732,43 @@ async function carregarDadesButlletins(grups) {
   const resDiv = document.getElementById('bLlistaAlumnes');
   const matDiv = document.getElementById('bResumMateries');
   const matLlista = document.getElementById('bLlistaMateries');
-  resDiv.innerHTML = '<p style="color:#9ca3af;padding:20px;">⏳ Carregant dades...</p>';
   matDiv.style.display = 'none';
+
+  // ── Progress banner dinàmic ──
+  const progId = '_bProgres';
+  document.getElementById(progId)?.remove();
+  const progDiv = document.createElement('div');
+  progDiv.id = progId;
+  progDiv.style.cssText = 'background:#ede9fe;border:1.5px solid #c4b5fd;border-radius:10px;padding:12px 16px;margin-bottom:12px;font-size:13px;color:#4c1d95;';
+  progDiv.innerHTML = '<span id="_bProgresText">⏳ Preparant cerca...</span><div style="margin-top:6px;background:#ddd6fe;border-radius:99px;height:6px;overflow:hidden;"><div id="_bProgresBar" style="background:#7c3aed;height:100%;width:0%;transition:width .3s;border-radius:99px;"></div></div>';
+  resDiv.parentElement.insertBefore(progDiv, resDiv);
+  resDiv.innerHTML = '';
+
+  const setProgres = (txt, pct) => {
+    const el = document.getElementById('_bProgresText');
+    const bar = document.getElementById('_bProgresBar');
+    if (el) el.textContent = txt;
+    if (bar) bar.style.width = pct + '%';
+  };
 
   try {
     const db = window.db;
     const grupDoc = grups.find(g=>g.id===grupId);
     let alumnesCentre = grupDoc?.alumnes || [];
 
-    // Estratègia: llegir totes les subcoleccions de avaluacio_centre/{curs}
-    // que tinguin dades per a aquest grup classe
+    // ── Optimització: NOMÉS cercar les matèries del grup seleccionat ──
+    // En lloc de recórrer TOTS els grups del curs, usem només els fills directes del grup
     const totsGrups = await carregarGrupsCentre();
-    const candidats = totsGrups.filter(g => !g.curs || g.curs === curs);
+    // Matèries/projectes/optatives fills del grup classe seleccionat
+    const candidats = totsGrups.filter(g =>
+      g.parentGrupId === grupId && g.tipus !== 'tutoria'
+    );
+    // Si no hi ha fills directes, fallback a tots els del curs (compatibilitat llegat)
+    const candidatsEfectius = candidats.length > 0
+      ? candidats
+      : totsGrups.filter(g => !g.curs || g.curs === curs);
+
+    setProgres(`⏳ Cercant dades de ${candidatsEfectius.length} matèria${candidatsEfectius.length!==1?'es':''}...`, 5);
 
     const materiesAmbDades = [];
     const alumnesAmbDades  = {};
@@ -2759,17 +2784,16 @@ async function carregarDadesButlletins(grups) {
     });
 
     // Llegir cada candidat com a possible subcolecció
-    for (const cand of candidats) {
+    for (let ci = 0; ci < candidatsEfectius.length; ci++) {
+      const cand = candidatsEfectius[ci];
+      const pct = Math.round(5 + ((ci + 1) / candidatsEfectius.length) * 85);
+      setProgres(`⏳ Matèria ${ci+1}/${candidatsEfectius.length}: ${cand.nom || cand.id}`, pct);
       try {
-        // Buscar documents que pertanyin al grup classe seleccionat
-        // El professor pot haver enviat amb grupId = grupId del grup classe
-        // Cercar per grupClasseId (nou camp) o per grupId (llegat)
         let snap = await db.collection('avaluacio_centre')
           .doc(curs)
           .collection(cand.id)
           .where('grupClasseId', '==', grupId)
           .get();
-        // Si no trobar per grupClasseId, intentar per grupId (dades antigues)
         if (snap.empty) {
           snap = await db.collection('avaluacio_centre')
             .doc(curs)
@@ -2780,36 +2804,43 @@ async function carregarDadesButlletins(grups) {
 
         if (!snap.empty) {
           const nomMat = cand.nom || cand.id;
-          materiesAmbDades.push({ id: cand.id, nom: nomMat });
+          // Comprovar si hi ha docs que passen el filtre de trimestre
+          // IMPORTANT: push a materiesAmbDades NOMÉS si hi ha docs del trimestre seleccionat
+          const docsTriestre = trimestre
+            ? snap.docs.filter(doc => {
+                const d = doc.data();
+                return d.periodeNom && d.periodeNom === trimestre;
+              })
+            : snap.docs;
 
-          snap.docs.forEach(doc => {
-            const d = doc.data();
-            // Filtrar per trimestre (mode estricte):
-            // Si trimestre seleccionat → NOMÉS mostrar docs amb periodeNom igual
-            // Docs sense periodeNom (dades antigues) → s'ignoren quan hi ha filtre
-            if (trimestre) {
-              if (!d.periodeNom || d.periodeNom !== trimestre) return;
-            }
-            const key = d.ralc || `${d.cognoms}_${d.nom}`;
-            if (!alumnesAmbDades[key]) {
-              alumnesAmbDades[key] = {
-                nom: d.nom||'', cognoms: d.cognoms||'', ralc: d.ralc||'',
-                nomComplet: d.cognoms ? `${d.cognoms}, ${d.nom}` : (d.nom||'Desconegut'),
-                materies: {}
+          if (docsTriestre.length > 0) {
+            materiesAmbDades.push({ id: cand.id, nom: nomMat });
+
+            docsTriestre.forEach(doc => {
+              const d = doc.data();
+              const key = d.ralc || `${d.cognoms}_${d.nom}`;
+              if (!alumnesAmbDades[key]) {
+                alumnesAmbDades[key] = {
+                  nom: d.nom||'', cognoms: d.cognoms||'', ralc: d.ralc||'',
+                  nomComplet: d.cognoms ? `${d.cognoms}, ${d.nom}` : (d.nom||'Desconegut'),
+                  materies: {}
+                };
+              }
+              alumnesAmbDades[key].materies[cand.id] = {
+                nom: nomMat,
+                periodeNom: d.periodeNom || '',
+                items: d.items || [],
+                descripcioComuna: d.descripcioComuna || '',
+                comentariGlobal: d.comentariGlobal || '',
               };
-            }
-            alumnesAmbDades[key].materies[cand.id] = {
-              nom: nomMat,
-              periodeNom: d.periodeNom || '',
-              items: d.items || [],
-              descripcioComuna: d.descripcioComuna || '',
-              comentariGlobal: d.comentariGlobal || '',
-            };
-          });
+            });
+          }
         }
-        // Nota: eliminat el fallback sense grupId per evitar barreja entre grups
       } catch(e) { /* ignorem errors de subcoleccions que no existeixen */ }
     }
+
+    setProgres('✅ Dades carregades!', 100);
+    setTimeout(() => document.getElementById(progId)?.remove(), 1500);
 
     // Deduplicar matèries
     const matUniques = [...new Map(materiesAmbDades.map(m=>[m.id,m])).values()];
