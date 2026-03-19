@@ -297,6 +297,7 @@ async function enviarRespostesAlumne(pendent, plantilla) {
       classId:    pendent.classId,
       plantillaId: pendent.plantillaId,
       plantillaTitol: plantilla.titol || '',
+      periodeNom: pendent.periodeNom || '',
       preguntes:  plantilla.preguntes || [],
       respostes,
       estat:      'rebut',   // rebut → revisat → enviatButlleti
@@ -687,6 +688,12 @@ async function obrirModalEnviarPlantilla(plantillaId, plantillaTitol) {
     ${aaHeader('📤', 'Enviar als alumnes', `Plantilla: ${plantillaTitol}`, '#059669')}
     <div style="padding:24px;">
       <div style="margin-bottom:18px;">
+        <label style="font-size:12px;font-weight:700;color:#6b7280;display:block;margin-bottom:8px;">PERÍODE D'AVALUACIÓ</label>
+        <select id="aaSelectPeriode" style="width:100%;padding:11px 14px;border:2px solid #e5e7eb;border-radius:10px;font-size:14px;outline:none;background:#f9fafb;">
+          <option value="">⏳ Carregant períodes...</option>
+        </select>
+      </div>
+      <div style="margin-bottom:18px;">
         <label style="font-size:12px;font-weight:700;color:#6b7280;display:block;margin-bottom:8px;">SELECCIONA EL GRUP CLASSE DE TUTORIA</label>
         <select id="aaSelectGrup" style="width:100%;padding:11px 14px;border:2px solid #e5e7eb;border-radius:10px;font-size:14px;outline:none;background:#f9fafb;">
           <option value="">⏳ Carregant grups...</option>
@@ -720,6 +727,37 @@ async function obrirModalEnviarPlantilla(plantillaId, plantillaTitol) {
 
   overlay.querySelector('.aa-close-btn').addEventListener('click', () => overlay.remove());
   document.getElementById('btnCancelEnviar').addEventListener('click', () => overlay.remove());
+
+  // Carregar períodes reals de Firestore
+  (async () => {
+    const BASE = [
+      { nom:'Pre-avaluació' }, { nom:'1r Trimestre' },
+      { nom:'2n Trimestre' }, { nom:'3r Trimestre' }, { nom:'Final de curs' },
+    ];
+    try {
+      const doc = await _aaDB.collection('_sistema').doc('periodes_tancats').get();
+      let periodes = BASE;
+      if (doc.exists) {
+        const data = doc.data();
+        const noms = data.noms || {};
+        const ordre = data.ordre || BASE.map((_, i) => i);
+        const BASE2 = [
+          { codi:'preav', nom:'Pre-avaluació' }, { codi:'T1', nom:'1r Trimestre' },
+          { codi:'T2', nom:'2n Trimestre' }, { codi:'T3', nom:'3r Trimestre' },
+          { codi:'final', nom:'Final de curs' },
+        ];
+        periodes = ordre.map(codi => {
+          const b = BASE2.find(p => p.codi === codi) || { nom: codi };
+          return { nom: noms[codi] || b.nom };
+        });
+      }
+      const sel = document.getElementById('aaSelectPeriode');
+      if (sel) {
+        sel.innerHTML = '<option value="">— Selecciona el període —</option>' +
+          periodes.map(p => `<option value="${p.nom}">${p.nom}</option>`).join('');
+      }
+    } catch(e) {}
+  })();
 
   // Carregar grups de tutoria filtrats pels grups assignats al tutor
   try {
@@ -917,6 +955,7 @@ async function obrirModalEnviarPlantilla(plantillaId, plantillaTitol) {
           continue;
         }
 
+        const periodeSelec = document.getElementById('aaSelectPeriode')?.value || '';
         batch.set(pendentRef, {
           alumneUID: uid,
           tutorUID:  _aaUID,
@@ -924,6 +963,7 @@ async function obrirModalEnviarPlantilla(plantillaId, plantillaTitol) {
           classId:   grupId,
           plantillaId,
           plantillaTitol,
+          periodeNom: periodeSelec,
           estat:     'pendent',
           enviatAt:  now,
         });
