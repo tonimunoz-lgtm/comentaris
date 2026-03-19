@@ -83,23 +83,31 @@ async function obtenirMateriesPerConfig() {
 /* ══════════════════════════════════════════════════════
    INJECTAR BOTÓ TUTORIA AL SIDEBAR
 ══════════════════════════════════════════════════════ */
+let _tutoriaInjectTimer = null; // guard anti-race-condition
 window.injectarBotoTutoria = function() {
   if (document.getElementById('btnTutoriaSidebar')) return;
+  // Debounce: si es crida múltiples vegades ràpid, esperar que s'estabilitzi
+  if (_tutoriaInjectTimer) return;
+  _tutoriaInjectTimer = setTimeout(() => {
+    _tutoriaInjectTimer = null;
+    if (document.getElementById('btnTutoriaSidebar')) return;
 
-  const nav = document.querySelector('.sidebar-nav') || document.querySelector('#sidebar nav');
-  if (!nav) return;
+    const nav = document.querySelector('.sidebar-nav') || document.querySelector('#sidebar nav');
+    if (!nav) return;
 
-  const btn = document.createElement('button');
-  btn.id = 'btnTutoriaSidebar';
-  btn.className = 'nav-item';
-  btn.dataset.screen = 'tutoria';
-  btn.innerHTML = `<span class="nav-icon">🧑‍🏫</span><span>Tutoria</span>`;
-  btn.style.cssText = `
-    background: linear-gradient(135deg, rgba(124,58,237,0.15), rgba(79,70,229,0.1));
-    border-left: 3px solid #7c3aed;
-  `;
-  btn.addEventListener('click', obrirPanellTutoria);
-  nav.appendChild(btn);
+    const btn = document.createElement('button');
+    btn.id = 'btnTutoriaSidebar';
+    btn.className = 'nav-item';
+    btn.dataset.screen = 'tutoria';
+    btn.innerHTML = `<span class="nav-icon">🧑‍🏫</span><span>Tutoria</span>`;
+    btn.style.cssText = `
+      background: linear-gradient(135deg, rgba(124,58,237,0.15), rgba(79,70,229,0.1));
+      border-left: 3px solid #7c3aed;
+    `;
+    btn.addEventListener('click', obrirPanellTutoria);
+    nav.appendChild(btn);
+    console.log('✅ Botó Tutoria injectat al sidebar');
+  }, 100);
 };
 
 /* ══════════════════════════════════════════════════════
