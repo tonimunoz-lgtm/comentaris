@@ -564,7 +564,7 @@ function mostrarAlertSuperAdmin(msg) {
   setTimeout(() => alertDiv.remove(), 3000);
 }
 
-// Sobreescriure l’actualització de UI per integrar superadmin fix
+// Sobreescriure l'actualització de UI per integrar superadmin fix
 const _origActUIRols2 = window.actualitzarUIRols;
 window.actualitzarUIRols = function() {
   _origActUIRols2?.();
@@ -575,15 +575,30 @@ window.actualitzarUIRols = function() {
   // Regenerar superadmin fix si cal
   assegurarSuperAdmin(user);
 
-  // Actualitzar UI segons rols
-  if (rols.some(r=>['secretaria','admin','superadmin'].includes(r)))
+  // ══════════════════════════════════════════════════════
+  // MATRIU DE BOTONS PER ROL — comprovació ESTRICTA (includes, no jerarquia)
+  //
+  // professor  → cap botó especial (crea grups i envia avaluacions)
+  // alumne     → cap botó (té pantalla pròpia)
+  // tutor      → Tutoria (filtrat als grups assignats)
+  // pedagog    → Tutoria (tots els grups)
+  // secretaria → Secretaria
+  // revisor    → Revisió
+  // admin/superadmin → tots els botons
+  // ══════════════════════════════════════════════════════
+
+  const esAdmin = rols.includes('admin') || rols.includes('superadmin') || !!window._isSuperAdmin;
+
+  // Secretaria: rol explícit o admin
+  if (esAdmin || rols.includes('secretaria'))
     window.injectarBotoSecretaria?.();
-  // Tutoria: NOMÉS tutor i pedagog (explícit, no per jerarquia)
-  // Secretaria NO ha de veure tutoria tot i ser superior jeràrquicament
-  const rolsTutoria = ['tutor', 'pedagog', 'admin', 'superadmin'];
-  if (rols.some(r => rolsTutoria.includes(r)))
+
+  // Tutoria: tutor o pedagog (o admin). Secretaria NO.
+  if (esAdmin || rols.includes('tutor') || rols.includes('pedagog'))
     window.injectarBotoTutoria?.();
-  if (rols.some(r=>['revisor','admin','superadmin'].includes(r)))
+
+  // Revisió: revisor (o admin). Secretaria, tutor, pedagog NO.
+  if (esAdmin || rols.includes('revisor'))
     window.injectarBotoRevisor?.();
 };
 
