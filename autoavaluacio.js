@@ -791,21 +791,23 @@ async function obrirModalEnviarPlantilla(plantillaId, plantillaTitol) {
     totsGrups.forEach(g => { grupsPerId[g.id] = g; });
 
     // Mostrar grups de tutoria (tenen els alumnes del grup classe)
-    // i grups classe que tinguin alumnes com a fallback
-    let grups = totsGrups
-      .filter(g => {
-      // Prioritat: grups tutoria. Fallback: grups classe amb alumnes NOMÉS si no hi ha cap grup tutoria
-      return g.tipus === 'tutoria';
-    });
-    // Fallback: si no hi ha cap grup tutoria, mostrar grups classe amb alumnes
-    if (grups.length === 0) {
-      grups = totsGrups.filter(g => g.tipus === 'classe' && (g.alumnes||[]).length > 0);
-    }
+    // Estratègia: primer busquem grups tipus 'tutoria', fallback a 'classe' amb alumnes
+    let grupsTutoria = totsGrups.filter(g => g.tipus === 'tutoria');
+    let grupsClasse  = totsGrups.filter(g => g.tipus === 'classe' && (g.alumnes||[]).length > 0);
 
-    // Filtrar: admin veu tot, tutor amb '_tot' veu tot, tutor amb grups específics veu els seus
-    if (!esAdminUsuari && !teTots && tutoriaGrups.length > 0) {
-      grups = grups.filter(g => tutoriaGrups.includes(g.id));
-    } else if (!esAdminUsuari && !teTots && tutoriaGrups.length === 0) {
+    // Filtrar per tutoriaGrups ABANS de decidir quins grups mostrar
+    // Això permet que un tutor assignat a un grup 'classe' o 'tutoria' el vegi correctament
+    let grups;
+    if (esAdminUsuari || teTots) {
+      // Admin/superadmin/pedagog: veu tots els grups tutoria (o classe com a fallback)
+      grups = grupsTutoria.length > 0 ? grupsTutoria : grupsClasse;
+    } else if (tutoriaGrups.length > 0) {
+      // Tutor amb grups assignats: filtrar tant tutoria com classe per l'ID assignat
+      const totsFiltrables = [...grupsTutoria, ...grupsClasse];
+      grups = totsFiltrables.filter(g => tutoriaGrups.includes(g.id));
+      // Evitar duplicats per si el mateix grup apareix a les dues llistes
+      grups = grups.filter((g, i, arr) => arr.findIndex(x => x.id === g.id) === i);
+    } else {
       grups = [];
     }
 
