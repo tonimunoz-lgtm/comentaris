@@ -79,20 +79,31 @@ const TIPUS_GRUP = {
    EXPORTAR FUNCIÓ PRINCIPAL
 ══════════════════════════════════════════════════════ */
 window.obrirPanellSecretaria = obrirPanellSecretaria;
+let _secretariaInjectTimer = null; // guard anti-race-condition
 window.injectarBotoSecretaria = function() {
   if (document.getElementById('btnSecretariaSidebar')) return;
-  const nav = document.querySelector('.sidebar-nav');
-  if (!nav) return;
+  // Guard de rol intern: NOMÉS secretaria, admin, superadmin
+  const rols = window._userRols || [];
+  const esAdmin = rols.includes('admin') || rols.includes('superadmin') || !!window._isSuperAdmin;
+  if (!esAdmin && !rols.includes('secretaria')) return;
+  // Debounce anti-race-condition
+  if (_secretariaInjectTimer) return;
+  _secretariaInjectTimer = setTimeout(() => {
+    _secretariaInjectTimer = null;
+    if (document.getElementById('btnSecretariaSidebar')) return;
+    const nav = document.querySelector('.sidebar-nav');
+    if (!nav) return;
   const btn = document.createElement('button');
   btn.id = 'btnSecretariaSidebar';
   btn.className = 'nav-item nav-item-rol';
   btn.innerHTML = `<span class="nav-icon">📋</span><span>Secretaria</span>`;
-  btn.addEventListener('click', obrirPanellSecretaria);
-  nav.appendChild(btn);
+    btn.addEventListener('click', obrirPanellSecretaria);
+    nav.appendChild(btn);
 
-  // Comprovar pendents en carregar i cada 5 minuts
-  comprovarUsuarisPendents();
-  setInterval(comprovarUsuarisPendents, 5 * 60 * 1000);
+    // Comprovar pendents en carregar i cada 5 minuts
+    comprovarUsuarisPendents();
+    setInterval(comprovarUsuarisPendents, 5 * 60 * 1000);
+  }, 100);
 };
 
 /* ══════════════════════════════════════════════════════
