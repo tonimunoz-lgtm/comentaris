@@ -134,11 +134,29 @@ async function renderAutodiagnosiPanel(cont) {
       carregarNivellsAD(), carregarGrupsAD(), carregarCursActiuAD()
     ]);
 
+    // Mapa id → grup per resoldre parentGrupId
+    const grupsPerId = {};
+    grups.forEach(g => { grupsPerId[g.id] = g; });
+
     // Grups de tutoria (on hi ha alumnes del grup classe)
     const grupsTutoria = grups.filter(g =>
       g.tipus === 'tutoria' || (g.tipus === 'classe' && (g.alumnes||[]).length > 0)
     );
     const cursos = [...new Set(grups.map(g => g.curs).filter(Boolean))].sort().reverse();
+
+    // Etiqueta llegible: "1r ESO A", "3r ESO C", etc.
+    function adEtiquetaGrup(g) {
+      const nivell = g.nivellNom || '';
+      if (g.tipus === 'tutoria' && g.parentGrupId) {
+        const pare = grupsPerId[g.parentGrupId];
+        const nomClasse = pare?.nom || g.nom;
+        return `${nivell} ${nomClasse}`.trim();
+      }
+      return `${nivell} ${g.nom || ''}`.trim();
+    }
+
+    // Ordenar per etiqueta
+    grupsTutoria.sort((a, b) => adEtiquetaGrup(a).localeCompare(adEtiquetaGrup(b), 'ca'));
 
     cont.innerHTML = `
       <h4 style="font-size:15px;font-weight:700;color:#1e1b4b;margin-bottom:16px;">
@@ -170,7 +188,7 @@ async function renderAutodiagnosiPanel(cont) {
             <select id="adGrup" style="width:100%;padding:8px 10px;border:1.5px solid #e5e7eb;border-radius:8px;font-size:13px;outline:none;">
               <option value="">— Tria grup —</option>
               ${grupsTutoria.map(g =>
-                `<option value="${g.id}">${adEsH(g.nivellNom || '')} ${adEsH(g.nom)} (${adEsH(g.curs || '')})</option>`
+                `<option value="${g.id}">${adEsH(adEtiquetaGrup(g))}</option>`
               ).join('')}
             </select>
           </div>
@@ -346,17 +364,30 @@ async function carregarAutodiagnosis() {
     `;
 
     // Guardar dades per als botons
-    window._adLlistaAlumnes = llistaAlumnes;
-    window._adGrupNom       = grupNom;
-    window._adGrupNivell    = grupNivell;
-    window._adCurs          = cursGrup;
-    window._adTrimestre     = trimestre;
+    // Recuperar l'etiqueta llegible del grup (si és tutoria, usar el nom del grup classe pare)
+    const grupDocData = grupDoc.data() || {};
+    let etiquetaGrupFinal = `${grupNivell} ${grupNom}`.trim();
+    if (grupDocData.tipus === 'tutoria' && grupDocData.parentGrupId) {
+      try {
+        const pareDoc = await db.collection('grups_centre').doc(grupDocData.parentGrupId).get();
+        if (pareDoc.exists) {
+          etiquetaGrupFinal = `${grupNivell} ${pareDoc.data().nom || grupNom}`.trim();
+        }
+      } catch(e) {}
+    }
+
+    window._adLlistaAlumnes  = llistaAlumnes;
+    window._adGrupNom        = grupNom;
+    window._adGrupNivell     = grupNivell;
+    window._adGrupEtiqueta   = etiquetaGrupFinal;
+    window._adCurs           = cursGrup;
+    window._adTrimestre      = trimestre;
 
     // Listener botons PDF individuals
     resDiv.querySelectorAll('.ad-btn-pdf').forEach(btn => {
       btn.addEventListener('click', () => {
         const alumne = window._adLlistaAlumnes[parseInt(btn.dataset.idx)];
-        if (alumne?.resposta) generarPDFAutodiagnosi(alumne, window._adGrupNom, window._adGrupNivell, window._adCurs, window._adTrimestre);
+        if (alumne?.resposta) generarPDFAutodiagnosi(alumne, window._adGrupEtiqueta || window._adGrupNom, '', window._adCurs, window._adTrimestre);
       });
     });
 
@@ -364,7 +395,7 @@ async function carregarAutodiagnosis() {
     document.getElementById('adGenTots')?.addEventListener('click', () => {
       window._adLlistaAlumnes
         .filter(a => a.resposta)
-        .forEach(a => generarPDFAutodiagnosi(a, window._adGrupNom, window._adGrupNivell, window._adCurs, window._adTrimestre));
+        .forEach(a => generarPDFAutodiagnosi(a, window._adGrupEtiqueta || window._adGrupNom, '', window._adCurs, window._adTrimestre));
     });
 
   } catch(e) {
@@ -392,7 +423,7 @@ function generarPDFAutodiagnosi(alumne, grupNom, grupNivell, curs, trimestre) {
   const comentariTutor = r.comentariTutor || '';
   const dataAvui = new Date().toLocaleDateString('ca-ES', { day: 'numeric', month: 'long', year: 'numeric' });
   const trimestreText = trimestre || r.periodeNom || '1r butlletí d\'avaluació';
-  const grupDisplay = `${grupNivell} ${grupNom}`.trim() || grupNom;
+  const grupDisplay = grupNom || '';  // grupNom ja porta l'etiqueta completa (ex: "1r ESO A")
 
   const html = `<!DOCTYPE html>
 <html lang="ca">
