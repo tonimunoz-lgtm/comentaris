@@ -1331,7 +1331,10 @@ function patchSecretariaRols() {
   console.log('✅ autoavaluacio: handlers secretaria registrats');
 }
 
-window.obrirPanellAutoaval = obrirPanellAutoaval;
+window.obrirPanellAutoaval             = obrirPanellAutoaval;
+window.comprovarRespostesPendentsAutoaval = comprovarRespostesPendentsAutoaval;
+window.injectarBannerAutoaval             = injectarBannerAutoaval;
+window.iniciarComprovacioBadgeAutoaval    = iniciarComprovacioBadgeAutoaval;
 
 // ═════════════════════════════════════════════════════════
 //  BADGE AUTOAVALUACIÓ — respostes alumnes pendents de revisar
