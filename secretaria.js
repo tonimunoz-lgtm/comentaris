@@ -3478,25 +3478,40 @@ async function comprovarUsuarisPendents() {
 }
 
 function actualitzarBadgePendents(count) {
-  // Badge al botó del sidebar
+  const badgeCSS = `
+    display:inline-flex;align-items:center;justify-content:center;
+    background:#ef4444;color:#fff;border-radius:99px;
+    font-size:10px;font-weight:800;min-width:18px;height:18px;
+    padding:0 5px;margin-left:6px;line-height:1;
+  `;
+  const titolBadge = `${count} usuari${count !== 1 ? 's' : ''} pendent${count !== 1 ? 's' : ''} d'assignar rol`;
+
+  // Badge al botó Secretaria del sidebar
   const btnSec = document.getElementById('btnSecretariaSidebar');
-  if (!btnSec) return;
+  if (btnSec) {
+    btnSec.querySelector('.aa-pending-badge')?.remove();
+    if (count > 0) {
+      const badge = document.createElement('span');
+      badge.className = 'aa-pending-badge';
+      badge.style.cssText = badgeCSS;
+      badge.textContent = count;
+      badge.title = titolBadge;
+      btnSec.appendChild(badge);
+    }
+  }
 
-  // Eliminar badge anterior
-  btnSec.querySelector('.aa-pending-badge')?.remove();
-
-  if (count > 0) {
-    const badge = document.createElement('span');
-    badge.className = 'aa-pending-badge';
-    badge.style.cssText = `
-      display:inline-flex;align-items:center;justify-content:center;
-      background:#ef4444;color:#fff;border-radius:99px;
-      font-size:10px;font-weight:800;min-width:18px;height:18px;
-      padding:0 5px;margin-left:6px;line-height:1;
-    `;
-    badge.textContent = count;
-    badge.title = `${count} usuari${count !== 1 ? 's' : ''} pendent${count !== 1 ? 's' : ''} d'assignar rol`;
-    btnSec.appendChild(badge);
+  // Badge idèntic al botó Usuaris del panell de secretaria (tab header)
+  const tabUsuaris = document.querySelector('button.sec-tab[data-tab="usuaris"]');
+  if (tabUsuaris) {
+    tabUsuaris.querySelector('.aa-pending-badge')?.remove();
+    if (count > 0) {
+      const badge = document.createElement('span');
+      badge.className = 'aa-pending-badge';
+      badge.style.cssText = badgeCSS;
+      badge.textContent = count;
+      badge.title = titolBadge;
+      tabUsuaris.appendChild(badge);
+    }
   }
 }
 
