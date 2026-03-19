@@ -505,7 +505,7 @@ async function renderEstructura(body) {
       btn.addEventListener('click', async () => {
         if (!confirm(`Eliminar "${btn.dataset.nom}"?`)) return;
         const nous = [...grup.alumnes]; nous.splice(parseInt(btn.dataset.idx),1);
-        await window.db.collection('grups_centre').doc(grup.id).update({alumnes:nous});
+        await window.db.collection('grups_centre').doc(grup.id).update({alumnes:nous, alumnesUpdatedAt: firebase.firestore.FieldValue.serverTimestamp()});
         grup.alumnes = nous; renderAlumnes(grup);
         window.mostrarToast('🗑️ Alumne eliminat');
       });
@@ -525,7 +525,7 @@ async function renderEstructura(body) {
         if (ddFrom===null||ddFrom===to) return;
         const nous = [...grup.alumnes];
         const [item] = nous.splice(ddFrom,1); nous.splice(to,0,item);
-        await window.db.collection('grups_centre').doc(grup.id).update({alumnes:nous});
+        await window.db.collection('grups_centre').doc(grup.id).update({alumnes:nous, alumnesUpdatedAt: firebase.firestore.FieldValue.serverTimestamp()});
         grup.alumnes = nous; renderAlumnes(grup);
       });
     });
@@ -984,7 +984,7 @@ function modalCopiarAlumnesDe(grupDesti, candidates, onRefresh) {
           });
 
           const total = [...actuals, ...nous];
-          await window.db.collection('grups_centre').doc(grupDesti.id).update({ alumnes: total });
+          await window.db.collection('grups_centre').doc(grupDesti.id).update({ alumnes: total, alumnesUpdatedAt: firebase.firestore.FieldValue.serverTimestamp() });
           grupDesti.alumnes = total;
 
           document.getElementById('_modalSec')?.remove();
@@ -1038,7 +1038,8 @@ async function copiarAlumnesATotesLesMateries(materiaOrigen, grups, onRefresh) {
           const currentDesti = grups.find(g => g.id === desti.id); // Re-fetch para el estado actual
           if (currentDesti && (!currentDesti.alumnes || currentDesti.alumnes.length === 0)) {
             await window.db.collection('grups_centre').doc(desti.id).update({
-              alumnes: materiaOrigen.alumnes
+              alumnes: materiaOrigen.alumnes,
+              alumnesUpdatedAt: firebase.firestore.FieldValue.serverTimestamp()
             });
           }
         }
@@ -1189,7 +1190,7 @@ function modalAlumne(grup, onRefresh) {
     const ralc    = document.getElementById('inpAlRalc').value.trim();
     if (!nom) { window.mostrarToast('⚠️ El nom és obligatori'); return false; }
     const alumnes = [...(grup.alumnes||[]), {nom, cognoms, ralc}];
-    await window.db.collection('grups_centre').doc(grup.id).update({alumnes});
+    await window.db.collection('grups_centre').doc(grup.id).update({alumnes, alumnesUpdatedAt: firebase.firestore.FieldValue.serverTimestamp()});
     grup.alumnes = alumnes;
     window.mostrarToast('✅ Alumne afegit');
     onRefresh?.(grup);
@@ -1256,7 +1257,7 @@ function modalEditarAlumne(grup, idx, onRefresh) {
     if (!nom) { window.mostrarToast('⚠️ El nom és obligatori'); return false; }
     const alumnesNous = [...grup.alumnes];
     alumnesNous[idx] = { nom, cognoms, ralc };
-    await window.db.collection('grups_centre').doc(grup.id).update({ alumnes: alumnesNous });
+    await window.db.collection('grups_centre').doc(grup.id).update({ alumnes: alumnesNous, alumnesUpdatedAt: firebase.firestore.FieldValue.serverTimestamp() });
     grup.alumnes = alumnesNous;
     window.mostrarToast('✅ Alumne actualitzat');
     onRefresh?.();
@@ -1345,7 +1346,7 @@ function modalImportExcel(grup, onRefresh) {
       const nodupl = nous.filter(a => !actuals.some(ex =>
         (a.ralc && ex.ralc === a.ralc) || (ex.nom===a.nom && ex.cognoms===a.cognoms)
       ));
-      await window.db.collection('grups_centre').doc(grup.id).update({ alumnes: [...actuals, ...nodupl] });
+      await window.db.collection('grups_centre').doc(grup.id).update({ alumnes: [...actuals, ...nodupl], alumnesUpdatedAt: firebase.firestore.FieldValue.serverTimestamp() });
       grup.alumnes = [...actuals, ...nodupl];
       window.mostrarToast(`✅ ${nodupl.length} alumnes importats (${nous.length-nodupl.length} duplicats ignorats)`);
       onRefresh?.();
@@ -2711,45 +2712,18 @@ async function carregarDadesButlletins(grups) {
   const resDiv = document.getElementById('bLlistaAlumnes');
   const matDiv = document.getElementById('bResumMateries');
   const matLlista = document.getElementById('bLlistaMateries');
+  resDiv.innerHTML = '<p style="color:#9ca3af;padding:20px;">⏳ Carregant dades...</p>';
   matDiv.style.display = 'none';
-
-  function mostrarProgres(actual, total, fase) {
-    const pct = total > 0 ? Math.round((actual / total) * 100) : 0;
-    resDiv.innerHTML = `
-      <div style="padding:24px 20px;">
-        <div style="display:flex;align-items:center;gap:12px;margin-bottom:16px;">
-          <div style="font-size:28px;animation:spin 1s linear infinite;">⏳</div>
-          <div>
-            <div style="font-size:14px;font-weight:700;color:#1e1b4b;">Carregant dades del butlletí...</div>
-            <div style="font-size:12px;color:#6b7280;margin-top:2px;">${fase}</div>
-          </div>
-        </div>
-        <div style="background:#e5e7eb;border-radius:99px;height:10px;overflow:hidden;">
-          <div style="height:100%;border-radius:99px;background:linear-gradient(90deg,#7c3aed,#4f46e5);
-                      width:${pct}%;transition:width .3s ease;"></div>
-        </div>
-        <div style="display:flex;justify-content:space-between;margin-top:6px;font-size:11px;color:#9ca3af;">
-          <span>${actual} de ${total} matèries consultades</span>
-          <span>${pct}%</span>
-        </div>
-      </div>
-      <style>@keyframes spin{from{transform:rotate(0deg)}to{transform:rotate(360deg)}}</style>
-    `;
-  }
-
-  mostrarProgres(0, 1, 'Preparant la consulta...');
 
   try {
     const db = window.db;
     const grupDoc = grups.find(g=>g.id===grupId);
     let alumnesCentre = grupDoc?.alumnes || [];
 
-    // Estratègia: llegir NOMÉS les matèries del grup classe seleccionat
-    // (parentGrupId === grupId), no tots els grups del centre
+    // Estratègia: llegir totes les subcoleccions de avaluacio_centre/{curs}
+    // que tinguin dades per a aquest grup classe
     const totsGrups = await carregarGrupsCentre();
-    const candidats = totsGrups.filter(g =>
-      g.parentGrupId === grupId && g.tipus !== 'tutoria'
-    );
+    const candidats = totsGrups.filter(g => !g.curs || g.curs === curs);
 
     const materiesAmbDades = [];
     const alumnesAmbDades  = {};
@@ -2765,8 +2739,6 @@ async function carregarDadesButlletins(grups) {
     });
 
     // Llegir cada candidat com a possible subcolecció
-    mostrarProgres(0, candidats.length, `Consultant ${candidats.length} matèries del grup...`);
-    let comptador = 0;
     for (const cand of candidats) {
       try {
         // Buscar documents que pertanyin al grup classe seleccionat
@@ -2817,13 +2789,6 @@ async function carregarDadesButlletins(grups) {
         }
         // Nota: eliminat el fallback sense grupId per evitar barreja entre grups
       } catch(e) { /* ignorem errors de subcoleccions que no existeixen */ }
-
-      comptador++;
-      mostrarProgres(comptador, candidats.length,
-        materiesAmbDades.length > 0
-          ? `Trobades ${materiesAmbDades.length} matèries amb dades...`
-          : `Consultant matèries del grup...`
-      );
     }
 
     // Deduplicar matèries
@@ -2953,7 +2918,7 @@ async function carregarDadesButlletins(grups) {
         nom: a.nom, cognoms: a.cognoms, ralc: a.ralc
       }));
       try {
-        await window.db.collection('grups_centre').doc(grupId).update({ alumnes: alumnesRecup });
+        await window.db.collection('grups_centre').doc(grupId).update({ alumnes: alumnesRecup, alumnesUpdatedAt: firebase.firestore.FieldValue.serverTimestamp() });
         window.mostrarToast(`✅ ${alumnesRecup.length} alumnes recuperats al grup classe`, 3000);
         btn.textContent = '✅ Recuperat!';
         setTimeout(() => document.getElementById('bCarregar')?.click(), 1000);
