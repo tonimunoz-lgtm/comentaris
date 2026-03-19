@@ -101,9 +101,7 @@ async function initAutoavaluacio() {
         // Patch secretaria: afegir rol alumne + camp RALC
         patchSecretariaRols();
         // Badge tutoria: respostes pendents (només si és tutor o admin)
-        const rolsU = _aaUser?.rols || [];
-        const esTutorOAdmin = rolsU.some(r => ['tutor','admin','superadmin','pedagog'].includes(r));
-        if (esTutorOAdmin) iniciarComprovacioBadgeTutoria();
+        iniciarComprovacioBadgeAutoaval();
       }
     });
   };
@@ -1012,6 +1010,9 @@ async function carregarTabRespostes() {
 
     const respostes = snap.docs.map(d => ({ id: d.id, ...d.data() })).sort((a,b) => (b.enviatAt?.seconds||0) - (a.enviatAt?.seconds||0));
 
+    const nPendents = respostes.filter(r => r.estat === 'rebut' || r.estat === 'revisat').length;
+    injectarBannerAutoaval(nPendents);
+
     if (respostes.length === 0) {
       cont.innerHTML = `<div style="text-align:center;padding:40px;background:#f9fafb;border-radius:12px;border:2px dashed #e5e7eb;">
         <div style="font-size:40px;margin-bottom:12px;">📥</div>
@@ -1333,110 +1334,76 @@ function patchSecretariaRols() {
 window.obrirPanellAutoaval = obrirPanellAutoaval;
 
 // ═════════════════════════════════════════════════════════
-//  BADGE TUTORIA — respostes alumnes pendents de revisar
+//  BADGE AUTOAVALUACIÓ — respostes alumnes pendents de revisar
 // ═════════════════════════════════════════════════════════
-async function comprovarRespostesPendentsTutoria() {
+async function comprovarRespostesPendentsAutoaval() {
   if (!_aaDB || !_aaUID) return 0;
   try {
     const snap = await _aaDB.collection('autoaval_respostes')
       .where('tutorUID', '==', _aaUID)
       .get();
 
-    const pendents = snap.docs.filter(d => {
-      const estat = d.data().estat;
-      return estat === 'rebut' || estat === 'revisat';
-    });
+    const count = snap.docs.filter(d => {
+      const e = d.data().estat;
+      return e === 'rebut' || e === 'revisat';
+    }).length;
 
-    const count = pendents.length;
-    actualitzarBadgeTutoria(count);
+    // Badge al botó Autoavaluació del sidebar
+    const btn = document.getElementById('btnAutoavalTutor');
+    if (btn) {
+      btn.querySelector('.aa-badge')?.remove();
+      if (count > 0) {
+        const badge = document.createElement('span');
+        badge.className = 'aa-badge';
+        badge.style.cssText = 'display:inline-flex;align-items:center;justify-content:center;background:#ef4444;color:#fff;border-radius:99px;font-size:10px;font-weight:800;min-width:18px;height:18px;padding:0 5px;margin-left:6px;line-height:1;';
+        badge.textContent = count;
+        badge.title = `${count} resposta${count !== 1 ? 'es' : ''} d'alumne pendent${count !== 1 ? 's' : ''} de revisar`;
+        btn.appendChild(badge);
+      }
+    }
     return count;
   } catch(e) {
-    console.warn('autoavaluacio: error comprovant respostes pendents', e);
+    console.warn('autoavaluacio: error badge', e);
     return 0;
   }
 }
 
-function actualitzarBadgeTutoria(count) {
-  const badgeCSS = `display:inline-flex;align-items:center;justify-content:center;
-    background:#ef4444;color:#fff;border-radius:99px;
-    font-size:10px;font-weight:800;min-width:18px;height:18px;
-    padding:0 5px;margin-left:6px;line-height:1;`;
-  const titol = `${count} resposta${count !== 1 ? 'es' : ''} d'alumne pendent${count !== 1 ? 's' : ''} de revisar`;
-
-  const btnTutoria = document.getElementById('btnTutoriaSidebar');
-  if (btnTutoria) {
-    btnTutoria.querySelector('.aa-tutoria-badge')?.remove();
-    if (count > 0) {
-      const badge = document.createElement('span');
-      badge.className = 'aa-tutoria-badge';
-      badge.style.cssText = badgeCSS;
-      badge.textContent = count;
-      badge.title = titol;
-      btnTutoria.appendChild(badge);
-    }
-  }
-}
-
-function injectarBannerTutoria(count) {
-  document.getElementById('aaBannerTutoria')?.remove();
+// Injectar banner dins del panell d'autoavaluació (tab Respostes)
+// Es crida des de carregarTabRespostes quan hi ha pendents
+function injectarBannerAutoaval(count) {
+  document.getElementById('aaBannerRespostes')?.remove();
   if (count === 0) return;
 
-  const panell = document.getElementById('panellTutoria');
-  if (!panell) return;
-
-  // Inserir just abans del body de contingut (el div que conté llistaTutoria)
-  const bodyContingut = panell.querySelector('#llistaTutoria')?.parentElement;
-  if (!bodyContingut) return;
+  const tabRespostes = document.getElementById('aaTabRespostes');
+  if (!tabRespostes) return;
 
   const banner = document.createElement('div');
-  banner.id = 'aaBannerTutoria';
-  banner.style.cssText = `background:#fef2f2;border-bottom:2px solid #fca5a5;
-    padding:12px 24px;display:flex;align-items:center;
-    justify-content:space-between;gap:12px;flex-wrap:wrap;flex-shrink:0;`;
+  banner.id = 'aaBannerRespostes';
+  banner.style.cssText = 'background:#fef2f2;border:2px solid #fca5a5;border-radius:12px;padding:14px 18px;margin-bottom:16px;display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;';
   banner.innerHTML = `
     <div style="display:flex;align-items:center;gap:10px;">
-      <span style="font-size:20px;">⚠️</span>
+      <span style="font-size:22px;">⚠️</span>
       <div>
-        <div style="font-size:13px;font-weight:800;color:#b91c1c;">
-          ${count} resposta${count !== 1 ? 'es' : ''} d'alumne${count !== 1 ? 's' : ''} pendent${count !== 1 ? 's' : ''} de revisar i enviar al butlletí
+        <div style="font-size:14px;font-weight:800;color:#b91c1c;">
+          ${count} resposta${count !== 1 ? 'es' : ''} d'alumne${count !== 1 ? 's' : ''} pendents de revisar i enviar al butlletí
         </div>
-        <div style="font-size:11px;color:#ef4444;margin-top:2px;">
-          Ves a "📝 Autoavaluació → Respostes" per revisar-les i enviar-les.
+        <div style="font-size:12px;color:#ef4444;margin-top:2px;">
+          Revisa-les i clica "Enviar al butlletí" per a cada alumne.
         </div>
       </div>
     </div>
-    <button id="btnBannerAnarAutoaval" style="
-      padding:7px 14px;background:#ef4444;color:#fff;border:none;
-      border-radius:8px;font-size:12px;font-weight:700;cursor:pointer;white-space:nowrap;">
-      Revisar ara →
-    </button>
   `;
-  bodyContingut.parentElement.insertBefore(banner, bodyContingut);
-
-  document.getElementById('btnBannerAnarAutoaval')?.addEventListener('click', () => {
-    document.getElementById('panellTutoria')?.remove();
-    obrirPanellAutoaval();
-    setTimeout(() => {
-      document.querySelector('.aa-tab[data-tab="respostes"]')?.click();
-    }, 300);
-  });
+  tabRespostes.insertBefore(banner, tabRespostes.firstChild);
 }
 
-function iniciarComprovacioBadgeTutoria() {
-  // Comprovació inicial i periòdica
-  comprovarRespostesPendentsTutoria();
-  setInterval(comprovarRespostesPendentsTutoria, 5 * 60 * 1000);
-
-  // MutationObserver: detectar quan s'obre el panell de tutoria
-  const obs = new MutationObserver(() => {
-    const panell = document.getElementById('panellTutoria');
-    if (panell && !document.getElementById('aaBannerTutoria')) {
-      comprovarRespostesPendentsTutoria().then(count => {
-        injectarBannerTutoria(count);
-      });
-    }
-  });
-  obs.observe(document.body, { childList: true });
+function iniciarComprovacioBadgeAutoaval() {
+  // Esperar que el botó del sidebar existeixi i fer la primera comprovació
+  function intentar() {
+    if (!document.getElementById('btnAutoavalTutor')) { setTimeout(intentar, 600); return; }
+    comprovarRespostesPendentsAutoaval();
+  }
+  intentar();
+  setInterval(comprovarRespostesPendentsAutoaval, 5 * 60 * 1000);
 }
 
 console.log('✅ autoavaluacio.js: inicialitzat');
