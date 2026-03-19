@@ -497,19 +497,17 @@ async function carregarDadesRevisio(curs, matId, grupId, materies, grups, period
             alumnesMap[key].id = docIdReal;
           }
 
-          // Filtre per periode: si s'ha seleccionat, ignorar docs d'altres períodes
+          // Filtre per periode (return, no continue — estem dins forEach)
           const periodeActual = data.periodeNom || data.periode || '';
-          if (periodeFiltre) {
-            if (!periodeActual || periodeActual !== periodeFiltre) continue;
-          }
+          if (periodeFiltre && periodeActual !== periodeFiltre) return;
 
           // Sense filtre: guardar només l'últim période
           const existent = alumnesMap[key].materies[mat.id];
           const ordrePeriodes = ['Pre-avaluació', 'T1', '1r Trimestre', 'T2', '2n Trimestre', 'T3', '3r Trimestre', 'Final', 'Final de curs'];
-          const indexNou = ordrePeriodes.indexOf(periodeActual);
-          const indexVell = existent ? ordrePeriodes.indexOf(existent.periodeNom) : -1;
+          const indexNou = periodeActual ? ordrePeriodes.indexOf(periodeActual) : -1;
+          const indexVell = existent ? ordrePeriodes.indexOf(existent.periodeNom || '') : -1;
 
-         if (!existent || periodeFiltre || indexNou > indexVell || indexNou === -1) {
+          if (!existent || indexNou > indexVell || (indexNou === -1 && !existent)) {
   alumnesMap[key].materies[mat.id] = {
     docId: docIdReal,   // ← AÑADIR ESTA LÍNEA
     nom: mat.nom || mat.id,
