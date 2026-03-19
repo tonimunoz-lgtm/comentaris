@@ -2711,8 +2711,40 @@ async function carregarDadesButlletins(grups) {
   const resDiv = document.getElementById('bLlistaAlumnes');
   const matDiv = document.getElementById('bResumMateries');
   const matLlista = document.getElementById('bLlistaMateries');
-  resDiv.innerHTML = '<p style="color:#9ca3af;padding:20px;">⏳ Carregant dades...</p>';
   matDiv.style.display = 'none';
+
+  // Funció helper per actualitzar la barra de progrés
+  function mostrarProgres(actual, total, fase) {
+    const pct = total > 0 ? Math.round((actual / total) * 100) : 0;
+    resDiv.innerHTML = `
+      <div style="padding:24px 20px;">
+        <div style="display:flex;align-items:center;gap:12px;margin-bottom:16px;">
+          <div style="font-size:28px;animation:spin 1s linear infinite;">⏳</div>
+          <div>
+            <div style="font-size:14px;font-weight:700;color:#1e1b4b;">Carregant dades del butlletí...</div>
+            <div style="font-size:12px;color:#6b7280;margin-top:2px;">${fase}</div>
+          </div>
+        </div>
+        <div style="background:#e5e7eb;border-radius:99px;height:10px;overflow:hidden;">
+          <div style="
+            height:100%;border-radius:99px;
+            background:linear-gradient(90deg,#7c3aed,#4f46e5);
+            width:${pct}%;
+            transition:width .3s ease;
+          "></div>
+        </div>
+        <div style="display:flex;justify-content:space-between;margin-top:6px;font-size:11px;color:#9ca3af;">
+          <span>${actual} de ${total} matèries consultades</span>
+          <span>${pct}%</span>
+        </div>
+      </div>
+      <style>
+        @keyframes spin { from{transform:rotate(0deg)} to{transform:rotate(360deg)} }
+      </style>
+    `;
+  }
+
+  mostrarProgres(0, 1, 'Preparant la consulta...');
 
   try {
     const db = window.db;
@@ -2736,6 +2768,10 @@ async function carregarDadesButlletins(grups) {
         materies: {}
       };
     });
+
+    // Inicialitzar progrés amb el total real de candidats
+    mostrarProgres(0, candidats.length, `Consultant ${candidats.length} matèries...`);
+    let comptador = 0;
 
     // Llegir cada candidat com a possible subcolecció
     for (const cand of candidats) {
@@ -2794,6 +2830,14 @@ async function carregarDadesButlletins(grups) {
         }
         // Nota: eliminat el fallback sense grupId per evitar barreja entre grups
       } catch(e) { /* ignorem errors de subcoleccions que no existeixen */ }
+
+      // Actualitzar progrés
+      comptador++;
+      const matTrobades = materiesAmbDades.length;
+      const fase = matTrobades > 0
+        ? `Trobades ${matTrobades} matèries amb dades...`
+        : `Consultant matèries del centre...`;
+      mostrarProgres(comptador, candidats.length, fase);
     }
 
     // Deduplicar matèries
