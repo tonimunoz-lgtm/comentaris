@@ -2760,12 +2760,11 @@ async function carregarDadesButlletins(grups) {
         if (!snap.empty) {
           const nomMat = cand.nom || cand.id;
 
-          // Verificar si hi ha almenys un doc del periode seleccionat
-          // ABANS de marcar la matèria com "enviada"
+          // Comptar quants docs corresponen al periode seleccionat
+          // ABANS de marcar la matèria com "enviada" per a l'estat d'enviament
           const docsDelPeriode = trimestre
             ? snap.docs.filter(doc => doc.data().periodeNom === trimestre)
             : snap.docs;
-
           if (docsDelPeriode.length > 0) {
             materiesAmbDades.push({ id: cand.id, nom: nomMat });
           }
