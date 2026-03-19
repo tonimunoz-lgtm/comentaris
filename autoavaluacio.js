@@ -736,11 +736,15 @@ async function obrirModalEnviarPlantilla(plantillaId, plantillaTitol) {
                         || (window._userRols || []).some(r => r === 'admin' || r === 'superadmin');
 
     const snap = await _aaDB.collection('grups_centre').get();
+    const totsGrups = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+
+    // Mapa id → grup per resoldre parentGrupId
+    const grupsPerId = {};
+    totsGrups.forEach(g => { grupsPerId[g.id] = g; });
 
     // Mostrar grups de tutoria (tenen els alumnes del grup classe)
     // i grups classe que tinguin alumnes com a fallback
-    let grups = snap.docs
-      .map(d => ({ id: d.id, ...d.data() }))
+    let grups = totsGrups
       .filter(g => g.tipus === 'tutoria' || (g.tipus === 'classe' && (g.alumnes||[]).length > 0));
 
     // Filtrar: admin veu tot, tutor amb '_tot' veu tot, tutor amb grups específics veu els seus
@@ -750,15 +754,27 @@ async function obrirModalEnviarPlantilla(plantillaId, plantillaTitol) {
       grups = [];
     }
 
-    // Ordenar per nom
-    grups.sort((a, b) => (a.nom || '').localeCompare(b.nom || '', 'ca'));
+    // Construir etiqueta llegible: "1r ESO A", "1r ESO B", etc.
+    // Per grups tutoria: usar el nom del grup classe pare (parentGrupId)
+    function etiquetaGrup(g) {
+      const nivell = g.nivellNom || '';
+      if (g.tipus === 'tutoria' && g.parentGrupId) {
+        const pare = grupsPerId[g.parentGrupId];
+        const nomClasse = pare?.nom || g.nom;
+        return `${nivell} ${nomClasse}`.trim();
+      }
+      return `${nivell} ${g.nom || ''}`.trim();
+    }
+
+    // Ordenar per nivell + nom grup classe
+    grups.sort((a, b) => etiquetaGrup(a).localeCompare(etiquetaGrup(b), 'ca'));
 
     const sel = document.getElementById('aaSelectGrup');
     if (grups.length === 0) {
       sel.innerHTML = '<option value="">— Cap grup assignat al teu perfil —</option>';
     } else {
       sel.innerHTML = '<option value="">— Selecciona un grup —</option>' +
-        grups.map(g => `<option value="${g.id}">${esH(g.nivellNom || '')} - ${esH(g.nom)} (${g.curs || ''})</option>`).join('');
+        grups.map(g => `<option value="${g.id}">${esH(etiquetaGrup(g))}</option>`).join('');
     }
 
     sel.addEventListener('change', () => carregarAlumnesGrup(sel.value));
