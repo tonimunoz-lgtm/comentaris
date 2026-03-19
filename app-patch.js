@@ -578,8 +578,10 @@ window.actualitzarUIRols = function() {
   // Actualitzar UI segons rols
   if (rols.some(r=>['secretaria','admin','superadmin'].includes(r)))
     window.injectarBotoSecretaria?.();
-  // 'pedagog' afegit: pot veure tots els grups de tutoria (igual que admin)
-  if (rols.some(r=>['tutor','pedagog','admin','superadmin'].includes(r)))
+  // Tutoria: NOMÉS tutor i pedagog (explícit, no per jerarquia)
+  // Secretaria NO ha de veure tutoria tot i ser superior jeràrquicament
+  const rolsTutoria = ['tutor', 'pedagog', 'admin', 'superadmin'];
+  if (rols.some(r => rolsTutoria.includes(r)))
     window.injectarBotoTutoria?.();
   if (rols.some(r=>['revisor','admin','superadmin'].includes(r)))
     window.injectarBotoRevisor?.();
