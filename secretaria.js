@@ -2759,13 +2759,20 @@ async function carregarDadesButlletins(grups) {
 
         if (!snap.empty) {
           const nomMat = cand.nom || cand.id;
-          materiesAmbDades.push({ id: cand.id, nom: nomMat });
+
+          // Verificar si hi ha almenys un doc del periode seleccionat
+          // ABANS de marcar la matèria com "enviada"
+          const docsDelPeriode = trimestre
+            ? snap.docs.filter(doc => doc.data().periodeNom === trimestre)
+            : snap.docs;
+
+          if (docsDelPeriode.length > 0) {
+            materiesAmbDades.push({ id: cand.id, nom: nomMat });
+          }
 
           snap.docs.forEach(doc => {
             const d = doc.data();
             // Filtrar per trimestre (mode estricte):
-            // Si trimestre seleccionat → NOMÉS mostrar docs amb periodeNom igual
-            // Docs sense periodeNom (dades antigues) → s'ignoren quan hi ha filtre
             if (trimestre) {
               if (!d.periodeNom || d.periodeNom !== trimestre) return;
             }
