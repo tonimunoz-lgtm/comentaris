@@ -90,15 +90,40 @@ async function initAutoavaluacio() {
 
       if (_aaRol === 'alumne') {
         await activarModeAlumne();
+      } else if (!_aaUser || !_aaUser.rols || _aaUser.rols.length === 0) {
+        // Usuari sense rol assignat → pantalla d'espera
+        // Interceptar setupAfterAuth per evitar que app.js mostri la UI
+        interceptarAppPerUsuariPendent();
+        await activarModePendent();
       } else {
         // Mode professor/tutor: injectar botó al panell tutoria
         injectarBotoAutoavalTutor();
-        // Patch secretaria: afegir rol alumne
+        // Patch secretaria: afegir rol alumne + camp RALC
         patchSecretariaRols();
       }
     });
   };
   tryInit();
+}
+
+// Evita que app.js mostri la UI quan l'usuari no té rol
+function interceptarAppPerUsuariPendent() {
+  // app.js crida showApp() que fa appRoot visible
+  // Ho interceptem sobreescrivint la funció global si existeix
+  if (window.showApp) {
+    const originalShowApp = window.showApp;
+    window.showApp = function() {
+      // No fer res — la pantalla pendent ja controla la UI
+      console.log('autoavaluacio: showApp interceptat per usuari pendent');
+    };
+  }
+  // També ocultar directament per si showApp ja s'ha cridat
+  setTimeout(() => {
+    const appRoot = document.getElementById('appRoot');
+    if (appRoot) appRoot.style.display = 'none';
+    const loginScreen = document.getElementById('loginScreen');
+    if (loginScreen) loginScreen.style.display = 'none';
+  }, 300);
 }
 
 // ═════════════════════════════════════════════════════════
@@ -292,6 +317,44 @@ async function enviarRespostesAlumne(pendent, plantilla) {
     btn.disabled = false;
     btn.textContent = '📤 Enviar autoavaluació';
   }
+}
+
+// ═════════════════════════════════════════════════════════
+//  MODE PENDENT — usuari sense rol assignat
+// ═════════════════════════════════════════════════════════
+async function activarModePendent() {
+  await new Promise(r => setTimeout(r, 600));
+
+  const appRoot = document.getElementById('appRoot');
+  if (appRoot) appRoot.style.display = 'none';
+  const loginScreen = document.getElementById('loginScreen');
+  if (loginScreen) loginScreen.style.display = 'none';
+
+  document.getElementById('aaPendentScreen')?.remove();
+  const screen = document.createElement('div');
+  screen.id = 'aaPendentScreen';
+  screen.style.cssText = 'position:fixed;inset:0;background:#f5f3ff;display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:99999;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;padding:24px;';
+  screen.innerHTML = `
+    <div style="background:#fff;border-radius:20px;padding:40px;max-width:480px;width:100%;text-align:center;box-shadow:0 8px 40px rgba(0,0,0,0.12);">
+      <div style="font-size:64px;margin-bottom:16px;">⏳</div>
+      <h2 style="font-size:22px;font-weight:800;color:#1e1b4b;margin:0 0 12px;">Compte pendent d'aprovació</h2>
+      <p style="color:#6b7280;font-size:14px;line-height:1.6;margin:0 0 24px;">
+        El teu compte s'ha creat correctament però encara no té cap rol assignat.<br><br>
+        Contacta amb la secretaria del centre perquè activin el teu accés.
+      </p>
+      <div style="background:#f0fdf4;border:1.5px solid #86efac;border-radius:10px;padding:12px;margin-bottom:24px;font-size:13px;color:#166534;">
+        📧 ${esH(window.firebase?.auth().currentUser?.email || '')}
+      </div>
+      <button id="btnPendentSortir" style="width:100%;padding:12px;background:#7c3aed;color:#fff;border:none;border-radius:10px;font-size:14px;font-weight:700;cursor:pointer;">
+        Tancar sessió
+      </button>
+    </div>
+  `;
+  document.body.appendChild(screen);
+  document.getElementById('btnPendentSortir').addEventListener('click', async () => {
+    await window.firebase.auth().signOut();
+    window.location.reload();
+  });
 }
 
 // ═════════════════════════════════════════════════════════
@@ -1210,84 +1273,58 @@ async function enviarRespostaAlButlleti(resposta, overlay) {
 //     com a fallback.
 // ═════════════════════════════════════════════════════════
 function patchSecretariaRols() {
-  const COLOR_ALUMNE = '#0891b2';
+  const COLOR_ALUMNE = '#0e7490';
 
-  // ── Helper: injectar checkbox alumne a un contenidor de rols ──
-  function injectarRolAlumne(container, clsCheckbox) {
-    if (!container) return;
-    if (container.querySelector(`[value="alumne"]`)) return; // ja existeix
+  // Handlers globals que secretaria.js crida via onchange inline
+  // quan es marca/desmarca el rol alumne
 
-    const esEdit = clsCheckbox === 'chk-rol-edit';
-
-    if (esEdit) {
-      // Modal editar rols: format amb padding i border com la resta
-      const label = document.createElement('label');
-      label.style.cssText = `display:flex;align-items:center;gap:12px;cursor:pointer;
-        padding:12px 14px;border-radius:10px;background:#f9fafb;
-        border:2px solid ${COLOR_ALUMNE};transition:border-color 0.2s;`;
-      label.id = 'row-rol-alumne';
-      label.innerHTML = `
-        <input type="checkbox" class="${clsCheckbox}" value="alumne"
-          style="width:18px;height:18px;accent-color:${COLOR_ALUMNE};">
-        <div style="flex:1;">
-          <div style="font-weight:700;color:${COLOR_ALUMNE};">alumne</div>
-          <div style="font-size:12px;color:#9ca3af;">Accés únic al formulari d'autoavaluació</div>
-        </div>`;
-      // Inserir al principi per diferenciar-lo visualment dels rols de professor
-      container.insertBefore(label, container.firstChild);
-    } else {
-      // Modal nou usuari: format compacte inline
-      const label = document.createElement('label');
-      label.style.cssText = 'display:flex;align-items:center;gap:6px;cursor:pointer;';
-      label.innerHTML = `
-        <input type="checkbox" class="${clsCheckbox}" value="alumne"
-          style="width:16px;height:16px;accent-color:${COLOR_ALUMNE};">
-        <span style="font-size:13px;font-weight:600;color:${COLOR_ALUMNE};">alumne</span>`;
-      container.insertBefore(label, container.firstChild);
+  window._aaOnRolNouChange = function(chk) {
+    const secRALC = document.getElementById('secRALC');
+    if (!secRALC) return;
+    if (chk.value === 'alumne' && chk.checked) {
+      // Desmarcar tots els altres rols
+      document.querySelectorAll('.chk-rol-nou').forEach(c => {
+        if (c.value !== 'alumne') c.checked = false;
+      });
+      secRALC.style.display = 'block';
+    } else if (chk.value === 'alumne' && !chk.checked) {
+      secRALC.style.display = 'none';
+    } else if (chk.checked) {
+      // Es marca un altre rol → desmarcar alumne i amagar RALC
+      const chkAlumne = document.querySelector('.chk-rol-nou[value="alumne"]');
+      if (chkAlumne) chkAlumne.checked = false;
+      secRALC.style.display = 'none';
     }
-  }
+  };
 
-  // ── Estratègia principal: MutationObserver persistent ──
-  // Cada vegada que apareix al DOM un contenidor amb checkboxes de rols,
-  // hi injectem el rol alumne. Funciona per a tots dos modals.
-  const obs = new MutationObserver((mutations) => {
-    for (const mut of mutations) {
-      for (const node of mut.addedNodes) {
-        if (node.nodeType !== 1) continue;
-
-        // Modal nou usuari: checkboxes amb classe 'chk-rol-nou'
-        const nouCont = node.querySelector?.('.chk-rol-nou')
-                          ?.closest('div[style*="flex-wrap"]');
-        if (nouCont && !nouCont.querySelector('[value="alumne"]')) {
-          injectarRolAlumne(nouCont, 'chk-rol-nou');
-        }
-
-        // Modal editar rols: checkboxes amb classe 'chk-rol-edit'
-        // El contenidor és un div amb flex-direction:column i gap:10px
-        const editCont = node.querySelector?.('.chk-rol-edit')
-                           ?.closest('div[style*="flex-direction:column"]');
-        if (editCont && !editCont.querySelector('[value="alumne"]')) {
-          injectarRolAlumne(editCont, 'chk-rol-edit');
-        }
+  window._aaOnRolEditChange = function(chk) {
+    const secRalcEdit = document.getElementById('secRalcEdit');
+    if (!secRalcEdit) return;
+    if (chk.value === 'alumne' && chk.checked) {
+      // Desmarcar tots els altres rols
+      document.querySelectorAll('.chk-rol-edit').forEach(c => {
+        if (c.value !== 'alumne') c.checked = false;
+        // Reset visual border
+        const row = document.getElementById('row-rol-' + c.value);
+        if (row && c.value !== 'alumne') row.style.borderColor = '#e5e7eb';
+      });
+      secRalcEdit.style.display = 'block';
+    } else if (chk.value === 'alumne' && !chk.checked) {
+      secRalcEdit.style.display = 'none';
+    } else if (chk.checked) {
+      const chkAlumne = document.querySelector('.chk-rol-edit[value="alumne"]');
+      if (chkAlumne) {
+        chkAlumne.checked = false;
+        const rowAlumne = document.getElementById('row-rol-alumne');
+        if (rowAlumne) rowAlumne.style.borderColor = '#e5e7eb';
       }
+      secRalcEdit.style.display = 'none';
     }
-  });
+  };
 
-  obs.observe(document.body, { childList: true, subtree: true });
-
-  // ── Patch de rolColor: afegir color per a 'alumne' ──
-  // Esperem que secretaria.js s'hagi executat i llavors fem patch de
-  // la funció global rolColor si existeix (és function declaration → és hoistable
-  // però és dins del mòdul de secretaria.js, no és window.rolColor).
-  // Per tant no podem fer wrap directe. En canvi, el color s'usa en línia
-  // dins de templates literals → ja queda definit per l'observer anterior.
-
-  console.log('✅ autoavaluacio: patch secretaria activat');
+  console.log('✅ autoavaluacio: handlers secretaria registrats');
 }
 
-// ═════════════════════════════════════════════════════════
-//  EXPORTS
-// ═════════════════════════════════════════════════════════
 window.obrirPanellAutoaval = obrirPanellAutoaval;
 
 console.log('✅ autoavaluacio.js: inicialitzat');
