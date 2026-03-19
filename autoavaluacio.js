@@ -733,17 +733,18 @@ async function obrirModalEnviarPlantilla(plantillaId, plantillaTitol) {
                         || window._isSuperAdmin === true
                         || (window._userRols || []).some(r => r === 'admin' || r === 'superadmin');
 
-    const snap = await _aaDB.collection('grups_centre')
-      .where('tipus', '==', 'classe')
-      .get();
+    const snap = await _aaDB.collection('grups_centre').get();
 
-    let grups = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    // Mostrar grups de tutoria (tenen els alumnes del grup classe)
+    // i grups classe que tinguin alumnes com a fallback
+    let grups = snap.docs
+      .map(d => ({ id: d.id, ...d.data() }))
+      .filter(g => g.tipus === 'tutoria' || (g.tipus === 'classe' && (g.alumnes||[]).length > 0));
 
     // Filtrar: admin veu tot, tutor amb '_tot' veu tot, tutor amb grups específics veu els seus
     if (!esAdminUsuari && !teTots && tutoriaGrups.length > 0) {
       grups = grups.filter(g => tutoriaGrups.includes(g.id));
     } else if (!esAdminUsuari && !teTots && tutoriaGrups.length === 0) {
-      // Sense grups assignats i no és admin: mostrar avís
       grups = [];
     }
 
