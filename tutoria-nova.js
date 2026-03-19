@@ -193,6 +193,11 @@ async function obrirPanellTutoria() {
             `<option value="${c}" ${c === cursActiu ? 'selected' : ''}>${c}</option>`
           ).join('')}
         </select>
+        <select id="selPeriodeTutoria" style="
+          padding:6px 12px;border:1.5px solid #e5e7eb;border-radius:8px;
+          font-size:13px;outline:none;background:#fff;">
+          <option value="">— Tots els períodes —</option>
+        </select>
         <button id="btnCarregarTutoria" style="
           padding:6px 16px;background:#7c3aed;color:#fff;border:none;
           border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;">
@@ -256,38 +261,9 @@ async function obrirPanellTutoria() {
     }
 
     // Filtrar grupos del curs
-    // Prioritat: grups tutoria (tenen els alumnes del grup classe per 2n i 3r ESO)
-    // Fallback: grups classe si no hi ha grups tutoria per a aquest curs
-    let grupsTutoriaCurs = grups.filter(g =>
-      g.tipus === 'tutoria' && (g.curs === curs || !g.curs) && g.parentGrupId
+    let grupsCurs = grups.filter(g => 
+      g.tipus === 'classe' && (g.curs === curs || !g.curs)
     );
-    let grupsCurs;
-    if (grupsTutoriaCurs.length > 0) {
-      // Usar grups tutoria, però mostrar el nom del grup classe pare (A, B, C...)
-      const grupsPerId = {};
-      grups.forEach(g => { grupsPerId[g.id] = g; });
-      grupsCurs = grupsTutoriaCurs.map(g => {
-        const pare = grupsPerId[g.parentGrupId];
-        return {
-          ...g,
-          nom: pare?.nom || g.nom,           // ex: "A", "B", "C"
-          nivellNom: g.nivellNom || pare?.nivellNom || '',
-          _idOriginal: g.id,
-        };
-      });
-      // Afegir també els grups classe que NO tinguin grup tutoria associat
-      const idsAmbTutoria = new Set(grupsTutoriaCurs.map(g => g.parentGrupId));
-      const classesSenseTutoria = grups.filter(g =>
-        g.tipus === 'classe' && (g.curs === curs || !g.curs) &&
-        !idsAmbTutoria.has(g.id) && (g.alumnes||[]).length > 0
-      );
-      grupsCurs = [...grupsCurs, ...classesSenseTutoria];
-    } else {
-      // Fallback: grups classe
-      grupsCurs = grups.filter(g =>
-        g.tipus === 'classe' && (g.curs === curs || !g.curs)
-      );
-    }
     
     // Filtrar por permisos de tutor
     if (!potVeureTots && tutoriaGrups.length > 0) {
@@ -376,14 +352,40 @@ async function obrirPanellTutoria() {
     }
   }
 
+  // Carregar períodes reals de Firestore
+  (async () => {
+    const BASE = [
+      {codi:'preav',nom:'Pre-avaluació'},{codi:'T1',nom:'1r Trimestre'},
+      {codi:'T2',nom:'2n Trimestre'},{codi:'T3',nom:'3r Trimestre'},
+      {codi:'final',nom:'Final de curs'},
+    ];
+    try {
+      const doc = await window.db.collection('_sistema').doc('periodes_tancats').get();
+      let periodes = BASE;
+      if (doc.exists) {
+        const data = doc.data();
+        const noms = data.noms || {};
+        const ordre = data.ordre || BASE.map(p => p.codi);
+        periodes = ordre.map(codi => {
+          const b = BASE.find(p => p.codi === codi) || {nom: codi};
+          return { nom: noms[codi] || b.nom };
+        });
+      }
+      const sel = overlay.querySelector('#selPeriodeTutoria');
+      if (sel) sel.innerHTML = '<option value="">— Tots els períodes —</option>' +
+        periodes.map(p => `<option value="${p.nom}">${p.nom}</option>`).join('');
+    } catch(e) {}
+  })();
+
   overlay.querySelector('#btnCarregarTutoria').addEventListener('click', async () => {
-    const curs  = overlay.querySelector('#selCursTutoria').value;
-    const grupId= overlay.querySelector('#selGrupTutoria').value;
+    const curs    = overlay.querySelector('#selCursTutoria').value;
+    const grupId  = overlay.querySelector('#selGrupTutoria').value;
+    const periode = overlay.querySelector('#selPeriodeTutoria')?.value || '';
     if (!curs || !grupId) {
       window.mostrarToast('⚠️ Selecciona curs i grup', 3000);
       return;
     }
-    await carregarAlumnesTutoria(curs, grupId, grups, materies, config);
+    await carregarAlumnesTutoria(curs, grupId, grups, materies, config, periode);
   });
 
   // Preseleccionar si el tutor té grup assignat
@@ -396,7 +398,7 @@ async function obrirPanellTutoria() {
 /* ══════════════════════════════════════════════════════
    CARREGAR I ORDENAR ALUMNES AMB SEMÀFOR
 ══════════════════════════════════════════════════════ */
-async function carregarAlumnesTutoria(curs, grupId, grups, materies, config) {
+async function carregarAlumnesTutoria(curs, grupId, grups, materies, config, periodeFiltre = '') {
   const llistaEl = document.getElementById('llistaTutoria');
   if (!llistaEl) return;
 
@@ -404,7 +406,7 @@ async function carregarAlumnesTutoria(curs, grupId, grups, materies, config) {
 
   try {
     // Llegir tots els alumnes del grup des d'avaluacio_centre
-    const alumnes = await llegirAlumnesGrupCentre(curs, grupId, materies);
+    const alumnes = await llegirAlumnesGrupCentre(curs, grupId, materies, periodeFiltre);
 
     if (alumnes.length === 0) {
       llistaEl.innerHTML = `
@@ -1080,7 +1082,7 @@ function compteTotalAssoliments(alumne) {
 /* ══════════════════════════════════════════════════════
    LLEGIR ALUMNES DEL GRUP DES D'AVALUACIÓ CENTRE
 ══════════════════════════════════════════════════════ */
-async function llegirAlumnesGrupCentre(curs, grupId, _materiesLlegat) {
+async function llegirAlumnesGrupCentre(curs, grupId, _materiesLlegat, periodeFiltre = '') {
   const db = window.db;
   const resultat = {};
 
@@ -1153,6 +1155,12 @@ async function llegirAlumnesGrupCentre(curs, grupId, _materiesLlegat) {
 
       snap.docs.forEach(d => {
         const data = d.data();
+
+        // Filtre per periode: si s'ha seleccionat, ignorar docs d'altres períodes
+        if (periodeFiltre && data.periodeNom && data.periodeNom !== periodeFiltre) return;
+        // Si periodeFiltre i el doc no té periodeNom (dades antigues): mostrar si no hi ha filtre
+        if (periodeFiltre && !data.periodeNom) return;
+
         const key = data.ralc || `alumne_${Object.keys(resultat).length}_${data.nom}`;
         const alumneKey = Object.keys(resultat).find(k =>
           (data.ralc && resultat[k].ralc === data.ralc) ||
