@@ -778,7 +778,7 @@ async function obrirModalEnviarPlantilla(plantillaId, plantillaTitol) {
         nomDiv.style.flex = '1';
         nomDiv.innerHTML = '<div style="font-size:13px;font-weight:600;color:#374151;">' +
           esH((a.nom || '') + ' ' + (a.cognoms || '')) + '</div>' +
-          (!a.teCom ? '<div style="font-size:11px;color:#9ca3af;">Sense compte d'usuari</div>' : '');
+          (!a.teCom ? '<div style="font-size:11px;color:#9ca3af;">Sense compte d\'usuari</div>' : '');
         label.appendChild(chk);
         label.appendChild(nomDiv);
         checkCont.appendChild(label);
