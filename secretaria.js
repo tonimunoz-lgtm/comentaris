@@ -2611,14 +2611,9 @@ async function renderButlletins(body) {
           </select>
         </div>
         <div>
-          <label style="font-size:12px;font-weight:600;color:#374151;display:block;margin-bottom:5px;">Trimestre</label>
+          <label style="font-size:12px;font-weight:600;color:#374151;display:block;margin-bottom:5px;">Període</label>
           <select id="bTrimestre" style="width:100%;padding:8px 10px;border:1.5px solid #e5e7eb;border-radius:8px;font-size:13px;outline:none;">
-            <option value="">— Tots —</option>
-            <option value="Pre-avaluació">Pre-avaluació</option>
-            <option value="1r Trimestre">1r Trimestre</option>
-            <option value="2n Trimestre">2n Trimestre</option>
-            <option value="3r Trimestre">3r Trimestre</option>
-            <option value="Final de curs">Final de curs</option>
+            <option value="">⏳ Carregant...</option>
           </select>
         </div>
         <div>
@@ -2663,6 +2658,38 @@ async function renderButlletins(body) {
     selGrup.innerHTML = '<option value="">— Tria grup —</option>' +
       grGrup.map(g=>`<option value="${g.id}" data-curs="${g.curs||''}">${esH(g.nom)} (${esH(g.nivellNom||'')})</option>`).join('');
   };
+
+  // Carregar períodes reals de Firestore al desplegable
+  (async () => {
+    try {
+      const doc = await window.db.collection('_sistema').doc('periodes_tancats').get();
+      const BASE = [
+        { codi:'preav', nom:'Pre-avaluació' },
+        { codi:'T1',    nom:'1r Trimestre'  },
+        { codi:'T2',    nom:'2n Trimestre'  },
+        { codi:'T3',    nom:'3r Trimestre'  },
+        { codi:'final', nom:'Final de curs' },
+      ];
+      let periodes = BASE;
+      if (doc.exists) {
+        const data = doc.data();
+        const noms = data.noms || {};
+        const ordre = data.ordre || BASE.map(p => p.codi);
+        periodes = ordre.map(codi => {
+          const base = BASE.find(p => p.codi === codi) || { codi, nom: codi };
+          return { nom: noms[codi] || base.nom };
+        });
+      }
+      const sel = document.getElementById('bTrimestre');
+      if (sel) {
+        sel.innerHTML = '<option value="">— Tots els períodes —</option>' +
+          periodes.map(p => `<option value="${p.nom}">${p.nom}</option>`).join('');
+        // Preseleccionar 1r Trimestre si existeix
+        const opt1r = [...sel.options].find(o => o.value.includes('1r') || o.value.includes('T1'));
+        if (opt1r) sel.value = opt1r.value;
+      }
+    } catch(e) { console.warn('butlletins: error carregant períodes', e); }
+  })();
 
   document.getElementById('bCurs').addEventListener('change', actualitzarGrups);
   document.getElementById('bNivell').addEventListener('change', actualitzarGrups);
