@@ -184,15 +184,29 @@ async function renderPanellAutodiagRevisor(cont, panell) {
       <div style="background:#f0f9ff;border:1.5px solid #bfdbfe;border-radius:12px;padding:14px 18px;margin-bottom:18px;font-size:12px;color:#1d4ed8;">
         💡 Pots veure les respostes dels alumnes, editar el comentari del tutor/a i enviar-les al butlletí.
       </div>
-      <div style="display:flex;gap:10px;margin-bottom:20px;flex-wrap:wrap;">
-        <select id="adRevGrup" style="padding:8px 12px;border:1.5px solid #e5e7eb;border-radius:8px;font-size:13px;outline:none;min-width:200px;">
-          <option value="">— Tria grup tutoria —</option>
-          ${grupsTutoria.map(g => `<option value="${g.id}">${adRH(etiqueta(g))}</option>`).join('')}
-        </select>
-        <select id="adRevPeriode" style="padding:8px 12px;border:1.5px solid #e5e7eb;border-radius:8px;font-size:13px;outline:none;min-width:160px;">
-          <option value="">⏳ Carregant períodes...</option>
-        </select>
-        <button id="adRevCarregar" style="padding:8px 18px;background:#0891b2;color:#fff;border:none;border-radius:8px;font-weight:700;cursor:pointer;">
+      <div style="display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap;align-items:flex-end;">
+        <div>
+          <label style="font-size:11px;font-weight:700;color:#6b7280;display:block;margin-bottom:4px;">NIVELL</label>
+          <select id="adRevNivell" style="padding:7px 10px;border:1.5px solid #e5e7eb;border-radius:8px;font-size:13px;outline:none;min-width:130px;">
+            <option value="">— Tots —</option>
+            ${[...new Set(grupsTutoria.map(g => g.nivellNom).filter(Boolean))].sort()
+              .map(n => `<option value="${n}">${adRH(n)}</option>`).join('')}
+          </select>
+        </div>
+        <div>
+          <label style="font-size:11px;font-weight:700;color:#6b7280;display:block;margin-bottom:4px;">GRUP</label>
+          <select id="adRevGrup" style="padding:7px 10px;border:1.5px solid #e5e7eb;border-radius:8px;font-size:13px;outline:none;min-width:160px;">
+            <option value="">— Tria grup —</option>
+            ${grupsTutoria.map(g => `<option value="${g.id}">${adRH(etiqueta(g))}</option>`).join('')}
+          </select>
+        </div>
+        <div>
+          <label style="font-size:11px;font-weight:700;color:#6b7280;display:block;margin-bottom:4px;">PERÍODE</label>
+          <select id="adRevPeriode" style="padding:7px 10px;border:1.5px solid #e5e7eb;border-radius:8px;font-size:13px;outline:none;min-width:150px;">
+            <option value="">⏳ Carregant...</option>
+          </select>
+        </div>
+        <button id="adRevCarregar" style="padding:8px 18px;background:#0891b2;color:#fff;border:none;border-radius:8px;font-weight:700;cursor:pointer;align-self:flex-end;">
           🔍 Carregar
         </button>
       </div>
@@ -206,10 +220,19 @@ async function renderPanellAutodiagRevisor(cont, panell) {
     // Carregar períodes reals
     carregarPeriodesADR().then(periodes => {
       const sel = document.getElementById('adRevPeriode');
-      if (sel) {
-        sel.innerHTML = '<option value="">— Tots els períodes —</option>' +
-          periodes.map(p => `<option value="${p.nom}">${p.nom}</option>`).join('');
-      }
+      if (sel) sel.innerHTML = '<option value="">— Tots els períodes —</option>' +
+        periodes.map(p => `<option value="${p.nom}">${p.nom}</option>`).join('');
+    });
+
+    // Filtrar grups per nivell
+    document.getElementById('adRevNivell')?.addEventListener('change', () => {
+      const nivell = document.getElementById('adRevNivell').value;
+      const selGrup = document.getElementById('adRevGrup');
+      selGrup.innerHTML = '<option value="">— Tria grup —</option>' +
+        grupsTutoria
+          .filter(g => !nivell || (g.nivellNom || '') === nivell)
+          .map(g => `<option value="${g.id}">${adRH(etiqueta(g))}</option>`)
+          .join('');
     });
 
     document.getElementById('adRevCarregar').addEventListener('click', () => {
@@ -275,8 +298,9 @@ async function carregarAutodiagRevisor(grupId, grupEtiqueta, grupsPerId, periode
     const llistaFiltrada = periodeFiltre
       ? llista.map(a => {
           if (!a.resposta) return a;
-          const periodeResp = a.resposta.periodeNom || a.resposta.plantillaTitol || '';
-          if (periodeFiltre && periodeResp && !periodeResp.includes(periodeFiltre) && periodeResp !== periodeFiltre) {
+          const periodeResp = a.resposta.periodeNom || '';
+          // Filtre exacte per periodeNom
+          if (periodeResp !== periodeFiltre) {
             return { ...a, resposta: null };
           }
           return a;
