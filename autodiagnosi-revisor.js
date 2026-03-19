@@ -53,19 +53,28 @@ document.addEventListener('DOMContentLoaded', () => {
   setTimeout(initADRevisor, 1800);
 });
 
+let _adObserver = null; // singleton observer
+
 function initADRevisor() {
   if (!window.firebase?.auth) { setTimeout(initADRevisor, 500); return; }
   window.firebase.auth().onAuthStateChanged(user => {
     if (!user) return;
-    observarPanells();
+    // Evitar múltiples observers si onAuthStateChanged es dispara diverses vegades
+    if (!_adObserver) {
+      observarPanells();
+    }
   });
 }
 
 // ─────────────────────────────────────────────
-// OBSERVER: detectar obertura de panells
+// OBSERVER: detectar obertura de panells (singleton)
 // ─────────────────────────────────────────────
 function observarPanells() {
-  const obs = new MutationObserver((mutations) => {
+  if (_adObserver) return; // ja existeix, no crear-ne un altre
+
+  let _adInjectTimer = null; // debounce per injectarTabRevisor
+
+  _adObserver = new MutationObserver((mutations) => {
     for (const mut of mutations) {
       for (const node of mut.addedNodes) {
         if (node.nodeType !== 1) continue;
@@ -73,12 +82,19 @@ function observarPanells() {
         // Panell Revisor
         if (node.id === 'panellRevisio' || node.querySelector?.('#panellRevisio')) {
           const panell = node.id === 'panellRevisio' ? node : node.querySelector('#panellRevisio');
-          if (panell) setTimeout(() => injectarTabRevisor(panell), 300);
+          if (panell) {
+            // Debounce: cancel·lar injecció anterior si es dispara múltiples vegades
+            if (_adInjectTimer) clearTimeout(_adInjectTimer);
+            _adInjectTimer = setTimeout(() => {
+              _adInjectTimer = null;
+              injectarTabRevisor(panell);
+            }, 300);
+          }
         }
       }
     }
   });
-  obs.observe(document.body, { childList: true });
+  _adObserver.observe(document.body, { childList: true });
 
   // Tutoria: interceptar mostrarDetallAlumne via patch
   patchTutoriaDetall();
