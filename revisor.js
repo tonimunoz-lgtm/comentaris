@@ -7,19 +7,27 @@ console.log('🔍 revisor.js carregat');
 /* ══════════════════════════════════════════════════════
    INJECTAR BOTÓ REVISIÓ AL SIDEBAR
 ══════════════════════════════════════════════════════ */
+let _revisorInjectTimer = null; // guard anti-race-condition
 window.injectarBotoRevisor = function() {
   if (document.getElementById('btnRevisorSidebar')) return;
+  // Debounce: si es crida múltiples vegades ràpid, esperar que s'estabilitzi
+  if (_revisorInjectTimer) return;
+  _revisorInjectTimer = setTimeout(() => {
+    _revisorInjectTimer = null;
+    if (document.getElementById('btnRevisorSidebar')) return;
 
-  const nav = document.querySelector('.sidebar-nav') || document.querySelector('#sidebar nav');
-  if (!nav) return;
+    const nav = document.querySelector('.sidebar-nav') || document.querySelector('#sidebar nav');
+    if (!nav) return;
 
-  const btn = document.createElement('button');
-  btn.id = 'btnRevisorSidebar';
-  btn.className = 'nav-item';
-  btn.dataset.screen = 'revisio';
-  btn.innerHTML = `<span class="nav-icon">🔍</span><span>Revisió</span>`;
-  btn.addEventListener('click', obrirPanellRevisio);
-  nav.appendChild(btn);
+    const btn = document.createElement('button');
+    btn.id = 'btnRevisorSidebar';
+    btn.className = 'nav-item';
+    btn.dataset.screen = 'revisio';
+    btn.innerHTML = `<span class="nav-icon">🔍</span><span>Revisió</span>`;
+    btn.addEventListener('click', obrirPanellRevisio);
+    nav.appendChild(btn);
+    console.log('✅ Botó Revisió injectat al sidebar');
+  }, 100);
 };
 
 /* ══════════════════════════════════════════════════════
