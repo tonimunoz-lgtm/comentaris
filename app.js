@@ -271,6 +271,7 @@ async function signInWithGoogle() {
           await profRef.set({
             email: user.email,
             nom: user.displayName || user.email.split('@')[0],
+            rols: [],          // sense rol fins que secretaria l'assigni
             google: true,
             isAdmin: false,
             suspended: false,
@@ -320,6 +321,7 @@ document.getElementById('btnRegister').addEventListener('click', () => {
       await db.collection('professors').doc(professorUID).set({
         email,
         nom: email.split('@')[0],
+        rols: [],          // sense rol fins que secretaria l'assigni
         isAdmin: false,
         suspended: false,
         deleted: false,
@@ -328,7 +330,7 @@ document.getElementById('btnRegister').addEventListener('click', () => {
         createdAt: firebase.firestore.Timestamp.now()
       });
       setupAfterAuth(u.user);
-      alert("Compte creat!");
+      alert("Compte creat! Contacta amb la secretaria perquè activin el teu accés.");
     } catch (e) {
       if (e.code === 'auth/email-already-in-use') alert("Email ja registrat.");
       else if (e.code === 'auth/weak-password') alert("Contrasenya massa dèbil (mínim 6 caràcters).");
