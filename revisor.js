@@ -149,6 +149,12 @@ async function obrirPanellRevisio() {
             <option value="">— Tria matèria —</option>
           </select>
           
+          <select id="selPeriodeRevisio" style="
+            padding:7px 12px;border-radius:8px;border:none;
+            font-size:13px;background:#fff;color:#1e293b;outline:none;
+          ">
+            <option value="">— Tots els períodes —</option>
+          </select>
           <button id="btnCarregarRevisio" style="
             padding:7px 16px;background:rgba(255,255,255,0.25);
             border:1.5px solid rgba(255,255,255,0.5);color:#fff;
@@ -324,11 +330,37 @@ async function obrirPanellRevisio() {
 
   overlay.querySelector('#btnTancarRevisio').addEventListener('click', () => overlay.remove());
 
+  // Carregar períodes reals de Firestore
+  (async () => {
+    const BASE = [
+      {codi:'preav',nom:'Pre-avaluació'},{codi:'T1',nom:'1r Trimestre'},
+      {codi:'T2',nom:'2n Trimestre'},{codi:'T3',nom:'3r Trimestre'},
+      {codi:'final',nom:'Final de curs'},
+    ];
+    try {
+      const doc = await window.db.collection('_sistema').doc('periodes_tancats').get();
+      let periodes = BASE;
+      if (doc.exists) {
+        const data = doc.data();
+        const noms = data.noms || {};
+        const ordre = data.ordre || BASE.map(p => p.codi);
+        periodes = ordre.map(codi => {
+          const b = BASE.find(p => p.codi === codi) || {nom: codi};
+          return { nom: noms[codi] || b.nom };
+        });
+      }
+      const sel = overlay.querySelector('#selPeriodeRevisio');
+      if (sel) sel.innerHTML = '<option value="">— Tots els períodes —</option>' +
+        periodes.map(p => `<option value="${p.nom}">${p.nom}</option>`).join('');
+    } catch(e) {}
+  })();
+
   overlay.querySelector('#btnCarregarRevisio').addEventListener('click', async () => {
     const curs    = overlay.querySelector('#selCursRevisio').value;
     const matId   = overlay.querySelector('#selMateriaRevisio').value;
     const grupId  = overlay.querySelector('#selGrupRevisio').value;
-    await carregarDadesRevisio(curs, matId, grupId, materiesesPermeses, grupsPermesos);
+    const periode = overlay.querySelector('#selPeriodeRevisio')?.value || '';
+    await carregarDadesRevisio(curs, matId, grupId, materiesesPermeses, grupsPermesos, periode);
   });
 }
 
@@ -337,7 +369,7 @@ async function obrirPanellRevisio() {
    - Lee las materias del grupo seleccionado (como tutoria-nova.js)
    - Muestra solo el último período enviado de cada materia
 ══════════════════════════════════════════════════════ */
-async function carregarDadesRevisio(curs, matId, grupId, materies, grups) {
+async function carregarDadesRevisio(curs, matId, grupId, materies, grups, periodeFiltre = '') {
   const content = document.getElementById('revisioContent');
   if (!content) return;
 
@@ -465,18 +497,19 @@ async function carregarDadesRevisio(curs, matId, grupId, materies, grups) {
             alumnesMap[key].id = docIdReal;
           }
 
-          // GUARDAR SOLO EL ÚLTIMO PERÍODO (o el más reciente)
-          const periodeActual = data.periodeNom || data.periode || 'Sense període';
+          // Filtre per periode: si s'ha seleccionat, ignorar docs d'altres períodes
+          const periodeActual = data.periodeNom || data.periode || '';
+          if (periodeFiltre) {
+            if (!periodeActual || periodeActual !== periodeFiltre) continue;
+          }
+
+          // Sense filtre: guardar només l'últim période
           const existent = alumnesMap[key].materies[mat.id];
-          
-          // Si no existe o el período es más reciente, actualizar
-          // (asumiendo que los períodos van: Pre-avaluació → T1 → T2 → T3 → Final)
           const ordrePeriodes = ['Pre-avaluació', 'T1', '1r Trimestre', 'T2', '2n Trimestre', 'T3', '3r Trimestre', 'Final', 'Final de curs'];
           const indexNou = ordrePeriodes.indexOf(periodeActual);
           const indexVell = existent ? ordrePeriodes.indexOf(existent.periodeNom) : -1;
-          
-          // Si no existe, o el nuevo período está después en la lista, o no se reconoce el período
-         if (!existent || indexNou > indexVell || indexNou === -1) {
+
+         if (!existent || periodeFiltre || indexNou > indexVell || indexNou === -1) {
   alumnesMap[key].materies[mat.id] = {
     docId: docIdReal,   // ← AÑADIR ESTA LÍNEA
     nom: mat.nom || mat.id,
