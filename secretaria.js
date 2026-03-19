@@ -2152,15 +2152,15 @@ async function modalEditarRols(usuari, onGuardat) {
      const uRols = window._userRols || [];
      if (uRols.includes('superadmin')) return true;
      if (uRols.includes('admin')) return r !== 'superadmin';
-     // Secretaria veu tots els rols però no pot modificar admin/superadmin
-     if (uRols.includes('secretaria')) return true;
+     // Secretaria: NO veu superadmin (rol ocult). Veu admin però no el pot modificar.
+     if (uRols.includes('secretaria')) return r !== 'superadmin';
      return false;
    })
 ).map(r=>{
     const uRols2 = window._userRols || [];
     const esRestringit = uRols2.includes('secretaria') &&
       !uRols2.some(x => ['admin','superadmin'].includes(x)) &&
-      ['admin','superadmin'].includes(r);
+      r === 'admin';
     return `
         <label style="display:flex;align-items:center;gap:12px;
                       ${esRestringit ? 'cursor:not-allowed;opacity:0.55;' : 'cursor:pointer;'}
@@ -2274,7 +2274,7 @@ async function modalEditarRols(usuari, onGuardat) {
 
     const ralcEdit = document.getElementById('inpRalcEdit')?.value?.trim()?.toUpperCase() || '';
 
-    // Preservar rols admin/superadmin si qui edita és secretaria (sense poders admin)
+    // Preservar admin/superadmin originals si qui edita és secretaria
     const uRolsEditor = window._userRols || [];
     const potEditarAdmin = uRolsEditor.some(r => ['admin','superadmin'].includes(r));
     let rolsFinals = [...rols];
