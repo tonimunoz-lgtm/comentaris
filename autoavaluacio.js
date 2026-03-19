@@ -1,5 +1,4 @@
 // autoavaluacio.js — Injector d'Autoavaluació d'Alumnes
-
 // UltraComentator / INS Matadepera
 //
 // FUNCIONS:
@@ -657,18 +656,37 @@ async function obrirModalEnviarPlantilla(plantillaId, plantillaTitol) {
   overlay.querySelector('.aa-close-btn').addEventListener('click', () => overlay.remove());
   document.getElementById('btnCancelEnviar').addEventListener('click', () => overlay.remove());
 
-  // Carregar grups de tutoria on el tutor és responsable
+  // Carregar grups de tutoria filtrats pels grups assignats al tutor
   try {
+    // Llegir els grups que té assignats el tutor al seu perfil
+    const tutorDoc = await _aaDB.collection('professors').doc(_aaUID).get();
+    const tutoriaGrups = tutorDoc.data()?.tutoria_grups || [];
+    const teTots = tutoriaGrups.includes('_tot');
+
     const snap = await _aaDB.collection('grups_centre')
       .where('tipus', '==', 'classe')
-      .orderBy('nom')
       .get();
 
-    const grups = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    let grups = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+
+    // Filtrar: si no té '_tot', només mostrar els grups assignats
+    if (!teTots && tutoriaGrups.length > 0) {
+      grups = grups.filter(g => tutoriaGrups.includes(g.id));
+    } else if (!teTots && tutoriaGrups.length === 0) {
+      // Sense grups assignats: mostrar avís
+      grups = [];
+    }
+
+    // Ordenar per nom
+    grups.sort((a, b) => (a.nom || '').localeCompare(b.nom || '', 'ca'));
 
     const sel = document.getElementById('aaSelectGrup');
-    sel.innerHTML = '<option value="">— Selecciona un grup —</option>' +
-      grups.map(g => `<option value="${g.id}">${esH(g.nivellNom || '')} - ${esH(g.nom)} (${g.curs || ''})</option>`).join('');
+    if (grups.length === 0) {
+      sel.innerHTML = '<option value="">— Cap grup assignat al teu perfil —</option>';
+    } else {
+      sel.innerHTML = '<option value="">— Selecciona un grup —</option>' +
+        grups.map(g => `<option value="${g.id}">${esH(g.nivellNom || '')} - ${esH(g.nom)} (${g.curs || ''})</option>`).join('');
+    }
 
     sel.addEventListener('change', () => carregarAlumnesGrup(sel.value));
 
@@ -739,20 +757,32 @@ async function obrirModalEnviarPlantilla(plantillaId, plantillaTitol) {
       const ambCompte = totAlumnesGrup.filter(a => a.teCom);
       document.getElementById('btnConfirmarEnviar').disabled = ambCompte.length === 0;
 
-      checkCont.innerHTML = totAlumnesGrup.map(a => `
-        <label style="display:flex;align-items:center;gap:10px;padding:8px 10px;border-radius:8px;cursor:${a.teCom ? 'pointer' : 'default'};
-          ${!a.teCom ? 'opacity:.4;' : ''}
-          transition:background .15s;"
-          ${a.teCom ? 'onmouseenter="this.style.background=\'#f5f3ff\'" onmouseleave="this.style.background=\'\'"' : ''}>
-          <input type="checkbox" class="chk-alumne-enviar" data-uid="${a.uid || ''}"
-            ${!a.teCom ? 'disabled' : 'checked'}
-            style="width:16px;height:16px;accent-color:#7c3aed;">
-          <div style="flex:1;">
-            <div style="font-size:13px;font-weight:600;color:#374151;">${esH((a.nom || '') + ' ' + (a.cognoms || ''))}</div>
-            ${!a.teCom ? '<div style="font-size:11px;color:#9ca3af;">Sense compte d\'usuari</div>' : ''}
-          </div>
-        </label>
-      `).join('');
+      checkCont.innerHTML = '';
+      totAlumnesGrup.forEach(a => {
+        const label = document.createElement('label');
+        label.style.cssText = 'display:flex;align-items:center;gap:10px;padding:8px 10px;border-radius:8px;' +
+          'cursor:' + (a.teCom ? 'pointer' : 'default') + ';' +
+          'opacity:' + (!a.teCom ? '.4' : '1') + ';transition:background .15s;';
+        if (a.teCom) {
+          label.addEventListener('mouseenter', () => { label.style.background = '#f5f3ff'; });
+          label.addEventListener('mouseleave', () => { label.style.background = ''; });
+        }
+        const chk = document.createElement('input');
+        chk.type = 'checkbox';
+        chk.className = 'chk-alumne-enviar';
+        chk.dataset.uid = a.uid || '';
+        chk.checked = !!a.teCom;
+        chk.disabled = !a.teCom;
+        chk.style.cssText = 'width:16px;height:16px;accent-color:#7c3aed;flex-shrink:0;';
+        const nomDiv = document.createElement('div');
+        nomDiv.style.flex = '1';
+        nomDiv.innerHTML = '<div style="font-size:13px;font-weight:600;color:#374151;">' +
+          esH((a.nom || '') + ' ' + (a.cognoms || '')) + '</div>' +
+          (!a.teCom ? '<div style="font-size:11px;color:#9ca3af;">Sense compte d'usuari</div>' : '');
+        label.appendChild(chk);
+        label.appendChild(nomDiv);
+        checkCont.appendChild(label);
+      });
 
     } catch(e) {
       checkCont.innerHTML = `<div style="color:#ef4444;padding:12px;font-size:13px;">❌ Error: ${e.message}</div>`;
