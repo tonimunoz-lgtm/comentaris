@@ -370,15 +370,15 @@ async function activarModePendent() {
 // ═════════════════════════════════════════════════════════
 //  MODE TUTOR — botó i panell
 // ═════════════════════════════════════════════════════════
+let _aaInjectant = false; // guard anti-race-condition
 function injectarBotoAutoavalTutor() {
   if (document.getElementById('btnAutoavalTutor')) return;
+  if (_aaInjectant) return; // ja hi ha un intent en curs
+  _aaInjectant = true;
 
-  // Esperar que el botó de tutoria existeixi
   const tryInject = () => {
-    const btnTutoriaNova = document.getElementById('btnTutoriaNova') ||
-                          document.querySelector('[id*="tutoria"]');
+    if (document.getElementById('btnAutoavalTutor')) { _aaInjectant = false; return; }
 
-    // Injectar al sidebar si existeix el nav
     const nav = document.querySelector('.sidebar-nav');
     if (!nav) { setTimeout(tryInject, 600); return; }
 
@@ -399,6 +399,7 @@ function injectarBotoAutoavalTutor() {
     btn.title = 'Gestionar autoavaluacions d\'alumnes';
     btn.addEventListener('click', obrirPanellAutoaval);
     nav.appendChild(btn);
+    _aaInjectant = false;
     console.log('✅ Botó Autoavaluació injectat al sidebar');
   };
 
@@ -803,8 +804,13 @@ async function obrirModalEnviarPlantilla(plantillaId, plantillaTitol) {
       grups = grupsTutoria.length > 0 ? grupsTutoria : grupsClasse;
     } else if (tutoriaGrups.length > 0) {
       // Tutor amb grups assignats: filtrar tant tutoria com classe per l'ID assignat
+      // IMPORTANT: igual que tutoria-nova.js, cal comprovar tant g.id com g.parentGrupId
+      // perquè el camp tutoria_grups del tutor pot contenir l'ID del grup classe pare
       const totsFiltrables = [...grupsTutoria, ...grupsClasse];
-      grups = totsFiltrables.filter(g => tutoriaGrups.includes(g.id));
+      grups = totsFiltrables.filter(g =>
+        tutoriaGrups.includes(g.id) ||
+        (g.parentGrupId && tutoriaGrups.includes(g.parentGrupId))
+      );
       // Evitar duplicats per si el mateix grup apareix a les dues llistes
       grups = grups.filter((g, i, arr) => arr.findIndex(x => x.id === g.id) === i);
     } else {
