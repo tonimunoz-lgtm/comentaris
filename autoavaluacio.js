@@ -745,7 +745,14 @@ async function obrirModalEnviarPlantilla(plantillaId, plantillaTitol) {
     // Mostrar grups de tutoria (tenen els alumnes del grup classe)
     // i grups classe que tinguin alumnes com a fallback
     let grups = totsGrups
-      .filter(g => g.tipus === 'tutoria' || (g.tipus === 'classe' && (g.alumnes||[]).length > 0));
+      .filter(g => {
+      // Prioritat: grups tutoria. Fallback: grups classe amb alumnes NOMÉS si no hi ha cap grup tutoria
+      return g.tipus === 'tutoria';
+    });
+    // Fallback: si no hi ha cap grup tutoria, mostrar grups classe amb alumnes
+    if (grups.length === 0) {
+      grups = totsGrups.filter(g => g.tipus === 'classe' && (g.alumnes||[]).length > 0);
+    }
 
     // Filtrar: admin veu tot, tutor amb '_tot' veu tot, tutor amb grups específics veu els seus
     if (!esAdminUsuari && !teTots && tutoriaGrups.length > 0) {
