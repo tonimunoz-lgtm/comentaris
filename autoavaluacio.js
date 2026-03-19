@@ -660,8 +660,15 @@ async function obrirModalEnviarPlantilla(plantillaId, plantillaTitol) {
   try {
     // Llegir els grups que té assignats el tutor al seu perfil
     const tutorDoc = await _aaDB.collection('professors').doc(_aaUID).get();
-    const tutoriaGrups = tutorDoc.data()?.tutoria_grups || [];
+    const tutorDades = tutorDoc.data() || {};
+    const tutoriaGrups = tutorDades.tutoria_grups || [];
     const teTots = tutoriaGrups.includes('_tot');
+
+    // Admin i superadmin veuen sempre tots els grups
+    const esAdminUsuari = (tutorDades.rols || []).some(r => r === 'admin' || r === 'superadmin')
+                        || tutorDades.isAdmin === true
+                        || window._isSuperAdmin === true
+                        || (window._userRols || []).some(r => r === 'admin' || r === 'superadmin');
 
     const snap = await _aaDB.collection('grups_centre')
       .where('tipus', '==', 'classe')
@@ -669,11 +676,11 @@ async function obrirModalEnviarPlantilla(plantillaId, plantillaTitol) {
 
     let grups = snap.docs.map(d => ({ id: d.id, ...d.data() }));
 
-    // Filtrar: si no té '_tot', només mostrar els grups assignats
-    if (!teTots && tutoriaGrups.length > 0) {
+    // Filtrar: admin veu tot, tutor amb '_tot' veu tot, tutor amb grups específics veu els seus
+    if (!esAdminUsuari && !teTots && tutoriaGrups.length > 0) {
       grups = grups.filter(g => tutoriaGrups.includes(g.id));
-    } else if (!teTots && tutoriaGrups.length === 0) {
-      // Sense grups assignats: mostrar avís
+    } else if (!esAdminUsuari && !teTots && tutoriaGrups.length === 0) {
+      // Sense grups assignats i no és admin: mostrar avís
       grups = [];
     }
 
