@@ -197,6 +197,10 @@ async function renderAutodiagnosiPanel(cont) {
     // Ordenar per etiqueta
     grupsTutoria.sort((a, b) => adEtiquetaGrup(a).localeCompare(adEtiquetaGrup(b), 'ca'));
 
+    // Construir opcions del nivell
+    const nivellsUnics = [...new Map(grups.filter(g => g.nivellNom)
+      .map(g => [g.nivellNom, g.nivellNom])).values()].sort();
+
     cont.innerHTML = `
       <h4 style="font-size:15px;font-weight:700;color:#1e1b4b;margin-bottom:16px;">
         🧠 Butlletins d'Autodiagnosi Alumne
@@ -204,7 +208,7 @@ async function renderAutodiagnosiPanel(cont) {
 
       <!-- Filtres -->
       <div style="background:#f9fafb;border:1.5px solid #e5e7eb;border-radius:12px;padding:16px;margin-bottom:16px;">
-        <div style="display:grid;grid-template-columns:1fr 1fr 1fr auto;gap:12px;align-items:end;">
+        <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr auto;gap:12px;align-items:end;flex-wrap:wrap;">
           <div>
             <label style="font-size:12px;font-weight:600;color:#374151;display:block;margin-bottom:5px;">Curs acadèmic</label>
             <select id="adCurs" style="width:100%;padding:8px 10px;border:1.5px solid #e5e7eb;border-radius:8px;font-size:13px;outline:none;">
@@ -215,7 +219,14 @@ async function renderAutodiagnosiPanel(cont) {
           <div>
             <label style="font-size:12px;font-weight:600;color:#374151;display:block;margin-bottom:5px;">Període</label>
             <select id="adTrimestre" style="width:100%;padding:8px 10px;border:1.5px solid #e5e7eb;border-radius:8px;font-size:13px;outline:none;">
-              <option value="">⏳ Carregant períodes...</option>
+              <option value="">⏳ Carregant...</option>
+            </select>
+          </div>
+          <div>
+            <label style="font-size:12px;font-weight:600;color:#374151;display:block;margin-bottom:5px;">Nivell</label>
+            <select id="adNivell" style="width:100%;padding:8px 10px;border:1.5px solid #e5e7eb;border-radius:8px;font-size:13px;outline:none;">
+              <option value="">— Tots —</option>
+              ${nivellsUnics.map(n => `<option value="${n}">${adEsH(n)}</option>`).join('')}
             </select>
           </div>
           <div>
@@ -227,7 +238,7 @@ async function renderAutodiagnosiPanel(cont) {
               ).join('')}
             </select>
           </div>
-          <button id="adCarregar" style="padding:8px 18px;background:#7c3aed;color:#fff;border:none;border-radius:8px;font-weight:600;cursor:pointer;white-space:nowrap;">
+          <button id="adCarregar" style="padding:8px 18px;background:#7c3aed;color:#fff;border:none;border-radius:8px;font-weight:600;cursor:pointer;white-space:nowrap;align-self:flex-end;">
             🔍 Carregar
           </button>
         </div>
@@ -243,10 +254,24 @@ async function renderAutodiagnosiPanel(cont) {
     // Carregar períodes reals de Firestore
     carregarPeriodesAD().then(periodes => {
       const sel = document.getElementById('adTrimestre');
-      if (sel) sel.innerHTML = opcionsPeriodesHTML(periodes);
+      if (sel) sel.innerHTML = '<option value="">— Tots els períodes —</option>' +
+        periodes.map(p => `<option value="${p.nom}">${p.nom}</option>`).join('');
+    });
+
+    // Filtrar grups per nivell
+    document.getElementById('adNivell')?.addEventListener('change', () => {
+      const nivell = document.getElementById('adNivell').value;
+      const selGrup = document.getElementById('adGrup');
+      selGrup.innerHTML = '<option value="">— Tria grup —</option>' +
+        grupsTutoria
+          .filter(g => !nivell || (g.nivellNom || '') === nivell)
+          .map(g => `<option value="${g.id}">${adEsH(adEtiquetaGrup(g))}</option>`)
+          .join('');
     });
 
     document.getElementById('adCarregar').addEventListener('click', () => {
+      const grupId = document.getElementById('adGrup').value;
+      if (!grupId) { window.mostrarToast?.('⚠️ Tria el grup de tutoria', 3000); return; }
       carregarAutodiagnosis();
     });
 
@@ -311,9 +336,15 @@ async function carregarAutodiagnosis() {
       }
     }
 
+    // Filtrar per periode si s'ha seleccionat
+    const periodeFiltre = document.getElementById('adTrimestre')?.value || '';
+    const respostesFiltrades = periodeFiltre
+      ? respostes.filter(r => (r.periodeNom || '') === periodeFiltre)
+      : respostes;
+
     // Mapa de respostes per alumne (última per alumne si n'hi ha diverses)
     const respostesPerAlumne = {};
-    respostes.forEach(r => {
+    respostesFiltrades.forEach(r => {
       const existent = respostesPerAlumne[r.alumneUID];
       if (!existent || (r.enviatAt?.seconds || 0) > (existent.enviatAt?.seconds || 0)) {
         respostesPerAlumne[r.alumneUID] = r;
