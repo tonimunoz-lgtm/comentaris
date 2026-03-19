@@ -9,6 +9,43 @@
 console.log('📋 autodiagnosi-butlletins.js carregat');
 
 // ─────────────────────────────────────────────
+// CARREGAR PERÍODES DES DE FIRESTORE
+// Llegeix _sistema/periodes_tancats igual que fa secretaria.js
+// Retorna [{codi, nom}] en l'ordre configurat per secretaria
+// ─────────────────────────────────────────────
+async function carregarPeriodesAD() {
+  const PERIODES_BASE = [
+    { codi: 'preav', nom: 'Pre-avaluació' },
+    { codi: 'T1',    nom: '1r Trimestre'  },
+    { codi: 'T2',    nom: '2n Trimestre'  },
+    { codi: 'T3',    nom: '3r Trimestre'  },
+    { codi: 'final', nom: 'Final de curs' },
+  ];
+  try {
+    const doc = await window.db.collection('_sistema').doc('periodes_tancats').get();
+    if (!doc.exists) return PERIODES_BASE;
+    const data = doc.data();
+    const noms  = data.noms  || {};
+    const ordre = data.ordre || PERIODES_BASE.map(p => p.codi);
+    return ordre.map(codi => {
+      const base = PERIODES_BASE.find(p => p.codi === codi) || { codi, nom: codi };
+      return { codi, nom: noms[codi] || base.nom };
+    });
+  } catch(e) {
+    return PERIODES_BASE;
+  }
+}
+
+function opcionsPeriodesHTML(periodes, seleccionat = '') {
+  return '<option value="">— Tots els períodes —</option>' +
+    periodes.map(p =>
+      `<option value="${p.nom}" ${p.nom === seleccionat ? 'selected' : ''}>${p.nom}</option>`
+    ).join('');
+}
+
+
+
+// ─────────────────────────────────────────────
 // INICIALITZACIÓ
 // ─────────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', () => {
@@ -176,13 +213,9 @@ async function renderAutodiagnosiPanel(cont) {
             </select>
           </div>
           <div>
-            <label style="font-size:12px;font-weight:600;color:#374151;display:block;margin-bottom:5px;">Trimestre</label>
+            <label style="font-size:12px;font-weight:600;color:#374151;display:block;margin-bottom:5px;">Període</label>
             <select id="adTrimestre" style="width:100%;padding:8px 10px;border:1.5px solid #e5e7eb;border-radius:8px;font-size:13px;outline:none;">
-              <option value="">— Tots —</option>
-              <option value="1r Trimestre" selected>1r Trimestre</option>
-              <option value="2n Trimestre">2n Trimestre</option>
-              <option value="3r Trimestre">3r Trimestre</option>
-              <option value="Final de curs">Final de curs</option>
+              <option value="">⏳ Carregant períodes...</option>
             </select>
           </div>
           <div>
@@ -206,6 +239,12 @@ async function renderAutodiagnosiPanel(cont) {
         </div>
       </div>
     `;
+
+    // Carregar períodes reals de Firestore
+    carregarPeriodesAD().then(periodes => {
+      const sel = document.getElementById('adTrimestre');
+      if (sel) sel.innerHTML = opcionsPeriodesHTML(periodes);
+    });
 
     document.getElementById('adCarregar').addEventListener('click', () => {
       carregarAutodiagnosis();
