@@ -10,6 +10,10 @@ console.log('🔍 revisor.js carregat');
 let _revisorInjectTimer = null; // guard anti-race-condition
 window.injectarBotoRevisor = function() {
   if (document.getElementById('btnRevisorSidebar')) return;
+  // Guard de rol intern: NOMÉS revisor, admin, superadmin
+  const rols = window._userRols || [];
+  const esAdmin = rols.includes('admin') || rols.includes('superadmin') || !!window._isSuperAdmin;
+  if (!esAdmin && !rols.includes('revisor')) return;
   // Debounce: si es crida múltiples vegades ràpid, esperar que s'estabilitzi
   if (_revisorInjectTimer) return;
   _revisorInjectTimer = setTimeout(() => {
