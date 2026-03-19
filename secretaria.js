@@ -163,6 +163,9 @@ async function obrirPanellSecretaria() {
 
   // Carregar primera tab
   overlay.querySelector('.sec-tab').click();
+
+  // Re-aplicar badge de pendents ara que els tabs ja existeixen al DOM
+  comprovarUsuarisPendents();
 }
 
 /* ══════════════════════════════════════════════════════
