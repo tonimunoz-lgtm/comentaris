@@ -103,12 +103,22 @@ async function initAutoavaluacio() {
           await activarModePendent();
         }
       } else {
-        // Mode professor/tutor: injectar botó al panell tutoria
-        injectarBotoAutoavalTutor();
-        // Patch secretaria: afegir rol alumne + camp RALC
+        // Patch secretaria: afegir rol alumne + camp RALC (per a tots els rols no-alumne)
         patchSecretariaRols();
-        // Badge tutoria: respostes pendents (només si és tutor o admin)
-        iniciarComprovacioBadgeAutoaval();
+
+        // Botó Autoavaluació i badge: NOMÉS per a tutor i admin/superadmin
+        const rolsUsuari = _aaUser?.rols || [];
+        const esAdminAA = rolsUsuari.includes('admin') || rolsUsuari.includes('superadmin') ||
+                          (window._userRols||[]).includes('admin') ||
+                          (window._userRols||[]).includes('superadmin') ||
+                          !!window._isSuperAdmin;
+        const esTutorAA = esAdminAA || rolsUsuari.includes('tutor');
+
+        if (esTutorAA) {
+          injectarBotoAutoavalTutor();
+          iniciarComprovacioBadgeAutoaval();
+        }
+        // Professor, secretaria, pedagog, revisor → no veuen autoavaluació
       }
     });
   };
@@ -382,13 +392,14 @@ function injectarBotoAutoavalTutor() {
     const nav = document.querySelector('.sidebar-nav');
     if (!nav) { setTimeout(tryInject, 600); return; }
 
-    // Botó Autoavaluació NOMÉS per a tutors, admins (no secretaria, no revisor, no professor, no pedagog)
+    // Botó Autoavaluació NOMÉS per a tutors (no secretaria, no revisor, no professor sol)
     const rols = window._userRols || [];
-    const esAdmin = rols.includes('admin') || rols.includes('superadmin') || !!window._isSuperAdmin;
-    const esTutor = esAdmin || rols.includes('tutor');
-    if (!esTutor) {
-      _aaInjectant = false;
-      return; // rol no adequat, no reintentar
+    const esTutor = rols.includes('tutor') ||
+                    rols.includes('admin') ||
+                    rols.includes('superadmin');
+    if (!window.teRol || !esTutor) {
+      setTimeout(tryInject, 1000);
+      return;
     }
 
     const btn = document.createElement('button');
@@ -1484,6 +1495,12 @@ function injectarBannerAutoaval(count) {
 }
 
 function iniciarComprovacioBadgeAutoaval() {
+  // Guard: només executar si l'usuari és tutor o admin
+  const rolsActuals = _aaUser?.rols || window._userRols || [];
+  const potBadge = rolsActuals.includes('tutor') || rolsActuals.includes('admin') ||
+                   rolsActuals.includes('superadmin') || !!window._isSuperAdmin;
+  if (!potBadge) return;
+
   // Esperar que el botó del sidebar existeixi i fer la primera comprovació
   function intentar() {
     if (!document.getElementById('btnAutoavalTutor')) { setTimeout(intentar, 600); return; }
