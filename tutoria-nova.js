@@ -86,6 +86,10 @@ async function obtenirMateriesPerConfig() {
 let _tutoriaInjectTimer = null; // guard anti-race-condition
 window.injectarBotoTutoria = function() {
   if (document.getElementById('btnTutoriaSidebar')) return;
+  // Guard de rol intern: NOMÉS tutor, pedagog, admin, superadmin
+  const rols = window._userRols || [];
+  const esAdmin = rols.includes('admin') || rols.includes('superadmin') || !!window._isSuperAdmin;
+  if (!esAdmin && !rols.includes('tutor') && !rols.includes('pedagog')) return;
   // Debounce: si es crida múltiples vegades ràpid, esperar que s'estabilitzi
   if (_tutoriaInjectTimer) return;
   _tutoriaInjectTimer = setTimeout(() => {
