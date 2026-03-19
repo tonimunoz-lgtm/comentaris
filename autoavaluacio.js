@@ -1331,6 +1331,8 @@ async function enviarRespostaAlButlleti(resposta, overlay) {
     aaToast('✅ Enviat al butlletí com a "Comentari alumne"');
     overlay.remove();
     carregarTabRespostes();
+    // Actualitzar el badge del sidebar immediatament
+    comprovarRespostesPendentsAutoaval();
 
   } catch(e) {
     console.error('autoavaluacio: error enviant al butlletí', e);
@@ -1429,7 +1431,9 @@ async function comprovarRespostesPendentsAutoaval() {
 
     const count = snap.docs.filter(d => {
       const e = d.data().estat;
-      return e === 'rebut' || e === 'revisat';
+      // 'rebut' = resposta nova no llegida → apareix al badge
+      // 'revisat' i 'enviatButlleti' = ja gestionades → no al badge
+      return e === 'rebut';
     }).length;
 
     // Badge al botó Autoavaluació del sidebar
