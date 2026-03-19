@@ -91,10 +91,17 @@ async function initAutoavaluacio() {
       if (_aaRol === 'alumne') {
         await activarModeAlumne();
       } else if (!_aaUser || !_aaUser.rols || _aaUser.rols.length === 0) {
-        // Usuari sense rol assignat → pantalla d'espera
-        // Interceptar setupAfterAuth per evitar que app.js mostri la UI
-        interceptarAppPerUsuariPendent();
-        await activarModePendent();
+        // Superadmin fix: encara que no tingui rols a Firestore, pot accedir
+        const esSuperAdmin = (window._userRols||[]).includes('superadmin') ||
+                             window._isSuperAdmin === true;
+        if (esSuperAdmin) {
+          injectarBotoAutoavalTutor();
+          patchSecretariaRols();
+          iniciarComprovacioBadgeAutoaval();
+        } else {
+          interceptarAppPerUsuariPendent();
+          await activarModePendent();
+        }
       } else {
         // Mode professor/tutor: injectar botó al panell tutoria
         injectarBotoAutoavalTutor();
@@ -375,9 +382,12 @@ function injectarBotoAutoavalTutor() {
     const nav = document.querySelector('.sidebar-nav');
     if (!nav) { setTimeout(tryInject, 600); return; }
 
-    // Injectar com a botó al sidebar (visible per tutors i admin)
-    if (!window.teRol || !window.teRol('tutor')) {
-      // Tornar a intentar quan els rols estiguin carregats
+    // Botó Autoavaluació NOMÉS per a tutors (no secretaria, no revisor, no professor sol)
+    const rols = window._userRols || [];
+    const esTutor = rols.includes('tutor') ||
+                    rols.includes('admin') ||
+                    rols.includes('superadmin');
+    if (!window.teRol || !esTutor) {
       setTimeout(tryInject, 1000);
       return;
     }
