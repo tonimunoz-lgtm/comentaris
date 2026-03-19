@@ -89,6 +89,10 @@ window.injectarBotoSecretaria = function() {
   btn.innerHTML = `<span class="nav-icon">📋</span><span>Secretaria</span>`;
   btn.addEventListener('click', obrirPanellSecretaria);
   nav.appendChild(btn);
+
+  // Comprovar pendents en carregar i cada 5 minuts
+  comprovarUsuarisPendents();
+  setInterval(comprovarUsuarisPendents, 5 * 60 * 1000);
 };
 
 /* ══════════════════════════════════════════════════════
@@ -1589,7 +1593,34 @@ async function renderUsuaris(body) {
     return;
   }
 
+  // Comptar pendents
+  const pendents = usuaris.filter(u => Array.isArray(u.rols) && u.rols.length === 0);
+  const nPendents = pendents.length;
+
   body.innerHTML = `
+    ${nPendents > 0 ? `
+    <div id="bannerPendents" style="
+      background:#fef2f2;border:2px solid #fca5a5;border-radius:12px;
+      padding:14px 18px;margin-bottom:18px;
+      display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;
+    ">
+      <div style="display:flex;align-items:center;gap:10px;">
+        <span style="font-size:24px;">⚠️</span>
+        <div>
+          <div style="font-size:14px;font-weight:800;color:#b91c1c;">
+            ${nPendents} usuari${nPendents!==1?'s':''} pendent${nPendents!==1?'s':''} d'assignar rol
+          </div>
+          <div style="font-size:12px;color:#ef4444;margin-top:2px;">
+            Aquests usuaris no poden accedir a l'aplicació fins que els assignis un rol.
+          </div>
+        </div>
+      </div>
+      <button id="btnFiltrarPendents" style="
+        padding:8px 16px;background:#ef4444;color:#fff;border:none;
+        border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;white-space:nowrap;
+      ">Veure pendents</button>
+    </div>` : ''}
+
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;flex-wrap:wrap;gap:10px;">
       <h3 style="font-size:16px;font-weight:700;color:#1e1b4b;margin:0;">👥 Usuaris (${usuaris.length})</h3>
       <div style="display:flex;gap:8px;">
@@ -1632,6 +1663,27 @@ async function renderUsuaris(body) {
   document.getElementById('btnNouUsuari').addEventListener('click', () =>
     modalNouUsuari(() => renderUsuaris(body))
   );
+
+  // Botó filtre pendents
+  document.getElementById('btnFiltrarPendents')?.addEventListener('click', () => {
+    const filtrats = usuaris.filter(u => Array.isArray(u.rols) && u.rols.length === 0);
+    document.getElementById('tbody-usuaris').innerHTML = renderFilesUsuaris(filtrats);
+    document.getElementById('buscaUser').value = '';
+    assignarEventsUsuaris(filtrats, usuaris);
+    // Ressaltar que estem filtrant
+    const btn = document.getElementById('btnFiltrarPendents');
+    if (btn) {
+      btn.textContent = '✕ Treure filtre';
+      btn.style.background = '#6b7280';
+      btn.onclick = () => {
+        document.getElementById('tbody-usuaris').innerHTML = renderFilesUsuaris(usuaris);
+        assignarEventsUsuaris(usuaris, usuaris);
+        btn.textContent = 'Veure pendents';
+        btn.style.background = '#ef4444';
+        btn.onclick = null;
+      };
+    }
+  });
 
   assignarEventsUsuaris(usuaris, usuaris);
 }
@@ -1870,6 +1922,7 @@ function modalNouUsuari(onCreat) {
         });
 
         window.mostrarToast(`✅ Usuari creat i email enviat a ${email}`, 4000);
+        setTimeout(() => comprovarUsuarisPendents(), 500);
         onCreat?.();
         return true;
 
@@ -2216,6 +2269,8 @@ async function modalEditarRols(usuari, onGuardat) {
       ...(rols.includes('alumne') && ralcEdit ? { ralc: ralcEdit } : {}),
     });
     window.mostrarToast('✅ Rols actualitzats');
+    // Actualitzar el badge de pendents
+    setTimeout(() => comprovarUsuarisPendents(), 500);
     onGuardat?.();
     return true;
   }, 'Guardar rols');
@@ -3391,5 +3446,61 @@ firebase.auth().onAuthStateChanged(user => {
     }
   }, 8000);
 });
+
+/* ══════════════════════════════════════════════════════
+   BADGE USUARIS PENDENTS
+   Mostra un badge al botó de secretaria del sidebar
+   quan hi ha usuaris sense cap rol assignat.
+══════════════════════════════════════════════════════ */
+async function comprovarUsuarisPendents() {
+  try {
+    const snap = await window.db.collection('professors')
+      .where('rols', '==', [])
+      .get();
+
+    // Filtrar: rols buit O rols inexistent (usuaris antics sense el camp)
+    // La query where('rols','==', []) no funciona a Firestore per arrays buits,
+    // així que carreguem tots i filtrem al client
+    const snapTots = await window.db.collection('professors').get();
+    const pendents = snapTots.docs.filter(d => {
+      const data = d.data();
+      const rols = data.rols;
+      return Array.isArray(rols) && rols.length === 0;
+    });
+
+    const count = pendents.length;
+    actualitzarBadgePendents(count);
+    return count;
+  } catch(e) {
+    console.warn('secretaria: error comprovant pendents', e);
+    return 0;
+  }
+}
+
+function actualitzarBadgePendents(count) {
+  // Badge al botó del sidebar
+  const btnSec = document.getElementById('btnSecretariaSidebar');
+  if (!btnSec) return;
+
+  // Eliminar badge anterior
+  btnSec.querySelector('.aa-pending-badge')?.remove();
+
+  if (count > 0) {
+    const badge = document.createElement('span');
+    badge.className = 'aa-pending-badge';
+    badge.style.cssText = `
+      display:inline-flex;align-items:center;justify-content:center;
+      background:#ef4444;color:#fff;border-radius:99px;
+      font-size:10px;font-weight:800;min-width:18px;height:18px;
+      padding:0 5px;margin-left:6px;line-height:1;
+    `;
+    badge.textContent = count;
+    badge.title = `${count} usuari${count !== 1 ? 's' : ''} pendent${count !== 1 ? 's' : ''} d'assignar rol`;
+    btnSec.appendChild(badge);
+  }
+}
+
+// Exposar per a ús extern
+window.comprovarUsuarisPendents = comprovarUsuarisPendents;
 
 console.log('✅ secretaria.js v2: inicialitzat');
