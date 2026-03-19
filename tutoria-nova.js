@@ -256,9 +256,38 @@ async function obrirPanellTutoria() {
     }
 
     // Filtrar grupos del curs
-    let grupsCurs = grups.filter(g => 
-      g.tipus === 'classe' && (g.curs === curs || !g.curs)
+    // Prioritat: grups tutoria (tenen els alumnes del grup classe per 2n i 3r ESO)
+    // Fallback: grups classe si no hi ha grups tutoria per a aquest curs
+    let grupsTutoriaCurs = grups.filter(g =>
+      g.tipus === 'tutoria' && (g.curs === curs || !g.curs) && g.parentGrupId
     );
+    let grupsCurs;
+    if (grupsTutoriaCurs.length > 0) {
+      // Usar grups tutoria, però mostrar el nom del grup classe pare (A, B, C...)
+      const grupsPerId = {};
+      grups.forEach(g => { grupsPerId[g.id] = g; });
+      grupsCurs = grupsTutoriaCurs.map(g => {
+        const pare = grupsPerId[g.parentGrupId];
+        return {
+          ...g,
+          nom: pare?.nom || g.nom,           // ex: "A", "B", "C"
+          nivellNom: g.nivellNom || pare?.nivellNom || '',
+          _idOriginal: g.id,
+        };
+      });
+      // Afegir també els grups classe que NO tinguin grup tutoria associat
+      const idsAmbTutoria = new Set(grupsTutoriaCurs.map(g => g.parentGrupId));
+      const classesSenseTutoria = grups.filter(g =>
+        g.tipus === 'classe' && (g.curs === curs || !g.curs) &&
+        !idsAmbTutoria.has(g.id) && (g.alumnes||[]).length > 0
+      );
+      grupsCurs = [...grupsCurs, ...classesSenseTutoria];
+    } else {
+      // Fallback: grups classe
+      grupsCurs = grups.filter(g =>
+        g.tipus === 'classe' && (g.curs === curs || !g.curs)
+      );
+    }
     
     // Filtrar por permisos de tutor
     if (!potVeureTots && tutoriaGrups.length > 0) {
