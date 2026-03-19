@@ -382,14 +382,13 @@ function injectarBotoAutoavalTutor() {
     const nav = document.querySelector('.sidebar-nav');
     if (!nav) { setTimeout(tryInject, 600); return; }
 
-    // Botó Autoavaluació NOMÉS per a tutors (no secretaria, no revisor, no professor sol)
+    // Botó Autoavaluació NOMÉS per a tutors, admins (no secretaria, no revisor, no professor, no pedagog)
     const rols = window._userRols || [];
-    const esTutor = rols.includes('tutor') ||
-                    rols.includes('admin') ||
-                    rols.includes('superadmin');
-    if (!window.teRol || !esTutor) {
-      setTimeout(tryInject, 1000);
-      return;
+    const esAdmin = rols.includes('admin') || rols.includes('superadmin') || !!window._isSuperAdmin;
+    const esTutor = esAdmin || rols.includes('tutor');
+    if (!esTutor) {
+      _aaInjectant = false;
+      return; // rol no adequat, no reintentar
     }
 
     const btn = document.createElement('button');
