@@ -1754,7 +1754,7 @@ function modalNouUsuari(onCreat) {
       <div style="margin-bottom:14px;">
         <label style="font-size:12px;font-weight:600;color:#374151;display:block;margin-bottom:5px;">Rols</label>
         <div style="display:flex;gap:10px;flex-wrap:wrap;">
-         ${(['professor','tutor','secretaria','revisor','admin','superadmin']
+         ${(['alumne','professor','tutor','secretaria','revisor','admin','superadmin']
        .filter(r => {
          const uRols = window._userRols || [];
          if (uRols.includes('superadmin')) return true;
@@ -1765,11 +1765,22 @@ function modalNouUsuari(onCreat) {
       ).map(r => `
             <label style="display:flex;align-items:center;gap:6px;cursor:pointer;">
               <input type="checkbox" class="chk-rol-nou" value="${r}" ${r==='professor'?'checked':''}
-                style="width:16px;height:16px;accent-color:${rolColor(r)};">
+                style="width:16px;height:16px;accent-color:${rolColor(r)};"
+                onchange="window._aaOnRolNouChange && window._aaOnRolNouChange(this)">
               <span style="font-size:13px;font-weight:600;color:${rolColor(r)};">${r}</span>
             </label>
           `).join('')}
         </div>
+      </div>
+
+      <!-- Camp RALC — visible només quan es marca el rol alumne -->
+      <div id="secRALC" style="display:none;margin-bottom:14px;padding:12px;background:#e0f2fe;border:1.5px solid #7dd3fc;border-radius:10px;">
+        <label style="font-size:12px;font-weight:700;color:#0369a1;display:block;margin-bottom:6px;">
+          🎓 RALC de l'alumne <span style="color:#ef4444;">*</span>
+        </label>
+        <input id="inpRalcAlumne" type="text" placeholder="Ex: 12345678A"
+          style="width:100%;box-sizing:border-box;padding:9px 11px;border:1.5px solid #7dd3fc;border-radius:8px;font-size:13px;outline:none;background:#fff;">
+        <div style="font-size:11px;color:#0369a1;margin-top:5px;">Identifica l'alumne i permet associar les seves autoavaluacions.</div>
       </div>
       <div>
         <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:13px;color:#374151;">
@@ -1844,12 +1855,14 @@ function modalNouUsuari(onCreat) {
         await auth2.sendPasswordResetEmail(email);
         await auth2.signOut();
 
+        const ralc = document.getElementById('inpRalcAlumne')?.value?.trim()?.toUpperCase() || '';
         await window.db.collection('professors').doc(uid).set({
           nom,
           email,
-          rols: rols.length > 0 ? rols : ['professor'],
+          rols: rols.length > 0 ? rols : [],
           isAdmin: rols.includes('admin') || rols.includes('superadmin'),
-          forcePasswordChange: true, // sempre true, canviarà quan faci el reset
+          ...(ralc && rols.includes('alumne') ? { ralc } : {}),
+          forcePasswordChange: true,
           createdAt: firebase.firestore.FieldValue.serverTimestamp(),
           creatPer: firebase.auth().currentUser?.uid || '',
           suspended: false,
@@ -2077,16 +2090,12 @@ async function modalEditarRols(usuari, onGuardat) {
 
   crearModal(`🎭 Rols — ${usuari.nom||usuari.email}`, `
     <div style="display:flex;flex-direction:column;gap:10px;">
-      ${(['professor','tutor','pedagog','secretaria','revisor','admin','superadmin']
+      ${(['alumne','professor','tutor','pedagog','secretaria','revisor','admin','superadmin']
    .filter(r => {
      const uRols = window._userRols || [];
-     // Admins i superadmins veuen tot
      if (uRols.includes('superadmin')) return true;
-     // Admins no veuen superadmins
      if (uRols.includes('admin')) return r !== 'superadmin';
-     // Secretaries només poden veure rols no administratius
      if (uRols.includes('secretaria')) return r !== 'admin' && r !== 'superadmin';
-     // La resta no veu rols
      return false;
    })
 ).map(r=>`
@@ -2097,13 +2106,23 @@ async function modalEditarRols(usuari, onGuardat) {
                id="row-rol-${r}">
           <input type="checkbox" class="chk-rol-edit" value="${r}"
             ${rolsActuals.includes(r)?'checked':''}
-            style="width:18px;height:18px;accent-color:${rolColor(r)};">
+            style="width:18px;height:18px;accent-color:${rolColor(r)};"
+            onchange="window._aaOnRolEditChange && window._aaOnRolEditChange(this)">
           <div style="flex:1;">
             <div style="font-weight:700;color:${rolColor(r)};">${r}</div>
             <div style="font-size:12px;color:#9ca3af;">${descrip[r]||''}</div>
           </div>
         </label>
       `).join('')}
+    </div>
+
+    <!-- Camp RALC editar rols — visible només quan es marca alumne -->
+    <div id="secRalcEdit" style="margin-top:12px;padding:12px;background:#e0f2fe;border:1.5px solid #7dd3fc;border-radius:10px;display:${rolsActuals.includes('alumne')?'block':'none'};">
+      <label style="font-size:12px;font-weight:700;color:#0369a1;display:block;margin-bottom:6px;">
+        🎓 RALC de l'alumne
+      </label>
+      <input id="inpRalcEdit" type="text" value="${esH(usuari.ralc||'')}" placeholder="Ex: 12345678A"
+        style="width:100%;box-sizing:border-box;padding:9px 11px;border:1.5px solid #7dd3fc;border-radius:8px;font-size:13px;outline:none;background:#fff;">
     </div>
 
     <!-- Secció revisor: assignar nivells -->
@@ -2187,12 +2206,14 @@ async function modalEditarRols(usuari, onGuardat) {
       }
     }
 
+    const ralcEdit = document.getElementById('inpRalcEdit')?.value?.trim()?.toUpperCase() || '';
     await window.db.collection('professors').doc(usuari.id).update({
-      rols: rols.length>0?rols:['professor'],
+      rols: rols.length>0?rols:[],
       isAdmin: rols.includes('admin'),
       revisio_nivells: revisioNivells,
       revisio_tot: revisioNivells.includes('_tot'),
       tutoria_grups: tutoriaGrups,
+      ...(rols.includes('alumne') && ralcEdit ? { ralc: ralcEdit } : {}),
     });
     window.mostrarToast('✅ Rols actualitzats');
     onGuardat?.();
@@ -3180,7 +3201,7 @@ async function carregarGrupsCentre() {
 
 function rolColor(rol) {
   const c = {superadmin:'#7c3aed',admin:'#dc2626',secretaria:'#0891b2',
-              tutor:'#059669',professor:'#2563eb',revisor:'#d97706'};
+              tutor:'#059669',professor:'#2563eb',revisor:'#d97706',alumne:'#0e7490'};
   return c[rol]||'#6b7280';
 }
 
