@@ -20,30 +20,17 @@ const _FALLBACK_VISIBLE_MS = 5000;
 function _mostrarNavDefinitiu() {
   if (window._rolsCarregats) return; // ja fet
   window._rolsCarregats = true;
-  const nav = document.querySelector('.sidebar-nav');
-  if (nav) {
-    nav.style.visibility = 'visible';
-    nav.style.opacity = '0';
-    nav.style.transition = 'opacity 0.2s ease';
-    requestAnimationFrame(() => { nav.style.opacity = '1'; });
-  }
-  console.log('✅ app-patch: nav visible (rols carregats)');
+  // Afegir classe al body — el CSS fa la resta (transition inclosa)
+  document.body.classList.add('rols-llestos');
+  console.log('✅ app-patch: rols-llestos → nav visible');
 }
 
-// Fallback de seguretat: si alguna cosa falla, el nav es mostra igualment
+// Fallback de seguretat: si alguna cosa falla, el nav es mostra igualment als 5s
 setTimeout(_mostrarNavDefinitiu, _FALLBACK_VISIBLE_MS);
 
-// Interceptar showApp() d'app.js per mantenir el nav ocult mentre carreguen els rols
-// app.js crida showApp() → mostra appRoot però el nav el controlem nosaltres
-const _origShowApp = window.showApp;
-window.showApp = function() {
-  _origShowApp?.();
-  // Assegurar que el nav queda ocult fins que _mostrarNavDefinitiu() el mostri
-  if (!window._rolsCarregats) {
-    const nav = document.querySelector('.sidebar-nav');
-    if (nav) nav.style.visibility = 'hidden';
-  }
-};
+// Nota: amb type="module" no cal interceptar showApp() —
+// el nav ja comença ocult per CSS (visibility:hidden) i
+// s'activa únicament quan afegim la classe 'rols-llestos' al body.
 
 /* ══════════════════════════════════════════════════════
    INIT — esperar Firebase + usuari autenticat
