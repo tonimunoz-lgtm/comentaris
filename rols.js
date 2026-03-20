@@ -368,10 +368,11 @@ window.mostrarToast = function(msg, durada = 3000) {
    INICIALITZACIÓ — Esperar auth
 ══════════════════════════════════════════════════════ */
 document.addEventListener('DOMContentLoaded', () => {
-  // El nav comença ocult per CSS (visibility:hidden a .sidebar-nav).
-  // app-patch.js és l'ÚNIC responsable de fer-lo visible (afegint 'rols-llestos' al body).
-  // rols.js només carrega el perfil i actualitza l'estat intern.
+  // Amagar el nav fins que els rols estiguin carregats
+  const nav = document.querySelector('.sidebar-nav');
+  if (nav) nav.style.visibility = 'hidden';
 
+  // Esperar que Firebase estigui disponible
   const waitForFirebase = setInterval(() => {
     if (!window.firebase || !window.db) return;
     clearInterval(waitForFirebase);
@@ -380,7 +381,8 @@ document.addEventListener('DOMContentLoaded', () => {
       if (!user) {
         window._userRol  = null;
         window._userRols = [];
-        // Sense usuari: app-patch cridarà _mostrarNavDefinitiu igualment
+        const nav = document.querySelector('.sidebar-nav');
+        if (nav) nav.style.visibility = 'visible';
         return;
       }
 
@@ -390,8 +392,10 @@ document.addEventListener('DOMContentLoaded', () => {
         if (perfil.data?.forcePasswordChange && !sessionStorage.getItem('pwChangeDone')) {
           mostrarModalCambioPassword();
         }
-        // Actualitzar estat intern de rols — NO tocar visibilitat del nav
+        // Sense setTimeout: els rols ja estan carregats aquí
         actualitzarUIRols();
+        const nav = document.querySelector('.sidebar-nav');
+        if (nav) nav.style.visibility = 'visible';
       }
     });
   }, 200);
