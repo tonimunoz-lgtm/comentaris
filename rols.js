@@ -381,8 +381,7 @@ document.addEventListener('DOMContentLoaded', () => {
       if (!user) {
         window._userRol  = null;
         window._userRols = [];
-        const nav = document.querySelector('.sidebar-nav');
-        if (nav) nav.style.visibility = 'visible';
+        // visibilitat gestionada per app-patch.js
         return;
       }
 
@@ -394,8 +393,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
         // Sense setTimeout: els rols ja estan carregats aquí
         actualitzarUIRols();
-        const nav = document.querySelector('.sidebar-nav');
-        if (nav) nav.style.visibility = 'visible';
+        // visibilitat gestionada per app-patch.js
       }
     });
   }, 200);
