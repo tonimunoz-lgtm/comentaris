@@ -368,11 +368,10 @@ window.mostrarToast = function(msg, durada = 3000) {
    INICIALITZACIÓ — Esperar auth
 ══════════════════════════════════════════════════════ */
 document.addEventListener('DOMContentLoaded', () => {
-  // Amagar el nav fins que els rols estiguin carregats
-  const nav = document.querySelector('.sidebar-nav');
-  if (nav) nav.style.visibility = 'hidden';
+  // El nav comença ocult per CSS (visibility:hidden a .sidebar-nav).
+  // app-patch.js és l'ÚNIC responsable de fer-lo visible (afegint 'rols-llestos' al body).
+  // rols.js només carrega el perfil i actualitza l'estat intern.
 
-  // Esperar que Firebase estigui disponible
   const waitForFirebase = setInterval(() => {
     if (!window.firebase || !window.db) return;
     clearInterval(waitForFirebase);
@@ -381,14 +380,7 @@ document.addEventListener('DOMContentLoaded', () => {
       if (!user) {
         window._userRol  = null;
         window._userRols = [];
-        // La visibilitat del nav la controla app-patch.js (_mostrarNavDefinitiu)
-        // Si app-patch no ha carregat (cas estrany), fem fallback directe
-        if (typeof window._mostrarNavDefinitiu === 'function') {
-          window._mostrarNavDefinitiu();
-        } else {
-          const nav = document.querySelector('.sidebar-nav');
-          if (nav) nav.style.visibility = 'visible';
-        }
+        // Sense usuari: app-patch cridarà _mostrarNavDefinitiu igualment
         return;
       }
 
@@ -398,11 +390,8 @@ document.addEventListener('DOMContentLoaded', () => {
         if (perfil.data?.forcePasswordChange && !sessionStorage.getItem('pwChangeDone')) {
           mostrarModalCambioPassword();
         }
-        // Els rols estan carregats però NO mostrem el nav aquí:
-        // app-patch.js s'encarrega de mostrar-lo un cop injectats tots els botons.
-        // Cridem actualitzarUIRols perquè pugui preparar l'estat intern.
+        // Actualitzar estat intern de rols — NO tocar visibilitat del nav
         actualitzarUIRols();
-        // NO posem nav visible aquí — ho farà _mostrarNavDefinitiu() a app-patch.js
       }
     });
   }, 200);
