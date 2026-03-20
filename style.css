@@ -367,6 +367,16 @@ body {
   display: flex;
   flex-direction: column;
   gap: 4px;
+  /* Ocult per defecte fins que els rols estiguin carregats */
+  visibility: hidden;
+  opacity: 0;
+  transition: opacity 0.2s ease;
+}
+
+/* Quan app-patch.js confirma que els rols estan llestos */
+body.rols-llestos .sidebar-nav {
+  visibility: visible;
+  opacity: 1;
 }
 
 .nav-item {
