@@ -5,17 +5,61 @@
 
 console.log('🔧 app-patch.js carregat');
 let _grupsCentreData = {};
+
+/* ══════════════════════════════════════════════════════
+   BARRERA DE ROLS — evita flash de botons incorrectes
+   ─────────────────────────────────────────────────────
+   El sidebar comença invisible (rols.js ja ho fa).
+   app-patch.js és l'ÚNIC que el torna visible, i només
+   quan els rols ja estan carregats i els botons injectats.
+   Fallback de seguretat: si triga més de 5s, es mostra igualment.
+══════════════════════════════════════════════════════ */
+window._rolsCarregats = false;
+const _FALLBACK_VISIBLE_MS = 5000;
+
+function _mostrarNavDefinitiu() {
+  if (window._rolsCarregats) return; // ja fet
+  window._rolsCarregats = true;
+  const nav = document.querySelector('.sidebar-nav');
+  if (nav) {
+    nav.style.visibility = 'visible';
+    nav.style.opacity = '0';
+    nav.style.transition = 'opacity 0.2s ease';
+    requestAnimationFrame(() => { nav.style.opacity = '1'; });
+  }
+  console.log('✅ app-patch: nav visible (rols carregats)');
+}
+
+// Fallback de seguretat: si alguna cosa falla, el nav es mostra igualment
+setTimeout(_mostrarNavDefinitiu, _FALLBACK_VISIBLE_MS);
+
+// Interceptar showApp() d'app.js per mantenir el nav ocult mentre carreguen els rols
+// app.js crida showApp() → mostra appRoot però el nav el controlem nosaltres
+const _origShowApp = window.showApp;
+window.showApp = function() {
+  _origShowApp?.();
+  // Assegurar que el nav queda ocult fins que _mostrarNavDefinitiu() el mostri
+  if (!window._rolsCarregats) {
+    const nav = document.querySelector('.sidebar-nav');
+    if (nav) nav.style.visibility = 'hidden';
+  }
+};
+
 /* ══════════════════════════════════════════════════════
    INIT — esperar Firebase + usuari autenticat
 ══════════════════════════════════════════════════════ */
 firebase.auth().onAuthStateChanged(async user => {
-  if (!user) return;
+  if (!user) {
+    // Usuari no autenticat: mostrar nav igualment (pantalla de login)
+    _mostrarNavDefinitiu();
+    return;
+  }
 
   // Esperar que rols.js hagi carregat carregarPerfilUsuari
   await esperarFn('carregarPerfilUsuari', 6000);
 
   try {
-    // Carregar perfil usuari
+    // Carregar perfil usuari (await garantit: rols disponibles abans d'injectar botons)
     await window.carregarPerfilUsuari(user.uid);
 
     // 🔹 Assegurar Superadmin fix en memòria/UI
@@ -23,26 +67,24 @@ firebase.auth().onAuthStateChanged(async user => {
 
     // 🔹 Regenerar superadmin a Firebase si ha desaparegut
     if (esSuperAdminFix(user)) {
-  const profRef = db.collection('professors').doc(user.uid);
-  const doc = await profRef.get();
-  if (!doc.exists) {
-    // Document inexistent → crear-lo completament
-    await profRef.set({
-      nom: user.displayName || 'SuperAdmin',
-      email: user.email,
-      rols: ['superadmin','admin'],
-      isAdmin: true,
-      createdAt: firebase.firestore.FieldValue.serverTimestamp(),
-      updatedAt: firebase.firestore.FieldValue.serverTimestamp()
-    });
-  } else if (!doc.data().isAdmin) {
-    // Document existent → assegurar isAdmin
-    await profRef.update({ isAdmin: true });
-    console.log('⚡ Superadmin fix actualitzat amb isAdmin: true');
-  }
-}
+      const profRef = db.collection('professors').doc(user.uid);
+      const doc = await profRef.get();
+      if (!doc.exists) {
+        await profRef.set({
+          nom: user.displayName || 'SuperAdmin',
+          email: user.email,
+          rols: ['superadmin','admin'],
+          isAdmin: true,
+          createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+          updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+        });
+      } else if (!doc.data().isAdmin) {
+        await profRef.update({ isAdmin: true });
+        console.log('⚡ Superadmin fix actualitzat amb isAdmin: true');
+      }
+    }
 
-    // Actualitzar UI segons rols
+    // Actualitzar UI segons rols (injecta botons correctes)
     window.actualitzarUIRols();
 
     // Verificar canvi de password
@@ -50,6 +92,9 @@ firebase.auth().onAuthStateChanged(async user => {
   } catch(e) {
     console.error('app-patch init:', e);
   }
+
+  // ✅ Ara sí: rols carregats i botons injectats → mostrar nav
+  _mostrarNavDefinitiu();
 
   // Interceptar creació de classe
   interceptarCrearClasse();
