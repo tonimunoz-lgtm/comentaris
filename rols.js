@@ -381,8 +381,14 @@ document.addEventListener('DOMContentLoaded', () => {
       if (!user) {
         window._userRol  = null;
         window._userRols = [];
-        const nav = document.querySelector('.sidebar-nav');
-        if (nav) nav.style.visibility = 'visible';
+        // La visibilitat del nav la controla app-patch.js (_mostrarNavDefinitiu)
+        // Si app-patch no ha carregat (cas estrany), fem fallback directe
+        if (typeof window._mostrarNavDefinitiu === 'function') {
+          window._mostrarNavDefinitiu();
+        } else {
+          const nav = document.querySelector('.sidebar-nav');
+          if (nav) nav.style.visibility = 'visible';
+        }
         return;
       }
 
@@ -392,10 +398,11 @@ document.addEventListener('DOMContentLoaded', () => {
         if (perfil.data?.forcePasswordChange && !sessionStorage.getItem('pwChangeDone')) {
           mostrarModalCambioPassword();
         }
-        // Sense setTimeout: els rols ja estan carregats aquí
+        // Els rols estan carregats però NO mostrem el nav aquí:
+        // app-patch.js s'encarrega de mostrar-lo un cop injectats tots els botons.
+        // Cridem actualitzarUIRols perquè pugui preparar l'estat intern.
         actualitzarUIRols();
-        const nav = document.querySelector('.sidebar-nav');
-        if (nav) nav.style.visibility = 'visible';
+        // NO posem nav visible aquí — ho farà _mostrarNavDefinitiu() a app-patch.js
       }
     });
   }, 200);
