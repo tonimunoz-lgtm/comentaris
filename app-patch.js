@@ -11,6 +11,15 @@ let _grupsCentreData = {};
 firebase.auth().onAuthStateChanged(async user => {
   if (!user) return;
 
+  // Ocultar nav immediatament — evita flash de botons incorrectes
+  const _nav = document.querySelector('.sidebar-nav');
+  if (_nav) _nav.style.visibility = 'hidden';
+
+  // Fallback: si alguna cosa falla, el nav es mostra als 6s
+  const _navFallback = setTimeout(() => {
+    if (_nav) _nav.style.visibility = 'visible';
+  }, 6000);
+
   // Esperar que rols.js hagi carregat carregarPerfilUsuari
   await esperarFn('carregarPerfilUsuari', 6000);
 
@@ -42,13 +51,22 @@ firebase.auth().onAuthStateChanged(async user => {
   }
 }
 
-    // Actualitzar UI segons rols
+    // Actualitzar UI segons rols (botons correctes ja injectats)
     window.actualitzarUIRols();
 
     // Verificar canvi de password
     await verificarPasswordChange(user);
   } catch(e) {
     console.error('app-patch init:', e);
+  }
+
+  // ✅ Rols carregats i botons injectats → mostrar nav amb fade suau
+  clearTimeout(_navFallback);
+  if (_nav) {
+    _nav.style.transition = 'opacity 0.2s ease';
+    _nav.style.opacity = '0';
+    _nav.style.visibility = 'visible';
+    requestAnimationFrame(() => { _nav.style.opacity = '1'; });
   }
 
   // Interceptar creació de classe
