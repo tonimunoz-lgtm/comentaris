@@ -160,6 +160,30 @@ function injectarTabRevisor(panell) {
 }
 
 // ─────────────────────────────────────────────
+// LLEGIR PERMISOS DEL REVISOR (per autodiagnosi)
+// Mirall de llegirPermisosRevisor() a revisor.js
+// ─────────────────────────────────────────────
+async function llegirPermisosRevisorAD() {
+  const uid = window.firebase?.auth().currentUser?.uid;
+  if (!uid) return { nivells: [], cursos: [], grups: [], totsNivells: false };
+  try {
+    const doc = await window.db.collection('professors').doc(uid).get();
+    const data = doc.data() || {};
+    const nivells = data.revisio_nivells || [];
+    const totsNivells = data.revisio_tot || nivells.includes('_tot') ||
+                        window.teRol?.('admin') || window.teRol?.('superadmin') || false;
+    return {
+      nivells:  nivells.filter(n => n !== '_tot'),
+      cursos:   data.revisio_cursos || [],
+      grups:    data.revisio_grups  || [],
+      totsNivells
+    };
+  } catch(e) {
+    return { nivells: [], cursos: [], grups: [], totsNivells: false };
+  }
+}
+
+// ─────────────────────────────────────────────
 // PANELL AUTODIAGNOSI al REVISOR
 // ─────────────────────────────────────────────
 async function renderPanellAutodiagRevisor(cont, panell) {
@@ -167,15 +191,28 @@ async function renderPanellAutodiagRevisor(cont, panell) {
 
   try {
     const db = window.db;
+
+    // Llegir permisos del revisor (igual que fa revisor.js)
+    const permisos = await llegirPermisosRevisorAD();
+
     const snap = await db.collection('grups_centre').get();
     const totsGrups = snap.docs.map(d => ({ id: d.id, ...d.data() }));
     const grupsPerId = {};
     totsGrups.forEach(g => { grupsPerId[g.id] = g; });
 
-    // Grups tutoria
-    let grupsTutoria = totsGrups.filter(g => g.tipus === 'tutoria');
+    // Filtrar tots els grups per permisos del revisor
+    const grupsPermesos = permisos.totsNivells
+      ? totsGrups
+      : totsGrups.filter(g =>
+          permisos.grups.includes(g.id) ||
+          permisos.cursos.some(c => g.curs === c) ||
+          permisos.nivells.some(nId => g.nivellId === nId)
+        );
+
+    // Grups tutoria (filtrats per permisos)
+    let grupsTutoria = grupsPermesos.filter(g => g.tipus === 'tutoria');
     if (grupsTutoria.length === 0) {
-      grupsTutoria = totsGrups.filter(g => g.tipus === 'classe' && (g.alumnes||[]).length > 0);
+      grupsTutoria = grupsPermesos.filter(g => g.tipus === 'classe' && (g.alumnes||[]).length > 0);
     }
 
     // Etiqueta llegible
@@ -189,6 +226,15 @@ async function renderPanellAutodiagRevisor(cont, panell) {
     }
 
     grupsTutoria.sort((a, b) => etiqueta(a).localeCompare(etiqueta(b), 'ca'));
+
+    // Si no té cap grup permès, avisar i sortir
+    if (grupsTutoria.length === 0 && !permisos.totsNivells) {
+      cont.innerHTML = `
+        <div style="background:#fef9c3;border:1.5px solid #fde68a;border-radius:12px;padding:20px 24px;color:#713f12;font-size:13px;">
+          ⚠️ No tens cap grup assignat per revisar autodiagnosis. Contacta amb l'administrador.
+        </div>`;
+      return;
+    }
 
     const cursActiu = window._cursActiu || '';
     const cursos = [...new Set(totsGrups.map(g => g.curs).filter(Boolean))].sort().reverse();
