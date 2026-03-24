@@ -3000,7 +3000,7 @@ async function carregarDadesButlletins(grups) {
     window._butlletinsAlumnes = alumnes;
 
     document.querySelectorAll('.btn-gen-butlleti').forEach(btn => {
-      btn.addEventListener('click', () => {
+      btn.addEventListener('click', async () => {
         const idx = parseInt(btn.dataset.idx);
         const alumne = window._butlletinsAlumnes?.[idx];
         if (alumne) generarButlleti(alumne, curs, grupDoc?.nom||'', trimestre, grupId, grupDoc?.nivellNom||'', await _carregarInfoButlleti(trimestre));
