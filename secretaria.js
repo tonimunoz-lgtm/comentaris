@@ -100,9 +100,10 @@ window.injectarBotoSecretaria = function() {
     btn.addEventListener('click', obrirPanellSecretaria);
     nav.appendChild(btn);
 
-    // Comprovar pendents en carregar i cada 5 minuts
-    comprovarUsuarisPendents();
-    setInterval(comprovarUsuarisPendents, 5 * 60 * 1000);
+    // Listener en temps real: actualitza el badge immediatament
+    // quan arriba qualsevol canvi a la col·lecció professors
+    // (registre nou via Google, via email, canvi de rols, etc.)
+    iniciarListenerPendents();
   }, 100);
 };
 
@@ -3547,18 +3548,13 @@ firebase.auth().onAuthStateChanged(user => {
 ══════════════════════════════════════════════════════ */
 async function comprovarUsuarisPendents() {
   try {
-    const snap = await window.db.collection('professors')
-      .where('rols', '==', [])
-      .get();
-
-    // Filtrar: rols buit O rols inexistent (usuaris antics sense el camp)
-    // La query where('rols','==', []) no funciona a Firestore per arrays buits,
-    // així que carreguem tots i filtrem al client
+    // Firestore no suporta query per array buit, cal carregar tots i filtrar al client
     const snapTots = await window.db.collection('professors').get();
     const pendents = snapTots.docs.filter(d => {
       const data = d.data();
+      if (data.deleted || data.suspended) return false;
       const rols = data.rols;
-      return Array.isArray(rols) && rols.length === 0;
+      return !Array.isArray(rols) || rols.length === 0;
     });
 
     const count = pendents.length;
@@ -3569,6 +3565,44 @@ async function comprovarUsuarisPendents() {
     return 0;
   }
 }
+
+/* ══════════════════════════════════════════════════════
+   LISTENER EN TEMPS REAL DE PENDENTS
+   Substitueix el setInterval — detecta nous usuaris
+   (inclosos els que es registren via Google) a l'instant
+══════════════════════════════════════════════════════ */
+let _pendentsUnsubscribe = null;
+
+function iniciarListenerPendents() {
+  // Cancel·lar listener anterior si existeix
+  if (_pendentsUnsubscribe) {
+    _pendentsUnsubscribe();
+    _pendentsUnsubscribe = null;
+  }
+
+  try {
+    _pendentsUnsubscribe = window.db.collection('professors')
+      .onSnapshot(snap => {
+        const pendents = snap.docs.filter(d => {
+          const data = d.data();
+          if (data.deleted || data.suspended) return false;
+          const rols = data.rols;
+          return !Array.isArray(rols) || rols.length === 0;
+        });
+        actualitzarBadgePendents(pendents.length);
+      }, err => {
+        console.warn('secretaria: error listener pendents', err);
+        // Fallback: polling cada 5 min si el listener falla
+        comprovarUsuarisPendents();
+        setInterval(comprovarUsuarisPendents, 5 * 60 * 1000);
+      });
+  } catch(e) {
+    console.warn('secretaria: no s\'ha pogut iniciar el listener', e);
+    comprovarUsuarisPendents();
+  }
+}
+
+window.iniciarListenerPendents = iniciarListenerPendents;
 
 function actualitzarBadgePendents(count) {
   const badgeCSS = `
