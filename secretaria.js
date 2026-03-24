@@ -3097,7 +3097,13 @@ async function generarButlleti(alumne, curs, grupNom, trimestre, grupId, nivellN
     .firma-img-area { height: 60px; display: flex; align-items: flex-end; justify-content: center; margin-bottom: 6px; }
     .firma-linia { border-top: 1px solid #999; width: 140px; padding-top: 5px; text-align: center; font-size: 9pt; color: #555; }
     .firma-nom { font-size: 9pt; color: #333; font-weight: 600; text-align: center; margin-top: 2px; }
-    @media print { body { padding: 15mm; } }
+    @media print {
+      @page { margin: 15mm; size: A4; }
+      body { padding: 0; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+      .mat-head { background: #1e1b4b !important; color: #fff !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+      .badge { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+      .info-butlleti-bloc { page-break-after: always; }
+    }
   </style>
 </head>
 <body>
@@ -3128,7 +3134,7 @@ async function generarButlleti(alumne, curs, grupNom, trimestre, grupId, nivellN
   </div>
 
   ${infoButlleti ? `
-  <div style="background:#f0fdf4;border:1.5px solid #86efac;border-radius:8px;padding:12px 16px;margin-bottom:16px;">
+  <div class="info-butlleti-bloc" style="background:#f0fdf4;border:1.5px solid #86efac;border-radius:8px;padding:12px 16px;margin-bottom:16px;">
     <div style="font-size:10.5pt;font-weight:bold;color:#166534;margin-bottom:6px;">Resultats de l'avaluació</div>
     <div style="font-size:10pt;color:#1e293b;white-space:pre-wrap;line-height:1.6;">${esH(infoButlleti)}</div>
   </div>` : ''}
