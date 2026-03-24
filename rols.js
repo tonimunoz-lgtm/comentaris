@@ -13,7 +13,7 @@ window.ROLS = {
   SECRETARIA: 'secretaria',
   TUTOR:      'tutor',
   PEDAGOG:    'pedagog',
-  PROFESSOR:  'professor',
+  PROFESSOR:  'professor/a',
   REVISOR:    'revisor'
 };
 
