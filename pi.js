@@ -360,8 +360,6 @@ function observarDetallTutoriaPI() {
     const detall = document.getElementById('detallAlumneTutoria');
     if (!detall || detall.children.length === 0) return;
     if (detall.querySelector('#piTutoriaSection')) return;
-    // Netejar comentari anterior si n'hi ha (alumne nou)
-    detall.querySelector('#comentariTutoriaSection')?.remove();
     await injectarSeccioPI(detall);
   });
 
@@ -386,20 +384,16 @@ function observarDetallTutoriaPI() {
 }
 
 async function injectarSeccioPI(detallEl) {
-  // Guard: evitar execució concurrent quan injectar el comentari dispara de nou el MutationObserver
-  if (detallEl.dataset.piInjectant) return;
-  detallEl.dataset.piInjectant = '1';
-
   // Extreure RALC del contingut del detall (tutoria-nova.js el posa com "RALC: XXXX")
   const matchRalc = detallEl.innerHTML.match(/RALC[:\s]+([A-Za-z0-9]+)/);
   const ralc = matchRalc?.[1]?.trim();
-  if (!ralc) { delete detallEl.dataset.piInjectant; return; }
+  if (!ralc) return;
 
   let piData = null;
   try {
     const doc = await window.db.collection(PI_COL).doc(String(ralc)).get();
     if (doc.exists && doc.data().actiu) piData = doc.data();
-  } catch(e) { delete detallEl.dataset.piInjectant; return; }
+  } catch(e) { return; }
 
   const seccio = document.createElement('div');
   seccio.id = 'piTutoriaSection';
@@ -407,7 +401,7 @@ async function injectarSeccioPI(detallEl) {
 
   if (!piData) {
     // No té PI — si és pedagog, mostrar botó per crear-ne un
-    if (!esPedagogPI()) { delete detallEl.dataset.piInjectant; return; } // no pedagog, no mostrar res
+    if (!esPedagogPI()) return; // no pedagog, no mostrar res
     seccio.innerHTML = `
       <div style="background:#f5f3ff;border:1.5px solid #c4b5fd;border-radius:14px;padding:16px 20px;">
         <div style="font-size:13px;font-weight:700;color:#4c1d95;margin-bottom:8px;">📋 Pla Individualitzat</div>
@@ -462,115 +456,12 @@ async function injectarSeccioPI(detallEl) {
     });
   }
 
-  // Inserir: Autodiagnosi → Comentari Tutor/a → PI
-  // Primer injectar el comentari de tutoria (si no existeix ja)
-  if (!detallEl.querySelector('#comentariTutoriaSection')) {
-    await injectarComentariTutoria(detallEl);
-  }
-
-  const comentariSec = detallEl.querySelector('#comentariTutoriaSection');
-  const adSection    = detallEl.querySelector('#adTutoriaSection');
-  if (comentariSec) {
-    comentariSec.after(seccio);
-  } else if (adSection) {
+  // Inserir al final del detall (sota autodiagnosi si existeix)
+  const adSection = detallEl.querySelector('#adTutoriaSection');
+  if (adSection) {
     adSection.after(seccio);
   } else {
     detallEl.appendChild(seccio);
-  }
-
-  // Alliberar guard
-  delete detallEl.dataset.piInjectant;
-}
-
-async function injectarComentariTutoria(detallEl) {
-  const matchRalc = detallEl.innerHTML.match(/RALC[:\s]+([A-Za-z0-9]+)/);
-  const ralc = matchRalc?.[1]?.trim();
-  if (!ralc) return;
-
-  let comentari = '';
-  try {
-    const db = window.db;
-
-    const grupId = document.getElementById('selGrupTutoria')?.value || '';
-    const curs   = document.getElementById('selCursTutoria')?.value
-                || document.getElementById('selCurs')?.value
-                || window._cursActiu || '';
-    const periodeEl = document.getElementById('selPeriodeTutoria')
-                   || document.getElementById('selPeriode');
-    const periode = periodeEl?.options?.[periodeEl?.selectedIndex]?.text?.trim() || '';
-
-    if (!grupId || !curs) return;
-
-    // Determinar el grup tutoria: selGrupTutoria pot ser el grup tutoria o el grup classe
-    let grupTutoriaId = grupId;
-    const grupDoc = await db.collection('grups_centre').doc(grupId).get();
-    const grupData = grupDoc.data() || {};
-
-    if (grupData.tipus !== 'tutoria') {
-      // És grup classe: buscar el fill de tipus tutoria
-      const grupsSnap = await db.collection('grups_centre')
-        .where('parentGrupId', '==', grupId)
-        .where('tipus', '==', 'tutoria')
-        .limit(1).get();
-      if (grupsSnap.empty) return;
-      grupTutoriaId = grupsSnap.docs[0].id;
-    }
-
-    // Grup classe pare
-    const grupClasseId = grupData.tipus === 'tutoria'
-      ? (grupData.parentGrupId || grupId)
-      : grupId;
-
-    // Buscar avaluació de tutoria per a aquest alumne
-    let snap = await db.collection('avaluacio_centre')
-      .doc(curs).collection(grupTutoriaId)
-      .where('grupClasseId', '==', grupClasseId).get();
-    if (snap.empty) {
-      snap = await db.collection('avaluacio_centre')
-        .doc(curs).collection(grupTutoriaId)
-        .where('grupId', '==', grupClasseId).get();
-    }
-    // Fallback sense filtre de grup
-    if (snap.empty) {
-      snap = await db.collection('avaluacio_centre')
-        .doc(curs).collection(grupTutoriaId).get();
-    }
-
-    // Filtrar per RALC i període
-    const docs = snap.docs.filter(d => {
-      const data = d.data();
-      return data.ralc === ralc && (!periode || data.periodeNom === periode);
-    });
-
-    if (docs.length > 0) {
-      comentari = docs[0].data().comentariGlobal || '';
-    }
-  } catch(e) {
-    console.warn('pi.js injectarComentariTutoria error:', e);
-    return;
-  }
-
-  if (!comentari) return;
-
-  const sec = document.createElement('div');
-  sec.id = 'comentariTutoriaSection';
-  sec.style.cssText = 'margin-top:20px;';
-  sec.innerHTML = `
-    <div style="border:1.5px solid #d1fae5;border-radius:12px;overflow:hidden;">
-      <div style="background:linear-gradient(135deg,#059669,#047857);padding:10px 16px;display:flex;align-items:center;gap:8px;">
-        <span style="font-weight:800;color:#fff;font-size:14px;">💬 Comentari Tutor/a</span>
-      </div>
-      <div style="padding:14px 16px;font-size:13px;color:#1e1b4b;white-space:pre-wrap;line-height:1.6;background:#fff;">
-        ${piEsH(comentari)}
-      </div>
-    </div>
-  `;
-
-  const adSection = detallEl.querySelector('#adTutoriaSection');
-  if (adSection) {
-    adSection.after(sec);
-  } else {
-    detallEl.appendChild(sec);
   }
 }
 
