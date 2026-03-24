@@ -360,6 +360,8 @@ function observarDetallTutoriaPI() {
     const detall = document.getElementById('detallAlumneTutoria');
     if (!detall || detall.children.length === 0) return;
     if (detall.querySelector('#piTutoriaSection')) return;
+    // Netejar comentari anterior si n'hi ha (alumne nou)
+    detall.querySelector('#comentariTutoriaSection')?.remove();
     await injectarSeccioPI(detall);
   });
 
@@ -456,12 +458,104 @@ async function injectarSeccioPI(detallEl) {
     });
   }
 
-  // Inserir al final del detall (sota autodiagnosi si existeix)
-  const adSection = detallEl.querySelector('#adTutoriaSection');
-  if (adSection) {
+  // Inserir: Autodiagnosi → Comentari Tutor/a → PI
+  // Primer injectar el comentari de tutoria (si no existeix ja)
+  if (!detallEl.querySelector('#comentariTutoriaSection')) {
+    await injectarComentariTutoria(detallEl);
+  }
+
+  const comentariSec = detallEl.querySelector('#comentariTutoriaSection');
+  const adSection    = detallEl.querySelector('#adTutoriaSection');
+  if (comentariSec) {
+    comentariSec.after(seccio);
+  } else if (adSection) {
     adSection.after(seccio);
   } else {
     detallEl.appendChild(seccio);
+  }
+}
+
+async function injectarComentariTutoria(detallEl) {
+  const matchRalc = detallEl.innerHTML.match(/RALC[:\s]+([A-Za-z0-9]+)/);
+  const ralc = matchRalc?.[1]?.trim();
+  if (!ralc) return;
+
+  // Buscar el grup tutoria associat al grup classe actiu
+  let comentari = '';
+  try {
+    const db = window.db;
+
+    // Obtenir el grup tutoria: fills del grup classe amb tipus=tutoria
+    const grupId = (() => {
+      const sel = document.getElementById('selGrupTutoria');
+      return sel?.value || '';
+    })();
+    const curs = (() => {
+      const sel = document.getElementById('selCursTutoria') || document.getElementById('selCurs');
+      return sel?.value || window._cursActiu || '';
+    })();
+    const periode = (() => {
+      const sel = document.getElementById('selPeriodeTutoria') || document.getElementById('selPeriode');
+      return sel?.options?.[sel?.selectedIndex]?.text?.trim() || '';
+    })();
+
+    if (!grupId || !curs) return;
+
+    // Buscar grup tutoria fill del grup classe
+    const grupsSnap = await db.collection('grups_centre')
+      .where('parentGrupId', '==', grupId)
+      .where('tipus', '==', 'tutoria')
+      .limit(1).get();
+
+    if (grupsSnap.empty) return;
+    const grupTutoriaId = grupsSnap.docs[0].id;
+
+    // Buscar avaluació de tutoria per a aquest alumne
+    let snap = await db.collection('avaluacio_centre')
+      .doc(curs).collection(grupTutoriaId)
+      .where('grupClasseId', '==', grupId)
+      .get();
+    if (snap.empty) {
+      snap = await db.collection('avaluacio_centre')
+        .doc(curs).collection(grupTutoriaId)
+        .where('grupId', '==', grupId)
+        .get();
+    }
+
+    // Filtrar per alumne (RALC) i per període
+    const docs = snap.docs.filter(d => {
+      const data = d.data();
+      const coincideixRalc = data.ralc === ralc;
+      const coincideixPeriode = !periode || data.periodeNom === periode;
+      return coincideixRalc && coincideixPeriode;
+    });
+
+    if (docs.length > 0) {
+      comentari = docs[0].data().comentariGlobal || '';
+    }
+  } catch(e) { return; }
+
+  if (!comentari) return;
+
+  const sec = document.createElement('div');
+  sec.id = 'comentariTutoriaSection';
+  sec.style.cssText = 'margin-top:20px;';
+  sec.innerHTML = `
+    <div style="border:1.5px solid #d1fae5;border-radius:12px;overflow:hidden;">
+      <div style="background:linear-gradient(135deg,#059669,#047857);padding:10px 16px;display:flex;align-items:center;gap:8px;">
+        <span style="font-weight:800;color:#fff;font-size:14px;">💬 Comentari Tutor/a</span>
+      </div>
+      <div style="padding:14px 16px;font-size:13px;color:#1e1b4b;white-space:pre-wrap;line-height:1.6;background:#fff;">
+        ${piEsH(comentari)}
+      </div>
+    </div>
+  `;
+
+  const adSection = detallEl.querySelector('#adTutoriaSection');
+  if (adSection) {
+    adSection.after(sec);
+  } else {
+    detallEl.appendChild(sec);
   }
 }
 
