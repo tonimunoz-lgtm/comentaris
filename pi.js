@@ -386,16 +386,20 @@ function observarDetallTutoriaPI() {
 }
 
 async function injectarSeccioPI(detallEl) {
+  // Guard: evitar execució concurrent (el MutationObserver es dispara quan injectem el comentari)
+  if (detallEl.dataset.piInjectant) return;
+  detallEl.dataset.piInjectant = '1';
+
   // Extreure RALC del contingut del detall (tutoria-nova.js el posa com "RALC: XXXX")
   const matchRalc = detallEl.innerHTML.match(/RALC[:\s]+([A-Za-z0-9]+)/);
   const ralc = matchRalc?.[1]?.trim();
-  if (!ralc) return;
+  if (!ralc) { delete detallEl.dataset.piInjectant; return; }
 
   let piData = null;
   try {
     const doc = await window.db.collection(PI_COL).doc(String(ralc)).get();
     if (doc.exists && doc.data().actiu) piData = doc.data();
-  } catch(e) { return; }
+  } catch(e) { delete detallEl.dataset.piInjectant; return; }
 
   const seccio = document.createElement('div');
   seccio.id = 'piTutoriaSection';
@@ -403,7 +407,7 @@ async function injectarSeccioPI(detallEl) {
 
   if (!piData) {
     // No té PI — si és pedagog, mostrar botó per crear-ne un
-    if (!esPedagogPI()) return; // no pedagog, no mostrar res
+    if (!esPedagogPI()) { delete detallEl.dataset.piInjectant; return; } // no pedagog, no mostrar res
     seccio.innerHTML = `
       <div style="background:#f5f3ff;border:1.5px solid #c4b5fd;border-radius:14px;padding:16px 20px;">
         <div style="font-size:13px;font-weight:700;color:#4c1d95;margin-bottom:8px;">📋 Pla Individualitzat</div>
@@ -473,6 +477,8 @@ async function injectarSeccioPI(detallEl) {
   } else {
     detallEl.appendChild(seccio);
   }
+
+  delete detallEl.dataset.piInjectant;
 }
 
 async function injectarComentariTutoria(detallEl) {
@@ -480,70 +486,60 @@ async function injectarComentariTutoria(detallEl) {
   const ralc = matchRalc?.[1]?.trim();
   if (!ralc) return;
 
+  // Buscar el grup tutoria associat al grup classe actiu
   let comentari = '';
   try {
     const db = window.db;
 
-    const grupId = document.getElementById('selGrupTutoria')?.value || '';
-    const curs   = document.getElementById('selCursTutoria')?.value
-                || document.getElementById('selCurs')?.value
-                || window._cursActiu || '';
-    const periodeEl = document.getElementById('selPeriodeTutoria')
-                   || document.getElementById('selPeriode');
-    const periode = periodeEl?.options?.[periodeEl?.selectedIndex]?.text?.trim() || '';
+    // Obtenir el grup tutoria: fills del grup classe amb tipus=tutoria
+    const grupId = (() => {
+      const sel = document.getElementById('selGrupTutoria');
+      return sel?.value || '';
+    })();
+    const curs = (() => {
+      const sel = document.getElementById('selCursTutoria') || document.getElementById('selCurs');
+      return sel?.value || window._cursActiu || '';
+    })();
+    const periode = (() => {
+      const sel = document.getElementById('selPeriodeTutoria') || document.getElementById('selPeriode');
+      return sel?.options?.[sel?.selectedIndex]?.text?.trim() || '';
+    })();
 
     if (!grupId || !curs) return;
 
-    // Determinar quin és el grup tutoria: pot ser que selGrupTutoria ja sigui
-    // el grup tutoria directament, o pot ser el grup classe (i cal buscar el fill tutoria)
-    let grupTutoriaId = grupId;
+    // Buscar grup tutoria fill del grup classe
+    const grupsSnap = await db.collection('grups_centre')
+      .where('parentGrupId', '==', grupId)
+      .where('tipus', '==', 'tutoria')
+      .limit(1).get();
 
-    const grupDoc = await db.collection('grups_centre').doc(grupId).get();
-    const grupData = grupDoc.data() || {};
-
-    if (grupData.tipus !== 'tutoria') {
-      // És un grup classe: buscar el fill de tipus tutoria
-      const grupsSnap = await db.collection('grups_centre')
-        .where('parentGrupId', '==', grupId)
-        .where('tipus', '==', 'tutoria')
-        .limit(1).get();
-      if (grupsSnap.empty) return;
-      grupTutoriaId = grupsSnap.docs[0].id;
-    }
-
-    // El grup classe pare (per filtrar els docs)
-    const grupClasseId = grupData.tipus === 'tutoria'
-      ? (grupData.parentGrupId || grupId)
-      : grupId;
+    if (grupsSnap.empty) return;
+    const grupTutoriaId = grupsSnap.docs[0].id;
 
     // Buscar avaluació de tutoria per a aquest alumne
     let snap = await db.collection('avaluacio_centre')
       .doc(curs).collection(grupTutoriaId)
-      .where('grupClasseId', '==', grupClasseId).get();
+      .where('grupClasseId', '==', grupId)
+      .get();
     if (snap.empty) {
       snap = await db.collection('avaluacio_centre')
         .doc(curs).collection(grupTutoriaId)
-        .where('grupId', '==', grupClasseId).get();
-    }
-    // Fallback sense filtre de grup (per si les dades no tenen grupClasseId)
-    if (snap.empty) {
-      snap = await db.collection('avaluacio_centre')
-        .doc(curs).collection(grupTutoriaId).get();
+        .where('grupId', '==', grupId)
+        .get();
     }
 
-    // Filtrar per RALC i període
+    // Filtrar per alumne (RALC) i per període
     const docs = snap.docs.filter(d => {
       const data = d.data();
-      return data.ralc === ralc && (!periode || data.periodeNom === periode);
+      const coincideixRalc = data.ralc === ralc;
+      const coincideixPeriode = !periode || data.periodeNom === periode;
+      return coincideixRalc && coincideixPeriode;
     });
 
     if (docs.length > 0) {
       comentari = docs[0].data().comentariGlobal || '';
     }
-  } catch(e) {
-    console.warn('pi.js injectarComentariTutoria error:', e);
-    return;
-  }
+  } catch(e) { return; }
 
   if (!comentari) return;
 
