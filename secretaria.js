@@ -2991,7 +2991,7 @@ async function carregarDadesButlletins(grups) {
       }
     });
 
-    document.getElementById('bGenTots')?.addEventListener('click', () => {
+    document.getElementById('bGenTots')?.addEventListener('click', async () => {
       const _infoButlleti = await _carregarInfoButlleti(trimestre);
       ambDades.forEach(a => generarButlleti(a, curs, grupDoc?.nom||'', trimestre, grupId, grupDoc?.nivellNom||'', _infoButlleti));
     });
