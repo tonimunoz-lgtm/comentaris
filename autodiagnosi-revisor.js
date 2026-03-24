@@ -123,15 +123,29 @@ function injectarTabRevisor(panell) {
   btnTab.innerHTML = '🧠 Autodiagnosi';
   btnTab.title = 'Veure autodiagnosis d\'alumnes';
 
+  // Botó Comentari Tutor/a
+  const btnTabCT = document.createElement('button');
+  btnTabCT.id = 'btnTabComentariTutorRevisor';
+  btnTabCT.style.cssText = `
+    padding:7px 16px;background:rgba(255,255,255,0.15);
+    border:1.5px solid rgba(255,255,255,0.4);color:#fff;
+    border-radius:8px;font-size:12px;font-weight:700;cursor:pointer;
+    margin-left:8px;transition:all .15s;
+  `;
+  btnTabCT.innerHTML = '💬 Comentari Tutor';
+  btnTabCT.title = 'Veure i editar comentaris de tutoria';
+
   // Afegir al costat del botó Carregar
   const btnCarregar = header.querySelector('#btnCarregarRevisio');
   if (btnCarregar) {
+    btnCarregar.insertAdjacentElement('afterend', btnTabCT);
     btnCarregar.insertAdjacentElement('afterend', btnTab);
   } else {
     header.appendChild(btnTab);
+    header.appendChild(btnTabCT);
   }
 
-  // Contenidor per al contingut d'autodiagnosi (sobre revisioContent)
+  // Contenidor per al contingut d'autodiagnosi
   const revisioContent = panell.querySelector('#revisioContent');
   if (!revisioContent) return;
 
@@ -140,22 +154,49 @@ function injectarTabRevisor(panell) {
   adContent.style.cssText = 'flex:1;overflow-y:auto;padding:24px;min-height:0;display:none;';
   revisioContent.parentElement.insertBefore(adContent, revisioContent);
 
-  let modeAutodiag = false;
+  // Contenidor per al contingut de Comentari Tutor
+  const ctContent = document.createElement('div');
+  ctContent.id = 'ctRevContent';
+  ctContent.style.cssText = 'flex:1;overflow-y:auto;padding:24px;min-height:0;display:none;';
+  revisioContent.parentElement.insertBefore(ctContent, revisioContent);
+
+  let modeActiu = null; // null | 'autodiag' | 'comentaritutor'
+
+  const desactivarTots = () => {
+    revisioContent.style.display = 'block';
+    adContent.style.display = 'none';
+    ctContent.style.display = 'none';
+    btnTab.style.background = 'rgba(255,255,255,0.15)';
+    btnTab.style.color = '#fff';
+    btnTabCT.style.background = 'rgba(255,255,255,0.15)';
+    btnTabCT.style.color = '#fff';
+    modeActiu = null;
+  };
 
   btnTab.addEventListener('click', () => {
-    modeAutodiag = !modeAutodiag;
-    if (modeAutodiag) {
-      btnTab.style.background = '#fff';
-      btnTab.style.color = '#0891b2';
-      revisioContent.style.display = 'none';
-      adContent.style.display = 'block';
-      renderPanellAutodiagRevisor(adContent, panell);
-    } else {
-      btnTab.style.background = 'rgba(255,255,255,0.15)';
-      btnTab.style.color = '#fff';
-      revisioContent.style.display = 'block';
-      adContent.style.display = 'none';
-    }
+    if (modeActiu === 'autodiag') { desactivarTots(); return; }
+    modeActiu = 'autodiag';
+    btnTab.style.background = '#fff';
+    btnTab.style.color = '#0891b2';
+    btnTabCT.style.background = 'rgba(255,255,255,0.15)';
+    btnTabCT.style.color = '#fff';
+    revisioContent.style.display = 'none';
+    adContent.style.display = 'block';
+    ctContent.style.display = 'none';
+    renderPanellAutodiagRevisor(adContent, panell);
+  });
+
+  btnTabCT.addEventListener('click', () => {
+    if (modeActiu === 'comentaritutor') { desactivarTots(); return; }
+    modeActiu = 'comentaritutor';
+    btnTabCT.style.background = '#fff';
+    btnTabCT.style.color = '#059669';
+    btnTab.style.background = 'rgba(255,255,255,0.15)';
+    btnTab.style.color = '#fff';
+    revisioContent.style.display = 'none';
+    adContent.style.display = 'none';
+    ctContent.style.display = 'block';
+    renderPanellComentariTutorRevisor(ctContent);
   });
 }
 
@@ -795,3 +836,332 @@ async function injectarSeccioAutodiagTutoria(detallEl) {
 }
 
 console.log('✅ autodiagnosi-revisor.js: inicialitzat');
+
+// ═════════════════════════════════════════════════════════
+//  REVISOR — PANELL COMENTARI TUTOR/A (tutoria → avaluacio_centre)
+// ═════════════════════════════════════════════════════════
+async function renderPanellComentariTutorRevisor(cont) {
+  cont.innerHTML = '<div style="padding:30px;text-align:center;color:#9ca3af;">⏳ Carregant...</div>';
+
+  try {
+    const db = window.db;
+    const permisos = await llegirPermisosRevisorAD();
+
+    const snap = await db.collection('grups_centre').get();
+    const totsGrups = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    const grupsPerId = {};
+    totsGrups.forEach(g => { grupsPerId[g.id] = g; });
+
+    // Filtrar per permisos
+    const grupsPermesos = permisos.totsNivells
+      ? totsGrups
+      : totsGrups.filter(g =>
+          permisos.grups.includes(g.id) ||
+          permisos.cursos.some(c => g.curs === c) ||
+          permisos.nivells.some(nId => g.nivellId === nId)
+        );
+
+    // Grups de tutoria (tipus='tutoria') amb permisos
+    const grupsTutoria = grupsPermesos.filter(g => g.tipus === 'tutoria');
+
+    function etiquetaGrup(g) {
+      const nivell = g.nivellNom || '';
+      if (g.parentGrupId) {
+        const pare = grupsPerId[g.parentGrupId];
+        return `${nivell} ${pare?.nom || g.nom}`.trim();
+      }
+      return `${nivell} ${g.nom || ''}`.trim();
+    }
+
+    grupsTutoria.sort((a, b) => etiquetaGrup(a).localeCompare(etiquetaGrup(b), 'ca'));
+
+    if (grupsTutoria.length === 0) {
+      cont.innerHTML = `
+        <div style="background:#fef9c3;border:1.5px solid #fde68a;border-radius:12px;padding:20px 24px;color:#713f12;font-size:13px;">
+          ⚠️ No tens cap grup de tutoria assignat. Contacta amb l'administrador.
+        </div>`;
+      return;
+    }
+
+    const nivells = [...new Set(grupsTutoria.map(g => g.nivellNom).filter(Boolean))].sort();
+
+    cont.innerHTML = `
+      <h4 style="font-size:15px;font-weight:700;color:#1e1b4b;margin-bottom:16px;">
+        💬 Comentaris Tutor/a — Revisió i edició
+      </h4>
+      <div style="background:#f0fdf4;border:1.5px solid #86efac;border-radius:12px;padding:14px 18px;margin-bottom:18px;font-size:12px;color:#166534;">
+        💡 Pots veure i editar els comentaris de tutoria enviats per cada alumne.
+      </div>
+      <div style="display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap;align-items:flex-end;">
+        <div>
+          <label style="font-size:11px;font-weight:700;color:#6b7280;display:block;margin-bottom:4px;">NIVELL</label>
+          <select id="ctRevNivell" style="padding:7px 10px;border:1.5px solid #e5e7eb;border-radius:8px;font-size:13px;outline:none;min-width:130px;">
+            <option value="">— Tots —</option>
+            ${nivells.map(n => `<option value="${adRH(n)}">${adRH(n)}</option>`).join('')}
+          </select>
+        </div>
+        <div>
+          <label style="font-size:11px;font-weight:700;color:#6b7280;display:block;margin-bottom:4px;">GRUP</label>
+          <select id="ctRevGrup" style="padding:7px 10px;border:1.5px solid #e5e7eb;border-radius:8px;font-size:13px;outline:none;min-width:160px;">
+            <option value="">— Tria grup —</option>
+            ${grupsTutoria.map(g => `<option value="${g.id}">${adRH(etiquetaGrup(g))}</option>`).join('')}
+          </select>
+        </div>
+        <div>
+          <label style="font-size:11px;font-weight:700;color:#6b7280;display:block;margin-bottom:4px;">PERÍODE</label>
+          <select id="ctRevPeriode" style="padding:7px 10px;border:1.5px solid #e5e7eb;border-radius:8px;font-size:13px;outline:none;min-width:150px;">
+            <option value="">⏳ Carregant...</option>
+          </select>
+        </div>
+        <button id="ctRevCarregar" style="padding:8px 18px;background:#059669;color:#fff;border:none;border-radius:8px;font-weight:700;cursor:pointer;align-self:flex-end;">
+          🔍 Carregar
+        </button>
+      </div>
+      <div id="ctRevResultats">
+        <div style="text-align:center;padding:40px;color:#9ca3af;font-size:13px;">
+          Selecciona un grup de tutoria per veure els comentaris.
+        </div>
+      </div>
+    `;
+
+    // Carregar períodes
+    carregarPeriodesADR().then(periodes => {
+      const sel = document.getElementById('ctRevPeriode');
+      if (sel) sel.innerHTML = '<option value="">— Tots els períodes —</option>' +
+        periodes.map(p => `<option value="${adRH(p.nom)}">${adRH(p.nom)}</option>`).join('');
+    });
+
+    // Filtrar grups per nivell
+    document.getElementById('ctRevNivell')?.addEventListener('change', () => {
+      const nivell = document.getElementById('ctRevNivell').value;
+      const selGrup = document.getElementById('ctRevGrup');
+      selGrup.innerHTML = '<option value="">— Tria grup —</option>' +
+        grupsTutoria
+          .filter(g => !nivell || (g.nivellNom || '') === nivell)
+          .map(g => `<option value="${g.id}">${adRH(etiquetaGrup(g))}</option>`)
+          .join('');
+    });
+
+    document.getElementById('ctRevCarregar')?.addEventListener('click', () => {
+      const grupId = document.getElementById('ctRevGrup').value;
+      const periode = document.getElementById('ctRevPeriode')?.value || '';
+      if (!grupId) { window.mostrarToast?.('⚠️ Tria un grup', 3000); return; }
+      const g = grupsTutoria.find(x => x.id === grupId);
+      carregarComentarisTutorRevisor(grupId, etiquetaGrup(g || {}), grupsPerId, periode);
+    });
+
+  } catch(e) {
+    cont.innerHTML = `<div style="color:#ef4444;padding:20px;">❌ ${e.message}</div>`;
+  }
+}
+
+async function carregarComentarisTutorRevisor(grupTutoriaId, grupEtiqueta, grupsPerId, periodeFiltre = '') {
+  const resDiv = document.getElementById('ctRevResultats');
+  resDiv.innerHTML = '<div style="padding:20px;text-align:center;color:#9ca3af;">⏳ Carregant...</div>';
+
+  try {
+    const db = window.db;
+    const cursActiu = window._cursActiu || '';
+
+    // Grup classe pare
+    const grupTutoriaDoc = await db.collection('grups_centre').doc(grupTutoriaId).get();
+    const grupTutoriaData = grupTutoriaDoc.data() || {};
+    const grupClasseId = grupTutoriaData.parentGrupId || grupTutoriaId;
+
+    // Llegir alumnes del grup classe
+    const grupClasseDoc = await db.collection('grups_centre').doc(grupClasseId).get();
+    const alumnesGrup = (grupClasseDoc.data()?.alumnes || [])
+      .sort((a, b) => (a.cognoms||a.nom||'').localeCompare(b.cognoms||b.nom||'', 'ca'));
+
+    // Llegir avaluació de tutoria
+    let snap = await db.collection('avaluacio_centre')
+      .doc(cursActiu).collection(grupTutoriaId)
+      .where('grupClasseId', '==', grupClasseId).get();
+    if (snap.empty) {
+      snap = await db.collection('avaluacio_centre')
+        .doc(cursActiu).collection(grupTutoriaId)
+        .where('grupId', '==', grupClasseId).get();
+    }
+
+    // Mapa ralc → comentariGlobal (filtrat per període)
+    const comentarisMap = {};
+    snap.docs.forEach(d => {
+      const data = d.data();
+      if (periodeFiltre && data.periodeNom !== periodeFiltre) return;
+      if (data.ralc) comentarisMap[data.ralc] = { comentari: data.comentariGlobal || '', docId: d.id, periodeNom: data.periodeNom || '' };
+    });
+
+    const ambComentari = alumnesGrup.filter(a => comentarisMap[a.ralc]?.comentari);
+    const senseComentari = alumnesGrup.filter(a => !comentarisMap[a.ralc]?.comentari);
+
+    resDiv.innerHTML = `
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
+        <div style="font-size:13px;color:#6b7280;">
+          <strong style="color:#1e1b4b;">${adRH(grupEtiqueta)}</strong> ·
+          <strong style="color:#059669;">${ambComentari.length}</strong> amb comentari ·
+          <strong style="color:#dc2626;">${senseComentari.length}</strong> sense
+        </div>
+      </div>
+      <table style="width:100%;border-collapse:collapse;font-size:13px;">
+        <thead>
+          <tr style="background:#f3f4f6;">
+            <th style="padding:9px 12px;text-align:left;font-weight:600;color:#374151;">Alumne/a</th>
+            <th style="padding:9px 12px;text-align:center;font-weight:600;color:#374151;">Període</th>
+            <th style="padding:9px 12px;text-align:center;font-weight:600;color:#374151;">Comentari</th>
+            <th style="padding:9px 12px;text-align:center;font-weight:600;color:#374151;">Accions</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${alumnesGrup.map((a, idx) => {
+            const nom = a.cognoms ? `${a.cognoms}, ${a.nom}` : a.nom;
+            const entrada = comentarisMap[a.ralc];
+            const teComent = !!(entrada?.comentari);
+            return `
+              <tr style="border-bottom:1px solid #f3f4f6;">
+                <td style="padding:8px 12px;font-weight:600;color:#1e1b4b;">${adRH(nom)}</td>
+                <td style="padding:8px 12px;text-align:center;font-size:12px;color:#6b7280;">${adRH(entrada?.periodeNom || '—')}</td>
+                <td style="padding:8px 12px;text-align:center;">
+                  ${teComent
+                    ? '<span style="color:#059669;font-size:12px;">✅ Sí</span>'
+                    : '<span style="color:#9ca3af;font-size:12px;">— No</span>'}
+                </td>
+                <td style="padding:8px 12px;text-align:center;">
+                  <button class="btn-ct-rev-editar" data-ralc="${adRH(a.ralc||'')}" data-idx="${idx}"
+                    style="padding:5px 12px;background:#059669;color:#fff;border:none;border-radius:6px;font-size:11px;font-weight:700;cursor:pointer;">
+                    ✏️ ${teComent ? 'Editar' : 'Crear'}
+                  </button>
+                </td>
+              </tr>
+            `;
+          }).join('')}
+        </tbody>
+      </table>
+    `;
+
+    // Guardar dades per als botons
+    window._ctRevAlumnes = alumnesGrup;
+    window._ctRevComentarisMap = comentarisMap;
+    window._ctRevGrupTutoriaId = grupTutoriaId;
+    window._ctRevGrupClasseId = grupClasseId;
+    window._ctRevCursActiu = cursActiu;
+    window._ctRevPeriode = periodeFiltre;
+
+    resDiv.querySelectorAll('.btn-ct-rev-editar').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const ralc = btn.dataset.ralc;
+        const alumne = window._ctRevAlumnes[parseInt(btn.dataset.idx)];
+        obrirEditorComentariTutor(alumne, window._ctRevComentarisMap[ralc] || null);
+      });
+    });
+
+  } catch(e) {
+    resDiv.innerHTML = `<div style="color:#ef4444;padding:20px;">❌ ${e.message}</div>`;
+    console.error('ctRevisor:', e);
+  }
+}
+
+function obrirEditorComentariTutor(alumne, entrada) {
+  document.getElementById('ctRevModal')?.remove();
+
+  const nomComplet = alumne.cognoms ? `${alumne.cognoms}, ${alumne.nom}` : alumne.nom;
+  const comentariActual = entrada?.comentari || '';
+  const periodeNom = window._ctRevPeriode || entrada?.periodeNom || '';
+
+  const modal = document.createElement('div');
+  modal.id = 'ctRevModal';
+  modal.style.cssText = `
+    position:fixed;inset:0;z-index:10000;background:rgba(15,23,42,0.75);
+    display:flex;align-items:center;justify-content:center;padding:20px;
+  `;
+  modal.innerHTML = `
+    <div style="background:#fff;border-radius:18px;width:100%;max-width:620px;max-height:90vh;overflow-y:auto;box-shadow:0 25px 60px rgba(0,0,0,0.3);">
+      <div style="background:linear-gradient(135deg,#059669,#047857);padding:20px 24px;border-radius:18px 18px 0 0;display:flex;justify-content:space-between;align-items:center;">
+        <div>
+          <div style="font-size:16px;font-weight:800;color:#fff;">💬 Comentari Tutor/a</div>
+          <div style="font-size:12px;color:rgba(255,255,255,0.8);margin-top:3px;">${adRH(nomComplet)}${periodeNom ? ' · ' + adRH(periodeNom) : ''}</div>
+        </div>
+        <button id="ctRevModalTancar" style="background:rgba(255,255,255,0.2);border:none;color:#fff;font-size:18px;width:34px;height:34px;border-radius:50%;cursor:pointer;font-weight:700;">✕</button>
+      </div>
+      <div style="padding:24px;">
+        <div style="margin-bottom:16px;">
+          <label style="font-size:12px;font-weight:700;color:#374151;display:block;margin-bottom:6px;">Comentari del tutor/a:</label>
+          <textarea id="ctRevTextarea" rows="8" style="width:100%;padding:12px;border:1.5px solid #d1d5db;border-radius:10px;font-size:13px;font-family:inherit;line-height:1.6;outline:none;resize:vertical;box-sizing:border-box;">${adRH(comentariActual)}</textarea>
+        </div>
+        <div style="display:flex;gap:10px;justify-content:flex-end;">
+          <button id="ctRevModalCancelar" style="padding:9px 20px;background:#f3f4f6;color:#374151;border:none;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;">Cancel·lar</button>
+          <button id="ctRevModalGuardar" style="padding:9px 22px;background:#059669;color:#fff;border:none;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;">💾 Guardar</button>
+        </div>
+      </div>
+    </div>
+  `;
+  document.body.appendChild(modal);
+
+  const tancar = () => modal.remove();
+  document.getElementById('ctRevModalTancar')?.addEventListener('click', tancar);
+  document.getElementById('ctRevModalCancelar')?.addEventListener('click', tancar);
+  modal.addEventListener('click', e => { if (e.target === modal) tancar(); });
+
+  document.getElementById('ctRevModalGuardar')?.addEventListener('click', async () => {
+    const btn = document.getElementById('ctRevModalGuardar');
+    const nouComentari = document.getElementById('ctRevTextarea')?.value?.trim() || '';
+    btn.disabled = true;
+    btn.textContent = '⏳ Guardant...';
+
+    try {
+      const db = window.db;
+      const cursActiu = window._ctRevCursActiu;
+      const grupTutoriaId = window._ctRevGrupTutoriaId;
+      const grupClasseId = window._ctRevGrupClasseId;
+      const ralc = alumne.ralc || '';
+      const periode = periodeNom;
+
+      // Buscar el document existent per RALC + període
+      let snapExist = await db.collection('avaluacio_centre')
+        .doc(cursActiu).collection(grupTutoriaId)
+        .where('grupClasseId', '==', grupClasseId)
+        .where('ralc', '==', ralc).get();
+      if (snapExist.empty) {
+        snapExist = await db.collection('avaluacio_centre')
+          .doc(cursActiu).collection(grupTutoriaId)
+          .where('grupId', '==', grupClasseId)
+          .where('ralc', '==', ralc).get();
+      }
+
+      const docsFiltrats = periode
+        ? snapExist.docs.filter(d => d.data().periodeNom === periode)
+        : snapExist.docs;
+
+      if (docsFiltrats.length > 0) {
+        // Actualitzar document existent
+        await docsFiltrats[0].ref.update({ comentariGlobal: nouComentari });
+      } else {
+        // Crear document nou
+        await db.collection('avaluacio_centre')
+          .doc(cursActiu).collection(grupTutoriaId).add({
+            ralc, nom: alumne.nom || '', cognoms: alumne.cognoms || '',
+            grupClasseId, grupId: grupClasseId,
+            periodeNom: periode,
+            comentariGlobal: nouComentari,
+            items: [],
+            creatAt: window.firebase.firestore.FieldValue.serverTimestamp(),
+          });
+      }
+
+      window.mostrarToast?.('✅ Comentari guardat correctament', 3000);
+      tancar();
+
+      // Recarregar la llista
+      const grupTutoriaDoc = await db.collection('grups_centre').doc(grupTutoriaId).get();
+      const grupEtiq = (() => {
+        const data = grupTutoriaDoc.data() || {};
+        return adRH(data.nivellNom ? `${data.nivellNom} ${data.nom || ''}` : (data.nom || grupTutoriaId));
+      })();
+      carregarComentarisTutorRevisor(grupTutoriaId, grupEtiq, {}, periode);
+
+    } catch(e) {
+      window.mostrarToast?.('❌ Error guardant: ' + e.message, 4000);
+      btn.disabled = false;
+      btn.textContent = '💾 Guardar';
+    }
+  });
+}
