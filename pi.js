@@ -147,11 +147,13 @@ function observarPanellTutoriaPI() {
    (#studentsList li[data-id])
 ══════════════════════════════════════════════════════ */
 let _piStudentsObserver = null;
+let _piActualitzant = false; // flag per evitar que l'observer es dispari per les seves pròpies mutacions
 
 function observarStudentsListPI() {
   if (_piStudentsObserver) return;
 
   const afegirBadgesStudentsList = async () => {
+    if (_piActualitzant) return; // ignorar mutacions provocades per nosaltres mateixos
     const llista = document.getElementById('studentsList');
     if (!llista) return;
     const cache = await getPICache();
@@ -178,17 +180,20 @@ function observarStudentsListPI() {
 
 async function afegirBadgePIaLI(li, cache) {
   if (li.querySelector('.badge-pi')) return; // ja té badge
+  if (li.dataset.piFetching) return; // evitar crides concurrent
   // Obtenir RALC de l'alumne: des de data-ralc o des de Firestore
   let ralc = li.dataset.ralc;
   if (!ralc) {
+    li.dataset.piFetching = '1';
     const alumneId = li.dataset.id;
-    if (!alumneId) return;
+    if (!alumneId) { delete li.dataset.piFetching; return; }
     try {
       const doc = await window.db.collection('alumnes').doc(alumneId).get();
-      if (!doc.exists) return;
+      if (!doc.exists) { delete li.dataset.piFetching; return; }
       ralc = doc.data().ralc || '';
       if (ralc) li.dataset.ralc = ralc; // cache al DOM
-    } catch(e) { return; }
+    } catch(e) { delete li.dataset.piFetching; return; }
+    delete li.dataset.piFetching;
   }
   if (!ralc) return;
   const c = cache || _piCache;
@@ -216,19 +221,20 @@ async function afegirBadgePIaLI(li, cache) {
 }
 
 function actualitzarBadgesPI() {
+  _piActualitzant = true;
   // Actualitzar studentsList
   const llista = document.getElementById('studentsList');
   if (llista) {
-    // Eliminar badges obsolets i re-afegir
+    // Eliminar badges obsolets i re-afegir (sense esborrar dataset.ralc!)
     llista.querySelectorAll('.badge-pi').forEach(b => b.remove());
     llista.querySelectorAll('li[data-id]').forEach(li => {
-      delete li.dataset.ralc; // forçar re-fetch
       afegirBadgePIaLI(li, _piCache);
     });
   }
 
   // Actualitzar llista tutoria
   actualitzarBadgesPITutoria();
+  setTimeout(() => { _piActualitzant = false; }, 500);
 }
 
 /* ══════════════════════════════════════════════════════
