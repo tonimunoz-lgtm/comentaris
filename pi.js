@@ -386,7 +386,7 @@ function observarDetallTutoriaPI() {
 }
 
 async function injectarSeccioPI(detallEl) {
-  // Guard: evitar execució concurrent (el MutationObserver es dispara quan injectem el comentari)
+  // Guard: evitar execució concurrent quan injectar el comentari dispara de nou el MutationObserver
   if (detallEl.dataset.piInjectant) return;
   detallEl.dataset.piInjectant = '1';
 
@@ -478,6 +478,7 @@ async function injectarSeccioPI(detallEl) {
     detallEl.appendChild(seccio);
   }
 
+  // Alliberar guard
   delete detallEl.dataset.piInjectant;
 }
 
@@ -486,60 +487,68 @@ async function injectarComentariTutoria(detallEl) {
   const ralc = matchRalc?.[1]?.trim();
   if (!ralc) return;
 
-  // Buscar el grup tutoria associat al grup classe actiu
   let comentari = '';
   try {
     const db = window.db;
 
-    // Obtenir el grup tutoria: fills del grup classe amb tipus=tutoria
-    const grupId = (() => {
-      const sel = document.getElementById('selGrupTutoria');
-      return sel?.value || '';
-    })();
-    const curs = (() => {
-      const sel = document.getElementById('selCursTutoria') || document.getElementById('selCurs');
-      return sel?.value || window._cursActiu || '';
-    })();
-    const periode = (() => {
-      const sel = document.getElementById('selPeriodeTutoria') || document.getElementById('selPeriode');
-      return sel?.options?.[sel?.selectedIndex]?.text?.trim() || '';
-    })();
+    const grupId = document.getElementById('selGrupTutoria')?.value || '';
+    const curs   = document.getElementById('selCursTutoria')?.value
+                || document.getElementById('selCurs')?.value
+                || window._cursActiu || '';
+    const periodeEl = document.getElementById('selPeriodeTutoria')
+                   || document.getElementById('selPeriode');
+    const periode = periodeEl?.options?.[periodeEl?.selectedIndex]?.text?.trim() || '';
 
     if (!grupId || !curs) return;
 
-    // Buscar grup tutoria fill del grup classe
-    const grupsSnap = await db.collection('grups_centre')
-      .where('parentGrupId', '==', grupId)
-      .where('tipus', '==', 'tutoria')
-      .limit(1).get();
+    // Determinar el grup tutoria: selGrupTutoria pot ser el grup tutoria o el grup classe
+    let grupTutoriaId = grupId;
+    const grupDoc = await db.collection('grups_centre').doc(grupId).get();
+    const grupData = grupDoc.data() || {};
 
-    if (grupsSnap.empty) return;
-    const grupTutoriaId = grupsSnap.docs[0].id;
+    if (grupData.tipus !== 'tutoria') {
+      // És grup classe: buscar el fill de tipus tutoria
+      const grupsSnap = await db.collection('grups_centre')
+        .where('parentGrupId', '==', grupId)
+        .where('tipus', '==', 'tutoria')
+        .limit(1).get();
+      if (grupsSnap.empty) return;
+      grupTutoriaId = grupsSnap.docs[0].id;
+    }
+
+    // Grup classe pare
+    const grupClasseId = grupData.tipus === 'tutoria'
+      ? (grupData.parentGrupId || grupId)
+      : grupId;
 
     // Buscar avaluació de tutoria per a aquest alumne
     let snap = await db.collection('avaluacio_centre')
       .doc(curs).collection(grupTutoriaId)
-      .where('grupClasseId', '==', grupId)
-      .get();
+      .where('grupClasseId', '==', grupClasseId).get();
     if (snap.empty) {
       snap = await db.collection('avaluacio_centre')
         .doc(curs).collection(grupTutoriaId)
-        .where('grupId', '==', grupId)
-        .get();
+        .where('grupId', '==', grupClasseId).get();
+    }
+    // Fallback sense filtre de grup
+    if (snap.empty) {
+      snap = await db.collection('avaluacio_centre')
+        .doc(curs).collection(grupTutoriaId).get();
     }
 
-    // Filtrar per alumne (RALC) i per període
+    // Filtrar per RALC i període
     const docs = snap.docs.filter(d => {
       const data = d.data();
-      const coincideixRalc = data.ralc === ralc;
-      const coincideixPeriode = !periode || data.periodeNom === periode;
-      return coincideixRalc && coincideixPeriode;
+      return data.ralc === ralc && (!periode || data.periodeNom === periode);
     });
 
     if (docs.length > 0) {
       comentari = docs[0].data().comentariGlobal || '';
     }
-  } catch(e) { return; }
+  } catch(e) {
+    console.warn('pi.js injectarComentariTutoria error:', e);
+    return;
+  }
 
   if (!comentari) return;
 
