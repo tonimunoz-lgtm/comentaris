@@ -3085,7 +3085,7 @@ async function generarButlleti(alumne, curs, grupNom, trimestre, grupId, nivellN
     .cap-logo { min-width: 60px; text-align: right; }
     .dades { background: #f3f4f6; padding: 10px 14px; border-radius: 8px; margin-bottom: 16px; font-size: 10pt; }
     .dades span { margin-right: 20px; }
-    .materia { margin-bottom: 16px; page-break-inside: avoid; }
+    .materia { margin-bottom: 16px; }
     .mat-head { background: #1e1b4b; color: #fff; padding: 7px 12px; border-radius: 6px 6px 0 0; font-weight: bold; font-size: 11pt; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
     .mat-desc { background: #f9fafb; padding: 8px 12px; font-size: 10pt; color: #444; border: 1px solid #e5e7eb; border-top: none; }
     table { width: 100%; border-collapse: collapse; border: 1px solid #e5e7eb; }
@@ -3103,7 +3103,6 @@ async function generarButlleti(alumne, curs, grupNom, trimestre, grupId, nivellN
       .mat-head { background: #1e1b4b !important; color: #fff !important; }
       .badge { color: #fff !important; }
       .dades { background: #f3f4f6 !important; }
-      .materia { page-break-inside: avoid; break-inside: avoid; }
       .info-butlleti-bloc { page-break-after: always; break-after: page; }
     }
   </style>
