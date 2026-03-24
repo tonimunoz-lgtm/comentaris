@@ -360,9 +360,14 @@ function observarDetallTutoriaPI() {
     const detall = document.getElementById('detallAlumneTutoria');
     if (!detall || detall.children.length === 0) return;
     if (detall.querySelector('#piTutoriaSection')) return;
+    if (detall.dataset.piInjectant) return;
     // Netejar comentari anterior si n'hi ha (alumne nou)
     detall.querySelector('#comentariTutoriaSection')?.remove();
+    // Desconnectar l'observer mentre injectem per evitar bucles
+    obsDetall.disconnect();
     await injectarSeccioPI(detall);
+    // Reconnectar
+    obsDetall.observe(detall, { childList: true });
   });
 
   const tryObs = () => {
@@ -386,16 +391,20 @@ function observarDetallTutoriaPI() {
 }
 
 async function injectarSeccioPI(detallEl) {
+  // Guard addicional per si l'observer es reconnecta abans que acabem
+  if (detallEl.dataset.piInjectant) return;
+  detallEl.dataset.piInjectant = '1';
+
   // Extreure RALC del contingut del detall (tutoria-nova.js el posa com "RALC: XXXX")
   const matchRalc = detallEl.innerHTML.match(/RALC[:\s]+([A-Za-z0-9]+)/);
   const ralc = matchRalc?.[1]?.trim();
-  if (!ralc) return;
+  if (!ralc) { delete detallEl.dataset.piInjectant; return; }
 
   let piData = null;
   try {
     const doc = await window.db.collection(PI_COL).doc(String(ralc)).get();
     if (doc.exists && doc.data().actiu) piData = doc.data();
-  } catch(e) { return; }
+  } catch(e) { delete detallEl.dataset.piInjectant; return; }
 
   const seccio = document.createElement('div');
   seccio.id = 'piTutoriaSection';
@@ -403,7 +412,7 @@ async function injectarSeccioPI(detallEl) {
 
   if (!piData) {
     // No té PI — si és pedagog, mostrar botó per crear-ne un
-    if (!esPedagogPI()) return; // no pedagog, no mostrar res
+    if (!esPedagogPI()) { delete detallEl.dataset.piInjectant; return; } // no pedagog, no mostrar res
     seccio.innerHTML = `
       <div style="background:#f5f3ff;border:1.5px solid #c4b5fd;border-radius:14px;padding:16px 20px;">
         <div style="font-size:13px;font-weight:700;color:#4c1d95;margin-bottom:8px;">📋 Pla Individualitzat</div>
@@ -473,6 +482,8 @@ async function injectarSeccioPI(detallEl) {
   } else {
     detallEl.appendChild(seccio);
   }
+
+  delete detallEl.dataset.piInjectant;
 }
 
 async function injectarComentariTutoria(detallEl) {
