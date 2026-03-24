@@ -350,6 +350,9 @@ function setupEventsDirectorFirmes(directorData) {
       await window.db.doc(FIRMES_CONFIG_DOC).set({ director }, { merge: true });
       window._firmes_firmaB64  = null;
       window._firmes_segellB64 = null;
+      // Invalidar cache
+      _firmesCache   = null;
+      _firmesCacheTs = 0;
       window.mostrarToast('✅ Director/a guardat correctament', 3000);
     } catch(e) {
       window.mostrarToast('❌ Error guardant: ' + e.message, 4000);
@@ -363,26 +366,42 @@ function setupEventsDirectorFirmes(directorData) {
 ══════════════════════════════════════════════════════ */
 async function guardarTutors(grups) {
   const btn = document.getElementById('btnGuardarTutors');
-  if (btn) { btn.disabled = true; btn.textContent = '⏳ Guardant...'; }
+  if (btn) { btn.disabled = true; btn.textContent = '\u23f3 Guardant...'; }
 
   try {
-    const tutors = {};
+    // Usem dot-notation per actualitzar cada grup independentment
+    // i no sobreescriure tutors d'altres cursos/grups no visibles
+    const updatePayload = {};
     document.querySelectorAll('.fila-tutor').forEach(fila => {
       const gid = fila.dataset.grupId;
       if (!gid) return;
-      tutors[gid] = {
+      updatePayload['tutors.' + gid] = {
         nom:     fila.querySelector('.inp-tutor-nom')?.value?.trim()  || '',
         cognom1: fila.querySelector('.inp-tutor-cog1')?.value?.trim() || '',
         cognom2: fila.querySelector('.inp-tutor-cog2')?.value?.trim() || '',
       };
     });
 
-    await window.db.doc(FIRMES_CONFIG_DOC).set({ tutors }, { merge: true });
-    window.mostrarToast('✅ Tutors/es guardats correctament', 3000);
+    if (Object.keys(updatePayload).length === 0) {
+      window.mostrarToast('\u26a0\ufe0f Cap grup per guardar', 3000);
+      if (btn) { btn.disabled = false; btn.textContent = '\ud83d\udcbe Guardar tots'; }
+      return;
+    }
+
+    // Primer assegurem que el document existeix, despres actualitzem
+    await window.db.doc(FIRMES_CONFIG_DOC).set({}, { merge: true });
+    await window.db.doc(FIRMES_CONFIG_DOC).update(updatePayload);
+
+    // Invalidar cache perque generarButlleti llegeixi les dades noves
+    _firmesCache   = null;
+    _firmesCacheTs = 0;
+
+    window.mostrarToast('\u2705 Tutors/es guardats correctament', 3000);
   } catch(e) {
-    window.mostrarToast('❌ Error guardant: ' + e.message, 4000);
+    window.mostrarToast('\u274c Error guardant: ' + e.message, 4000);
+    console.error('guardarTutors:', e);
   }
-  if (btn) { btn.disabled = false; btn.textContent = '💾 Guardar tots'; }
+  if (btn) { btn.disabled = false; btn.textContent = '\ud83d\udcbe Guardar tots'; }
 }
 
 /* ══════════════════════════════════════════════════════
@@ -556,8 +575,7 @@ window.getDirectorData = async function() {
   return cfg.director || null;
 };
 
-// Invalidar cache quan es guarda des del panell
-const _origGuardar = window.db?.doc; // no cal, invalidem manualment
-window._invalidarFirmesCache = function() { _firmesCacheTs = 0; };
+// Invalidar cache manualment des de fora si cal
+window._invalidarFirmesCache = function() { _firmesCache = null; _firmesCacheTs = 0; };
 
 console.log('✅ firmes.js inicialitzat');
