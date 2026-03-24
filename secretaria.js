@@ -3076,34 +3076,33 @@ async function generarButlleti(alumne, curs, grupNom, trimestre, grupId, nivellN
   <title>Butlletí — ${nomComplet}</title>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
-    body { font-family: Arial, sans-serif; font-size: 10pt; color: #111; padding: 15mm; }
+    body { font-family: Arial, sans-serif; font-size: 11pt; color: #111; padding: 20mm; }
     .cap { display: flex; justify-content: space-between; align-items: center;
-           border-bottom: 2px solid #1e1b4b; padding-bottom: 10px; margin-bottom: 12px; }
+           border-bottom: 2px solid #1e1b4b; padding-bottom: 12px; margin-bottom: 16px; }
     .cap-esquerra { display: flex; align-items: center; gap: 10px; min-width: 160px; }
     .cap-titol { text-align: center; font-size: 12pt; font-weight: bold; color: #1e1b4b; flex: 1; padding: 0 16px; }
     .cap-titol .sub { font-size: 10pt; font-weight: normal; color: #555; margin-top: 4px; }
     .cap-logo { min-width: 60px; text-align: right; }
-    .dades { background: #f3f4f6; padding: 8px 12px; border-radius: 6px; margin-bottom: 10px; font-size: 9.5pt; }
-    .dades span { margin-right: 16px; }
-    .materia { margin-bottom: 10px; }
-    .mat-head { background: #1e1b4b; color: #fff; padding: 6px 10px; border-radius: 4px 4px 0 0; font-weight: bold; font-size: 10pt; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-    .mat-desc { background: #f9fafb; padding: 6px 10px; font-size: 9pt; color: #444; border: 1px solid #e5e7eb; border-top: none; font-style: italic; }
+    .dades { background: #f3f4f6; padding: 10px 14px; border-radius: 8px; margin-bottom: 16px; font-size: 10pt; }
+    .dades span { margin-right: 20px; }
+    .materia { margin-bottom: 16px; page-break-inside: avoid; }
+    .mat-head { background: #1e1b4b; color: #fff; padding: 7px 12px; border-radius: 6px 6px 0 0; font-weight: bold; font-size: 11pt; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+    .mat-desc { background: #f9fafb; padding: 8px 12px; font-size: 10pt; color: #444; border: 1px solid #e5e7eb; border-top: none; }
     table { width: 100%; border-collapse: collapse; border: 1px solid #e5e7eb; }
-    th { background: #f3f4f6; padding: 5px 8px; text-align: left; font-size: 9pt; border-bottom: 1px solid #e5e7eb; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-    td { padding: 5px 8px; font-size: 9pt; border-bottom: 1px solid #f0f0f0; vertical-align: top; }
-    .badge { display: inline-block; padding: 2px 7px; border-radius: 4px; font-size: 8.5pt; font-weight: bold; color: #fff; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-    .peu { margin-top: 20px; display: flex; justify-content: space-between; align-items: flex-end; font-size: 9.5pt; gap: 12px; }
+    th { background: #f3f4f6; padding: 7px 10px; text-align: left; font-size: 10pt; border-bottom: 1px solid #e5e7eb; }
+    td { padding: 7px 10px; font-size: 10pt; border-bottom: 1px solid #f0f0f0; vertical-align: top; }
+    .badge { display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 9pt; font-weight: bold; color: #fff; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+    .peu { margin-top: 30px; display: flex; justify-content: space-between; align-items: flex-end; font-size: 10pt; gap: 12px; }
     .firma-box { display: flex; flex-direction: column; align-items: center; min-width: 140px; }
-    .firma-img-area { height: 55px; display: flex; align-items: flex-end; justify-content: center; margin-bottom: 5px; }
-    .firma-linia { border-top: 1px solid #999; width: 140px; padding-top: 4px; text-align: center; font-size: 8.5pt; color: #555; }
-    .firma-nom { font-size: 8.5pt; color: #333; font-weight: 600; text-align: center; margin-top: 2px; }
+    .firma-img-area { height: 60px; display: flex; align-items: flex-end; justify-content: center; margin-bottom: 6px; }
+    .firma-linia { border-top: 1px solid #999; width: 140px; padding-top: 5px; text-align: center; font-size: 9pt; color: #555; }
+    .firma-nom { font-size: 9pt; color: #333; font-weight: 600; text-align: center; margin-top: 2px; }
     @media print {
-      @page { margin: 12mm 15mm; size: A4; }
+      @page { margin: 15mm; size: A4; }
       html, body { padding: 0 !important; margin: 0 !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
       .mat-head { background: #1e1b4b !important; color: #fff !important; }
       .badge { color: #fff !important; }
       .dades { background: #f3f4f6 !important; }
-      .th-bg { background: #f3f4f6 !important; }
       .materia { page-break-inside: avoid; break-inside: avoid; }
       .info-butlleti-bloc { page-break-after: always; break-after: page; }
     }
@@ -3202,53 +3201,11 @@ async function generarButlleti(alumne, curs, grupNom, trimestre, grupId, nivellN
 </body>
 </html>`;
 
-  // Generar PDF directament amb html2pdf (sense capçalera/peu del navegador)
-  const nomFitxer = `Butlleti_${(alumne.cognoms||'').replace(/\s+/g,'_')}_${(alumne.nom||'').replace(/\s+/g,'_')}_${trimestre||'notas'}.pdf`;
-
-  // Crear iframe ocult per renderitzar l'HTML
-  const iframe = document.createElement('iframe');
-  iframe.style.cssText = 'position:fixed;top:-9999px;left:-9999px;width:210mm;height:297mm;border:none;';
-  document.body.appendChild(iframe);
-
-  iframe.onload = async () => {
-    try {
-      // Esperar que els recursos (imatges base64) carreguin
-      await new Promise(r => setTimeout(r, 300));
-
-      // Comprovar si html2pdf està disponible, si no, carregar-lo
-      if (typeof html2pdf === 'undefined') {
-        await new Promise((resolve, reject) => {
-          const s = document.createElement('script');
-          s.src = 'https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js';
-          s.onload = resolve; s.onerror = reject;
-          document.head.appendChild(s);
-        });
-      }
-
-      const element = iframe.contentDocument.body;
-      const opt = {
-        margin:       [12, 15, 12, 15], // top, right, bottom, left en mm
-        filename:     nomFitxer,
-        image:        { type: 'jpeg', quality: 0.95 },
-        html2canvas:  { scale: 2, useCORS: true, letterRendering: true },
-        jsPDF:        { unit: 'mm', format: 'a4', orientation: 'portrait' },
-        pagebreak:    { mode: ['avoid-all', 'css', 'legacy'] }
-      };
-
-      await html2pdf().set(opt).from(element).save();
-    } catch(e) {
-      console.error('html2pdf error:', e);
-      // Fallback: obrir finestra i imprimir
-      const win = window.open('', '_blank');
-      if (win) { win.document.write(html); win.document.close(); setTimeout(() => win.print(), 500); }
-    } finally {
-      document.body.removeChild(iframe);
-    }
-  };
-
-  iframe.contentDocument.open();
-  iframe.contentDocument.write(html);
-  iframe.contentDocument.close();
+  const win = window.open('', '_blank');
+  if (!win) { window.mostrarToast('⚠️ Permet les finestres emergents al navegador', 4000); return; }
+  win.document.write(html);
+  win.document.close();
+  setTimeout(() => win.print(), 500);
 }
 
 async function renderQuadreDades(body) {
