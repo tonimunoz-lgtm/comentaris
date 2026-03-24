@@ -3103,7 +3103,6 @@ async function generarButlleti(alumne, curs, grupNom, trimestre, grupId, nivellN
       .mat-head { background: #1e1b4b !important; color: #fff !important; }
       .badge { color: #fff !important; }
       .dades { background: #f3f4f6 !important; }
-      .info-butlleti-bloc { page-break-after: always; break-after: page; }
     }
   </style>
 </head>
