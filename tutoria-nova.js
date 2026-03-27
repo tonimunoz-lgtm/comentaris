@@ -352,7 +352,7 @@ async function obrirPanellTutoria() {
 
     const grupsNivell = grupsCurs
       .filter(g => g.nivellNom === nivell)
-      .sort((a, b) => (a.ordre || 99) - (b.ordre || 99));
+      .sort((a, b) => (a.nom || '').localeCompare(b.nom || '', 'ca'));
 
     if (grupsNivell.length === 0) {
       selGrup.innerHTML = '<option value="">Cap grup</option>';
@@ -431,6 +431,19 @@ async function obrirPanellTutoria() {
     if (!curs || !grupId) {
       window.mostrarToast('⚠️ Selecciona curs i grup', 3000);
       return;
+    }
+    // Netejar el panell de detall de l'alumne anterior
+    const detall = document.getElementById('detallAlumneTutoria');
+    if (detall) {
+      detall.innerHTML = `
+        <div style="
+          display:flex;align-items:center;justify-content:center;
+          height:100%;color:#9ca3af;flex-direction:column;gap:12px;
+        ">
+          <div style="font-size:48px;">👤</div>
+          <div>Selecciona un alumne per veure el seu resum</div>
+        </div>
+      `;
     }
     await carregarAlumnesTutoria(curs, grupId, grups, materies, config, periode);
   });
