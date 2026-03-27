@@ -81,7 +81,11 @@ async function renderFirmes(body) {
     const directorData = cfg.director || {};  // { nom, cognom1, cognom2, firmaBase64, segellBase64 }
 
     const grups = grupsSnap.docs.map(d => ({ id: d.id, ...d.data() }))
-      .sort((a,b) => (a.curs||'').localeCompare(b.curs||'') || (a.nom||'').localeCompare(b.nom||''));
+      .sort((a,b) =>
+        (a.curs||'').localeCompare(b.curs||'') ||
+        (a.nivellNom||'').localeCompare(b.nivellNom||'', 'ca') ||
+        (a.nom||'').localeCompare(b.nom||'', 'ca')
+      );
 
     // Agrupar per curs
     const cursos = [...new Set(grups.map(g => g.curs).filter(Boolean))].sort().reverse();
@@ -493,12 +497,25 @@ function aplicarExcelTutors(rows, grups) {
 
     if (!grupNom || !nomTutor) return;
 
-    // Buscar el grup per nom (parcial, case-insensitive)
-    const grupTrobat = grups.find(g =>
-      g.nom.toLowerCase() === grupNom ||
-      g.nom.toLowerCase().includes(grupNom) ||
-      grupNom.includes(g.nom.toLowerCase())
-    );
+    // Buscar el grup per nom — accepta formats variats:
+    //   "A", "B"  →  coincidència directa amb g.nom
+    //   "1r ESO A", "2n ESO B"  →  coincidència amb nivellNom + " " + nom
+    //   "1ESO-A", "1ESOA"  →  coincidència flexible
+    const grupNomNorm = grupNom.replace(/[\s\-_]+/g, '').toLowerCase();
+    const grupTrobat = grups.find(g => {
+      const solNom     = (g.nom || '').toLowerCase();
+      const complet    = `${g.nivellNom || ''} ${g.nom || ''}`.toLowerCase();
+      const compNorm   = complet.replace(/[\s\-_]+/g, '');
+      return (
+        solNom === grupNom ||
+        solNom.includes(grupNom) ||
+        grupNom.includes(solNom) ||
+        complet === grupNom ||
+        complet.includes(grupNom) ||
+        grupNom.includes(complet.trim()) ||
+        compNorm === grupNomNorm
+      );
+    });
 
     if (!grupTrobat) return;
 
