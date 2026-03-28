@@ -16,29 +16,42 @@ console.log('🎓 nou-curs.js carregat');
     const tabsContainer = overlay.querySelector('.sec-tab')?.parentElement;
     if (!tabsContainer) return;
 
-    // Crear el nou tab
+    // Crear el nou tab — estil destacat per indicar acció crítica
     const tab = document.createElement('button');
     tab.className = 'sec-tab';
     tab.dataset.tab = 'noucurs';
     tab.style.cssText = `
       padding:7px 14px;border-radius:8px 8px 0 0;border:none;cursor:pointer;
-      font-size:13px;font-weight:600;
-      background:rgba(255,255,255,0.15);color:#fff;white-space:nowrap;
+      font-size:13px;font-weight:700;white-space:nowrap;
+      background:rgba(220,38,38,0.25);color:#fca5a5;
+      margin-left:12px;border-left:2px solid rgba(220,38,38,0.4);
     `;
-    tab.textContent = '🎓 Nou curs';
+    tab.textContent = '⚠️ Nou curs';
     tabsContainer.appendChild(tab);
 
     // Listener del nou tab — replica exactament el comportament dels tabs originals
     tab.addEventListener('click', () => {
       overlay.querySelectorAll('.sec-tab').forEach(t => {
+        // Restaurar estil base — si és el tab de nou curs, el seu base és diferent
+        if (t === tab) return;
         t.style.background = 'rgba(255,255,255,0.15)';
         t.style.color = '#fff';
       });
-      tab.style.background = '#fff';
-      tab.style.color = '#4c1d95';
+      // Tab actiu: fons vermell clar en lloc de blanc
+      tab.style.background = '#fee2e2';
+      tab.style.color = '#991b1b';
 
       const body = document.getElementById('secBody');
       if (body) renderNouCurs(body);
+    });
+
+    // Quan qualsevol altre tab s'activa, restaurar l'estil perillós d'aquest
+    overlay.querySelectorAll('.sec-tab').forEach(t => {
+      if (t === tab) return;
+      t.addEventListener('click', () => {
+        tab.style.background = 'rgba(220,38,38,0.25)';
+        tab.style.color = '#fca5a5';
+      });
     });
   });
 
