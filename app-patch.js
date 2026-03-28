@@ -618,6 +618,10 @@ window.actualitzarUIRols = function() {
   // Revisió: revisor (o admin). Secretaria, tutor, pedagog NO.
   if (esAdmin || rols.includes('revisor'))
     window.injectarBotoRevisor?.();
+
+  // Junta Avaluació: rol explícit o admin
+  if (esAdmin || rols.includes('juntaavaluacio'))
+    window.injectarBotoJuntaAvaluacio?.();
 };
 
 // Panell flotant per superadmins fixos
