@@ -1580,7 +1580,7 @@ document.getElementById('btnAbout')?.addEventListener('click', () => {
       <!-- Capçalera -->
       <div style="background:linear-gradient(135deg,#1e1b4b,#4c1d95);padding:28px 32px;color:#fff;border-radius:20px 20px 0 0;position:relative;">
         <div style="font-size:36px;margin-bottom:8px;">⚡</div>
-        <h2 style="margin:0 0 4px;font-size:24px;font-weight:900;letter-spacing:-.5px;">Ultracomentator</h2>
+        <h2 style="margin:0 0 4px;font-size:24px;font-weight:900;letter-spacing:-.5px;">Notia</h2>
         <div style="font-size:13px;opacity:.75;">Versió Beta · Institut Matadepera</div>
         <button id="btnAboutClose" style="position:absolute;top:16px;right:16px;background:rgba(255,255,255,.15);border:none;color:#fff;width:32px;height:32px;border-radius:50%;cursor:pointer;font-size:16px;display:flex;align-items:center;justify-content:center;">✕</button>
       </div>
@@ -1631,7 +1631,7 @@ document.getElementById('btnAbout')?.addEventListener('click', () => {
 
             <div>
               <strong style="color:#1a1a2e;">Programari lliure i gratuït</strong><br>
-              Ultracomentator és una aplicació de programari lliure, distribuïda de manera gratuïta per a ús educatiu. Qualsevol professor o centre educatiu pot fer-la servir, copiar-la i adaptar-la sense restriccions comercials.
+              Notia és una aplicació de programari lliure, distribuïda de manera gratuïta per a ús educatiu. Qualsevol professor o centre educatiu pot fer-la servir, copiar-la i adaptar-la sense restriccions comercials.
             </div>
 
             <div>
