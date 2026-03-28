@@ -678,7 +678,7 @@ body {
 
 /* ── STUDENTS PANEL ── */
 .students-panel {
-  width: 240px;
+  width: 280px;
   flex-shrink: 0;
   background: var(--white);
   border-radius: var(--radius);
