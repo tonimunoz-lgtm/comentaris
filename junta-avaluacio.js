@@ -302,8 +302,6 @@ function _jaRenderEdicio(edit, dadesMateries, comentariTutor, comentariTutorDocR
         this.textContent='✅';
         setTimeout(()=>{this.textContent='💾 Guardar';this.disabled=false;},2000);
         window.mostrarToast?.(`✅ ${mat.matNom} guardat`);
-        // Re-renderitzar la columna esquerra de tutoria
-        _jaRecarregarColEsquerra();
       } catch(e){this.textContent='❌';this.disabled=false;window.mostrarToast?.('❌ '+e.message);}
     });
     edit.appendChild(div);
@@ -342,7 +340,6 @@ function _jaRenderEdicio(edit, dadesMateries, comentariTutor, comentariTutorDocR
         this.textContent='✅';
         setTimeout(()=>{this.textContent='💾 Guardar';this.disabled=false;},2000);
         window.mostrarToast?.('✅ Comentari tutor/a guardat');
-        _jaRecarregarColEsquerra();
       } catch(e){this.textContent='❌';this.disabled=false;window.mostrarToast?.('❌ '+e.message);}
     });
   }
