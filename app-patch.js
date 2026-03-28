@@ -912,14 +912,21 @@ function mostrarBannerActualitzacio(nCentre, nClasse, grupCentreId, vistaKey, up
         alumnesActuals.map(id => window.db.collection('alumnes').doc(id).get())
       );
       const ralcsActuals = new Set(docsActuals.map(d=>d.data()?.ralc).filter(Boolean));
-      const nomsActuals  = new Set(docsActuals.map(d=>`${d.data()?.nom}_${d.data()?.cognoms}`));
+      // Normalitzar noms: minúscules, sense espais dobles
+      // Suporta tant { nom:'Pere Garcia' } com { nom:'Pere', cognoms:'Garcia' }
+      const _norm = s => (s||'').toLowerCase().replace(/\s+/g,' ').trim();
+      const nomsActuals = new Set(docsActuals.map(d => {
+        const data = d.data() || {};
+        if (data.cognoms) return _norm(`${data.nom} ${data.cognoms}`);
+        return _norm(data.nom || '');
+      }));
 
       const nousBatch = window.db.batch();
       const nousIds = [...alumnesActuals];
       const profUID = firebase.auth().currentUser?.uid;
 
       for (const a of alumnesCentre) {
-        const key = `${a.nom}_${a.cognoms}`;
+        const key = _norm(`${a.nom||''} ${a.cognoms||''}`);
         if ((a.ralc && ralcsActuals.has(a.ralc)) || nomsActuals.has(key)) continue;
         const ref = window.db.collection('alumnes').doc();
         nousBatch.set(ref, {
