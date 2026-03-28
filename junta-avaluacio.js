@@ -1,7 +1,6 @@
 // junta-avaluacio.js — Injector "Junta d'Avaluació"
-// Rol: juntaavaluacio (+ admin/superadmin per defecte)
-// Vista: llista alumnes amb semàfor (esquerra) + detall editable (dreta)
-
+// Estratègia: obre panellTutoria, intercepta mostrarDetallAlumne,
+// divideix detallAlumneTutoria en dues columnes: esquerra=tutoria (intacta) | dreta=edició
 console.log('📋 junta-avaluacio.js carregat');
 
 const JA_ROL = 'juntaavaluacio';
@@ -15,10 +14,8 @@ window.injectarBotoJuntaAvaluacio = function() {
   const teAcces = window._isSuperAdmin ||
     rols.includes(JA_ROL) || rols.includes('admin') || rols.includes('superadmin');
   if (!teAcces) return;
-
   const nav = document.querySelector('.sidebar-nav') || document.querySelector('#sidebar nav');
   if (!nav) return;
-
   const btn = document.createElement('button');
   btn.id = 'btnJuntaAvaluacioSidebar';
   btn.className = 'nav-item nav-item-rol';
@@ -29,569 +26,389 @@ window.injectarBotoJuntaAvaluacio = function() {
 };
 
 /* ══════════════════════════════════════════════════════
-   HELPERS
-══════════════════════════════════════════════════════ */
-const _jaEsH = s => s ? String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;') : '';
-const _jaNorm = s => (s||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f·]/g,'').trim();
-
-function _jaColorAss(s) {
-  const n = _jaNorm(s);
-  if (n.includes('excel'))       return { bg:'#22c55e', text:'#fff', border:'#16a34a' };
-  if (n.includes('notable'))     return { bg:'#84cc16', text:'#fff', border:'#65a30d' };
-  if (n.includes('satisfactori'))return { bg:'#f59e0b', text:'#fff', border:'#d97706' };
-  if (n.includes('no ass'))      return { bg:'#ef4444', text:'#fff', border:'#dc2626' };
-  return                               { bg:'#9ca3af', text:'#fff', border:'#6b7280' };
-}
-
-const JA_ASSOLIMENTS = [
-  'Assoliment Excel·lent',
-  'Assoliment Notable',
-  'Assoliment Satisfactori',
-  'No Assoliment',
-  'No avaluat',
-];
-
-/* ══════════════════════════════════════════════════════
-   PANELL PRINCIPAL
+   OBRIR JUNTA AVALUACIÓ
 ══════════════════════════════════════════════════════ */
 async function obrirJuntaAvaluacio() {
-  document.getElementById('panellJuntaAvaluacio')?.remove();
+  let intents = 0;
+  while (typeof window.obrirPanellTutoria !== 'function' && intents++ < 20)
+    await new Promise(r => setTimeout(r, 200));
+  if (typeof window.obrirPanellTutoria !== 'function') {
+    window.mostrarToast?.('❌ El mòdul de tutoria no està disponible'); return;
+  }
 
-  const overlay = document.createElement('div');
-  overlay.id = 'panellJuntaAvaluacio';
-  overlay.style.cssText = `
-    position:fixed;inset:0;z-index:8888;background:rgba(15,23,42,0.7);
-    display:flex;align-items:stretch;
-  `;
+  // Interceptar mostrarDetallAlumne ABANS d'obrir el panell
+  _jaInterceptarMostrarDetall();
 
-  // Carregar dades inicials
-  const db = window.db;
-  const curs = window._cursActiu || await _jaCarregarCurs();
-  const grups = window.fsCache ? await window.fsCache.grups() :
-    (await db.collection('grups_centre').get()).docs.map(d => ({id:d.id,...d.data()}));
-  const periodes = window.fsCache ? await window.fsCache.periodes() : {};
+  await window.obrirPanellTutoria();
 
-  const grupsClasse = grups.filter(g => g.tipus === 'classe').sort((a,b) => (a.ordre||99)-(b.ordre||99));
-  const nivells = [...new Set(grupsClasse.map(g => g.nivellNom || g.nivellId).filter(Boolean))];
+  const overlay = document.getElementById('panellTutoria');
+  if (!overlay) return;
 
-  // Períodes disponibles
-  const BASE_PERIODES = [
-    {codi:'preav',nom:'Pre-avaluació'},{codi:'T1',nom:'1r Trimestre'},
-    {codi:'T2',nom:'2n Trimestre'},{codi:'T3',nom:'3r Trimestre'},
-    {codi:'final',nom:'Final de curs'},
-  ];
-  const ordreP = periodes.ordre || BASE_PERIODES.map(p=>p.codi);
-  const nomsP  = periodes.noms  || {};
-  const llPerio = ordreP.map(c => { const b = BASE_PERIODES.find(p=>p.codi===c)||{nom:c}; return {codi:c, nom:nomsP[c]||b.nom}; });
+  // Canviar títol
+  const h2 = overlay.querySelector('h2');
+  if (h2) h2.textContent = '🏫 Junta d\'Avaluació';
+  const p = overlay.querySelector('p');
+  if (p) p.textContent = 'Visualització i edició per a junta d\'avaluació';
 
-  overlay.innerHTML = `
-    <div style="width:100%;background:#fff;display:flex;flex-direction:column;overflow:hidden;">
+  // Preparar detallAlumneTutoria per a dues columnes
+  const detallEl = document.getElementById('detallAlumneTutoria');
+  if (detallEl) {
+    detallEl.style.display = 'flex';
+    detallEl.style.padding = '0';
+    detallEl.style.overflow = 'hidden';
+  }
+}
 
-      <!-- HEADER -->
-      <div style="background:linear-gradient(135deg,#1e1b4b,#312e81);color:#fff;padding:18px 24px;flex-shrink:0;">
-        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;">
-          <div>
-            <h2 style="font-size:20px;font-weight:800;margin:0;">🏫 Junta d'Avaluació</h2>
-            <p style="font-size:12px;opacity:0.7;margin:4px 0 0;">Curs actiu: <strong>${_jaEsH(curs)}</strong></p>
-          </div>
-          <button id="jaClose" style="background:rgba(255,255,255,0.2);border:none;color:#fff;
-            width:36px;height:36px;border-radius:50%;cursor:pointer;font-size:18px;">✕</button>
-        </div>
-        <!-- Filtres -->
-        <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;">
-          <select id="jaSelNivell" style="padding:7px 12px;border-radius:8px;border:none;
-            font-size:13px;font-weight:600;background:rgba(255,255,255,0.15);color:#fff;
-            outline:none;cursor:pointer;min-width:140px;">
-            <option value="">— Nivell —</option>
-            ${nivells.map(n => `<option value="${_jaEsH(n)}">${_jaEsH(n)}</option>`).join('')}
-          </select>
-          <select id="jaSelGrup" style="padding:7px 12px;border-radius:8px;border:none;
-            font-size:13px;font-weight:600;background:rgba(255,255,255,0.15);color:#fff;
-            outline:none;cursor:pointer;min-width:120px;" disabled>
-            <option value="">— Grup —</option>
-          </select>
-          <select id="jaSelPeriode" style="padding:7px 12px;border-radius:8px;border:none;
-            font-size:13px;font-weight:600;background:rgba(255,255,255,0.15);color:#fff;
-            outline:none;cursor:pointer;min-width:150px;">
-            <option value="">— Tots els períodes —</option>
-            ${llPerio.map(p => `<option value="${_jaEsH(p.nom)}">${_jaEsH(p.nom)}</option>`).join('')}
-          </select>
-          <button id="jaCarregar" style="padding:7px 18px;background:#fff;color:#1e1b4b;
-            border:none;border-radius:8px;font-weight:700;font-size:13px;cursor:pointer;
-            opacity:0.5;" disabled>
-            ▶ Carregar
-          </button>
+/* ══════════════════════════════════════════════════════
+   INTERCEPTAR mostrarDetallAlumne de tutoria-nova.js
+   Quan tutoria escriu al detall, ho posem a la columna
+   esquerra i afegim la columna dreta d'edició
+══════════════════════════════════════════════════════ */
+let _jaInterceptat = false;
+function _jaInterceptarMostrarDetall() {
+  if (_jaInterceptat) return;
+  _jaInterceptat = true;
+
+  // Esperar que tutoria-nova hagi definit la funció interna
+  // No podem accedir a mostrarDetallAlumne directament (és privada)
+  // Per tant observem quan canvia el contingut de detallAlumneTutoria
+  const obs = new MutationObserver(() => {
+    const detallEl = document.getElementById('detallAlumneTutoria');
+    if (!detallEl) return;
+
+    // Si ja té les dues columnes, no fer res
+    if (detallEl.querySelector('#ja-col-tutoria')) return;
+
+    // Si tutoria ha posat contingut directament (sense columnes), re-estructurar
+    const contingutOriginal = detallEl.innerHTML;
+    if (!contingutOriginal.trim() || contingutOriginal.includes('Selecciona un alumne')) return;
+    if (contingutOriginal.includes('ja-col-tutoria')) return;
+
+    // Agafar l'alumneId del item actiu
+    const itemActiu = document.querySelector('.alumne-semafor-item[style*="e0e7ff"]') ||
+                      document.querySelector('.alumne-semafor-item[data-ja-actiu]');
+    const alumneId  = itemActiu?.dataset?.id;
+    const cursActual = document.querySelector('#selCursTutoria')?.value;
+    const periode    = document.querySelector('#selPeriodeTutoria')?.value || '';
+
+    // Crear estructura de dues columnes
+    detallEl.style.display  = 'flex';
+    detallEl.style.padding  = '0';
+    detallEl.style.overflow = 'hidden';
+
+    // Columna esquerra: contingut original de tutoria
+    const colEsquerra = document.createElement('div');
+    colEsquerra.id = 'ja-col-tutoria';
+    colEsquerra.style.cssText = `
+      flex:1;overflow-y:auto;padding:24px;background:#fff;
+      border-right:2px solid #e0e7ff;min-width:0;
+    `;
+    colEsquerra.innerHTML = contingutOriginal;
+
+    // Columna dreta: edició (placeholder inicial)
+    const colDreta = document.createElement('div');
+    colDreta.id = 'ja-col-edicio';
+    colDreta.style.cssText = `
+      width:420px;flex-shrink:0;overflow-y:auto;
+      background:#fafafa;border-left:3px solid #7c3aed;
+    `;
+    colDreta.innerHTML = `
+      <div style="background:#7c3aed;color:#fff;padding:12px 18px;
+                  font-size:13px;font-weight:700;position:sticky;top:0;z-index:1;">
+        ✏️ Mode edició — Junta d'Avaluació
+      </div>
+      <div id="ja-edicio-contingut" style="padding:18px;">
+        <div style="color:#9ca3af;text-align:center;padding:30px 10px;font-size:13px;">
+          ⏳ Carregant dades editables...
         </div>
       </div>
+    `;
 
-      <!-- CONTINGUT: dues columnes -->
-      <div style="flex:1;display:flex;overflow:hidden;">
-        <!-- Columna esquerra: llista alumnes -->
-        <div id="jaLlista" style="width:280px;flex-shrink:0;border-right:1px solid #e5e7eb;
-          overflow-y:auto;background:#f9fafb;">
-          <div style="padding:40px 20px;text-align:center;color:#9ca3af;font-size:13px;">
-            Selecciona un grup i carrega les dades
-          </div>
-        </div>
-        <!-- Columna dreta: detall editable -->
-        <div id="jaDetall" style="flex:1;overflow-y:auto;padding:24px;background:#fff;">
-          <div style="padding:60px;text-align:center;color:#9ca3af;">
-            <div style="font-size:48px;margin-bottom:12px;">🏫</div>
-            <div style="font-size:15px;font-weight:600;">Selecciona un alumne/a per veure el seu detall</div>
-          </div>
-        </div>
-      </div>
-    </div>
-  `;
+    detallEl.innerHTML = '';
+    detallEl.appendChild(colEsquerra);
+    detallEl.appendChild(colDreta);
 
-  document.body.appendChild(overlay);
+    // Marcar item actiu per futures referències
+    if (itemActiu) itemActiu.dataset.jaActiu = '1';
 
-  overlay.querySelector('#jaClose').addEventListener('click', () => overlay.remove());
-  overlay.addEventListener('click', e => { if (e.target === overlay) overlay.remove(); });
-
-  // Lògica filtres
-  const selNivell  = overlay.querySelector('#jaSelNivell');
-  const selGrup    = overlay.querySelector('#jaSelGrup');
-  const selPeriode = overlay.querySelector('#jaSelPeriode');
-  const btnCar     = overlay.querySelector('#jaCarregar');
-
-  selNivell.addEventListener('change', () => {
-    const nivell = selNivell.value;
-    selGrup.innerHTML = '<option value="">— Grup —</option>' +
-      grupsClasse
-        .filter(g => (g.nivellNom || g.nivellId) === nivell)
-        .map(g => `<option value="${g.id}">${_jaEsH(g.nom)}</option>`)
-        .join('');
-    selGrup.disabled = !nivell;
-    btnCar.disabled = true;
-    btnCar.style.opacity = '0.5';
+    // Carregar dades d'edició
+    if (alumneId && cursActual) {
+      _jaCarregarEdicio(alumneId, cursActual, periode);
+    }
   });
 
-  selGrup.addEventListener('change', () => {
-    const ok = !!selGrup.value;
-    btnCar.disabled = !ok;
-    btnCar.style.opacity = ok ? '1' : '0.5';
-  });
+  // Observar canvis al detallAlumneTutoria quan aparegui
+  const waitForDetall = () => {
+    const detallEl = document.getElementById('detallAlumneTutoria');
+    if (detallEl) {
+      obs.observe(detallEl, { childList: true, subtree: false, characterData: false });
+    } else {
+      setTimeout(waitForDetall, 300);
+    }
+  };
+  waitForDetall();
 
-  btnCar.addEventListener('click', async () => {
-    const grupId  = selGrup.value;
-    const periode = selPeriode.value;
-    if (!grupId) return;
-    await jaCarregarAlumnes(grupId, periode, curs, grups, overlay);
+  // També interceptar els clics als items de la llista per saber l'alumneId
+  document.addEventListener('click', e => {
+    const item = e.target.closest('.alumne-semafor-item');
+    if (!item) return;
+    document.querySelectorAll('.alumne-semafor-item').forEach(el => delete el.dataset.jaActiu);
+    item.dataset.jaActiu = '1';
+    // Quan tutoria acabi de renderitzar, carregar l'edició
+    const alumneId   = item.dataset.id;
+    const cursActual = document.querySelector('#selCursTutoria')?.value;
+    const periode    = document.querySelector('#selPeriodeTutoria')?.value || '';
+    if (alumneId && cursActual) {
+      setTimeout(() => _jaCarregarEdicio(alumneId, cursActual, periode), 600);
+      setTimeout(() => _jaCarregarEdicio(alumneId, cursActual, periode), 1400);
+    }
   });
 }
 
 /* ══════════════════════════════════════════════════════
-   CARREGAR ALUMNES DEL GRUP
+   CARREGAR DADES D'EDICIÓ PER A UN ALUMNE
 ══════════════════════════════════════════════════════ */
-async function jaCarregarAlumnes(grupId, periodeFiltre, curs, grups, overlay) {
-  const llistaEl = overlay.querySelector('#jaLlista');
-  const detallEl = overlay.querySelector('#jaDetall');
-  llistaEl.innerHTML = `<div style="padding:30px;text-align:center;color:#9ca3af;">⏳ Carregant...</div>`;
-  detallEl.innerHTML = '';
+async function _jaCarregarEdicio(alumneId, curs, periode) {
+  const contenidor = document.getElementById('ja-edicio-contingut');
+  if (!contenidor) return;
+
+  // Evitar recàrrega si ja estem mostrant el mateix alumne
+  if (contenidor.dataset.alumneId === alumneId) return;
+  contenidor.dataset.alumneId = alumneId;
+  contenidor.innerHTML = `<div style="color:#9ca3af;text-align:center;padding:30px;font-size:13px;">⏳ Carregant...</div>`;
+
+  const db      = window.db;
+  const grupId  = document.querySelector('#selGrupTutoria')?.value;
+  if (!grupId) return;
 
   try {
-    const db = window.db;
-    const grupDoc = await db.collection('grups_centre').doc(grupId).get();
-    const grupData = grupDoc.exists ? grupDoc.data() : {};
-    const grupClasId = grupData.parentGrupId || grupId;
+    // Matèries del grup
+    const grupDoc    = await db.collection('grups_centre').doc(grupId).get();
+    const grupClasId = grupDoc.data()?.parentGrupId || grupId;
+    const matSnap    = await db.collection('grups_centre').where('parentGrupId','==',grupClasId).get();
+    const materies   = matSnap.docs.map(d => ({id:d.id,...d.data()})).filter(m => m.tipus !== 'tutoria');
 
-    // Llegir alumnes del grup
-    const alumnesCentre = grupData.alumnes || [];
-    const resultat = {};
-    alumnesCentre.forEach((a, idx) => {
-      const id = a.ralc || `alumne_${idx}_${a.nom}`;
-      resultat[id] = { id, nom: a.nom||'', cognoms: a.cognoms||'', ralc: a.ralc||'', materies: {} };
-    });
-
-    // Llegir matèries del grup
-    const matSnap = await db.collection('grups_centre').where('parentGrupId','==', grupClasId).get();
-    const materies = matSnap.docs.map(d => ({id:d.id,...d.data()})).filter(m => m.tipus !== 'tutoria');
-
-    // Llegir avaluació per cada matèria
+    // Dades avaluació per matèria
+    const dadesMateries = [];
     for (const mat of materies) {
       try {
-        let snap = await db.collection('avaluacio_centre').doc(curs).collection(mat.id)
-          .where('grupClasseId','==', grupClasId).get();
-        if (snap.empty) snap = await db.collection('avaluacio_centre').doc(curs).collection(mat.id)
-          .where('grupId','==', grupClasId).get();
-        snap.docs.forEach(d => {
-          const data = d.data();
-          if (periodeFiltre && data.periodeNom && data.periodeNom !== periodeFiltre) return;
-          if (periodeFiltre && !data.periodeNom) return;
-          const key = data.ralc || Object.keys(resultat).find(k =>
-            resultat[k].nom === data.nom && resultat[k].cognoms === (data.cognoms||'')
-          ) || data.ralc || `_${d.id}`;
-          if (!resultat[key]) resultat[key] = { id: key, nom: data.nom||'', cognoms: data.cognoms||'', ralc: data.ralc||'', materies: {} };
-          resultat[key].materies[mat.id] = { ...data, nom: mat.nom || mat.id, docId: d.id, docRef: d.ref };
-        });
+        let docAv = await db.collection('avaluacio_centre').doc(curs).collection(mat.id).doc(alumneId).get();
+        if (!docAv.exists) {
+          const snap = await db.collection('avaluacio_centre').doc(curs).collection(mat.id)
+            .where('grupClasseId','==',grupClasId).limit(30).get();
+          const trobat = snap.docs.find(d => d.id===alumneId || d.data().ralc===alumneId);
+          if (trobat) docAv = trobat;
+        }
+        if (docAv?.exists !== false) {
+          const data = docAv.data ? docAv.data() : docAv;
+          if (periode && data.periodeNom && data.periodeNom !== periode) continue;
+          dadesMateries.push({ matId:mat.id, matNom:mat.nom||mat.id,
+            docRef:docAv.ref||docAv, items:data.items||[], periodeNom:data.periodeNom||'',
+            alumneNom:data.nom||'', alumneCognoms:data.cognoms||'' });
+        }
       } catch(e) {}
     }
 
-    const alumnes = Object.values(resultat);
-    if (alumnes.length === 0) {
-      llistaEl.innerHTML = `<div style="padding:30px;text-align:center;color:#9ca3af;font-size:13px;">Cap alumne/a trobat/da en aquest grup.</div>`;
-      return;
-    }
+    // Comentari tutoria
+    let comentariTutoria='', alumneDocId=null, periodeIdTutoria=null;
+    try {
+      const ralc = (alumneId||'').includes('_') ? null : alumneId;
+      let snapAl = ralc ? await db.collection('alumnes').where('ralc','==',ralc).limit(5).get() : null;
+      if (!snapAl?.empty === false || !snapAl) {
+        const nomRef = dadesMateries[0]?.alumneNom;
+        if (nomRef) snapAl = await db.collection('alumnes').where('nom','==',nomRef).limit(10).get();
+      }
+      if (snapAl && !snapAl.empty) {
+        for (const d of snapAl.docs) {
+          const periodes = d.data().comentarisPerPeriode || {};
+          const claus = Object.keys(periodes);
+          let k = periode ? claus.find(c => periodes[c]?.periodeNom===periode || c===periode) : null;
+          if (!k && claus.length) k = claus[claus.length-1];
+          if (k) { comentariTutoria=periodes[k]?.comentari||''; alumneDocId=d.id; periodeIdTutoria=k; break; }
+          else if (!alumneDocId) alumneDocId=d.id;
+        }
+      }
+    } catch(e) {}
 
-    // Calcular semàfor simple (% d'ítems NA)
-    function _semafor(alumne) {
-      let total = 0, na = 0;
-      Object.values(alumne.materies).forEach(mat => {
-        (mat.items||[]).forEach(item => {
-          total++;
-          if (_jaNorm(item.assoliment||'').includes('no ass')) na++;
-        });
-      });
-      if (total === 0) return { color:'#9ca3af', emoji:'⚪' };
-      const pct = na / total;
-      if (pct >= 0.5) return { color:'#ef4444', emoji:'🔴' };
-      if (pct >= 0.25) return { color:'#f59e0b', emoji:'🟡' };
-      return { color:'#22c55e', emoji:'🟢' };
-    }
+    // Autoavaluació
+    let autoavalData=null, autoavalDocId=null;
+    try {
+      const ralc = (alumneId||'').includes('_') ? null : alumneId;
+      if (ralc) {
+        const ps = await db.collection('professors').where('rols','array-contains','alumne').where('ralc','==',ralc).limit(1).get();
+        if (!ps.empty) {
+          const rs = await db.collection('autoaval_respostes').where('alumneUID','==',ps.docs[0].id).get();
+          if (!rs.empty) {
+            const sorted = rs.docs.sort((a,b)=>(b.data().enviatAt?.seconds||0)-(a.data().enviatAt?.seconds||0));
+            autoavalData=sorted[0].data(); autoavalDocId=sorted[0].id;
+          }
+        }
+      }
+    } catch(e) {}
 
-    // Renderitzar llista
-    llistaEl.innerHTML = `
-      <div style="padding:10px 12px;background:#1e1b4b;color:#fff;font-size:12px;font-weight:700;
-                  position:sticky;top:0;z-index:1;">
-        ${alumnes.length} alumnes/es · ${_jaEsH(grupData.nom||grupId)}
-      </div>
-    `;
-    alumnes.sort((a,b) => (a.cognoms||a.nom).localeCompare(b.cognoms||b.nom,'ca')).forEach(alumne => {
-      const sem = _semafor(alumne);
-      const div = document.createElement('div');
-      div.style.cssText = `padding:10px 14px;cursor:pointer;border-bottom:1px solid #f3f4f6;
-        display:flex;align-items:center;gap:10px;transition:background .15s;`;
-      div.innerHTML = `
-        <span style="font-size:16px;">${sem.emoji}</span>
-        <div style="flex:1;min-width:0;">
-          <div style="font-weight:600;font-size:13px;color:#1e1b4b;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">
-            ${_jaEsH(alumne.cognoms ? `${alumne.cognoms}, ${alumne.nom}` : alumne.nom)}
-          </div>
-          ${alumne.ralc ? `<div style="font-size:11px;color:#9ca3af;">${_jaEsH(alumne.ralc)}</div>` : ''}
-        </div>
-      `;
-      div.addEventListener('mouseenter', () => { if (!div.dataset.actiu) div.style.background = '#f0f0ff'; });
-      div.addEventListener('mouseleave', () => { if (!div.dataset.actiu) div.style.background = ''; });
-      div.addEventListener('click', () => {
-        llistaEl.querySelectorAll('[data-actiu]').forEach(el => { delete el.dataset.actiu; el.style.background = ''; });
-        div.dataset.actiu = '1';
-        div.style.background = '#e0e7ff';
-        jaMostrarDetall(alumne, materies, curs, periodeFiltre, detallEl);
-      });
-      llistaEl.appendChild(div);
-    });
+    _jaRenderEdicio(contenidor, dadesMateries, comentariTutoria, alumneDocId, periodeIdTutoria, autoavalData, autoavalDocId);
 
   } catch(e) {
-    llistaEl.innerHTML = `<div style="padding:20px;color:#ef4444;font-size:13px;">Error: ${_jaEsH(e.message)}</div>`;
-    console.error('jaCarregarAlumnes:', e);
+    contenidor.innerHTML = `<div style="color:#ef4444;font-size:13px;padding:16px;">Error: ${_jaEsH(e.message)}</div>`;
   }
 }
 
 /* ══════════════════════════════════════════════════════
-   DETALL ALUMNE EDITABLE
+   RENDERITZAR EDICIÓ
 ══════════════════════════════════════════════════════ */
-async function jaMostrarDetall(alumne, materies, curs, periodeFiltre, detallEl) {
-  detallEl.innerHTML = `<div style="padding:40px;text-align:center;color:#9ca3af;">⏳ Carregant detall...</div>`;
+const JA_ASSOLIMENTS = ['Assoliment Excel·lent','Assoliment Notable','Assoliment Satisfactori','No Assoliment','No avaluat'];
 
+function _jaColorAss(s) {
+  const n = (s||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').trim();
+  if (n.includes('excel'))        return {bg:'#22c55e',text:'#fff',border:'#16a34a'};
+  if (n.includes('notable'))      return {bg:'#84cc16',text:'#fff',border:'#65a30d'};
+  if (n.includes('satisfactori')) return {bg:'#f59e0b',text:'#fff',border:'#d97706'};
+  if (n.includes('no ass'))       return {bg:'#ef4444',text:'#fff',border:'#dc2626'};
+  return                                 {bg:'#9ca3af',text:'#fff',border:'#6b7280'};
+}
+function _jaEsH(s) {
+  return s ? String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;') : '';
+}
+
+function _jaRenderEdicio(contenidor, dadesMateries, comentariTutoria,
+                          alumneDocId, periodeIdTutoria, autoavalData, autoavalDocId) {
   const db = window.db;
+  contenidor.innerHTML = '';
 
-  // Llegir comentari de tutoria (col·lecció alumnes)
-  let comentariTutoria = '';
-  let alumneDocId = null;
-  let periodeIdTutoria = null;
-  try {
-    // Cercar l'alumne per RALC o nom a la col·lecció alumnes
-    let snapAl = alumne.ralc
-      ? await db.collection('alumnes').where('ralc','==', alumne.ralc).limit(5).get()
-      : null;
-    if (!snapAl || snapAl.empty) {
-      snapAl = await db.collection('alumnes').where('nom','==', alumne.nom).limit(10).get();
-    }
-    if (snapAl && !snapAl.empty) {
-      // Agafar el primer doc que tingui comentarisPerPeriode
-      for (const d of snapAl.docs) {
-        const data = d.data();
-        const periodes = data.comentarisPerPeriode || {};
-        // Triar el període que coincideixi amb el filtre, o el primer que existeixi
-        const claus = Object.keys(periodes);
-        let clauTriada = null;
-        if (periodeFiltre) {
-          // Buscar la clau on el nom del període coincideixi
-          clauTriada = claus.find(k => periodes[k]?.periodeNom === periodeFiltre || k === periodeFiltre);
-        }
-        if (!clauTriada && claus.length > 0) clauTriada = claus[claus.length - 1]; // últim
-        if (clauTriada) {
-          comentariTutoria = periodes[clauTriada]?.comentari || '';
-          alumneDocId = d.id;
-          periodeIdTutoria = clauTriada;
-          break;
-        } else if (claus.length === 0 && !alumneDocId) {
-          alumneDocId = d.id;
-        }
-      }
-    }
-  } catch(e) { console.warn('ja: comentari tutoria:', e.message); }
-
-  // Llegir autoavaluació
-  let autoavalData = null;
-  let autoavalDocId = null;
-  try {
-    if (alumne.ralc) {
-      const alumProfSnap = await db.collection('professors')
-        .where('rols','array-contains','alumne')
-        .where('ralc','==', alumne.ralc).limit(1).get();
-      if (!alumProfSnap.empty) {
-        const alumUID = alumProfSnap.docs[0].id;
-        const respSnap = await db.collection('autoaval_respostes')
-          .where('alumneUID','==', alumUID).get();
-        if (!respSnap.empty) {
-          // Agafar la més recent
-          const docs = respSnap.docs.sort((a,b) => (b.data().enviatAt?.seconds||0)-(a.data().enviatAt?.seconds||0));
-          autoavalData = docs[0].data();
-          autoavalDocId = docs[0].id;
-        }
-      }
-    }
-  } catch(e) { console.warn('ja: autoavaluació:', e.message); }
-
-  // Renderitzar detall
-  const materiesTotals = Object.entries(alumne.materies).map(([id, data]) => ({
-    ...data, id, nom: data.materiaNom || data.nom_materia || materies.find(m=>m.id===id)?.nom || id,
-  }));
-
-  detallEl.innerHTML = `
-    <!-- CAPÇALERA -->
-    <div style="background:linear-gradient(135deg,#1e1b4b,#4c1d95);color:#fff;border-radius:16px;
-                padding:20px 24px;margin-bottom:20px;">
-      <div style="font-size:22px;font-weight:800;margin-bottom:4px;">
-        ${_jaEsH(alumne.cognoms ? `${alumne.cognoms}, ${alumne.nom}` : alumne.nom)}
-      </div>
-      <div style="font-size:13px;opacity:0.8;">
-        ${alumne.ralc ? `RALC: <strong>${_jaEsH(alumne.ralc)}</strong> · ` : ''}
-        ${materiesTotals.length} matèries · curs ${_jaEsH(curs)}
-        ${periodeFiltre ? ` · ${_jaEsH(periodeFiltre)}` : ''}
-      </div>
-    </div>
-
-    <!-- MATÈRIES EDITABLES -->
-    <div id="jaMateries"></div>
-
-    <!-- COMENTARI TUTORIA -->
-    <div style="background:#f5f3ff;border:1.5px solid #a78bfa;border-radius:12px;
-                padding:18px 20px;margin-bottom:20px;">
-      <div style="font-size:13px;font-weight:700;color:#4c1d95;margin-bottom:8px;">
-        💬 Comentari de tutoria
-        ${periodeFiltre ? `<span style="font-size:11px;font-weight:500;color:#7c3aed;margin-left:6px;">(${_jaEsH(periodeFiltre)})</span>` : ''}
-      </div>
-      <textarea id="jaComentariTutoria" rows="4" placeholder="Sense comentari de tutoria..."
-        style="width:100%;box-sizing:border-box;padding:10px 12px;border:1.5px solid #ddd6fe;
-               border-radius:8px;font-size:13px;font-family:inherit;resize:vertical;outline:none;
-               background:#fff;"
-      >${_jaEsH(comentariTutoria)}</textarea>
-      <div style="display:flex;justify-content:flex-end;margin-top:8px;">
-        <button id="jaGuardarTutoria" style="padding:7px 16px;background:#7c3aed;color:#fff;
-          border:none;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer;
-          font-family:inherit;">
-          💾 Guardar comentari tutoria
-        </button>
-      </div>
-    </div>
-
-    <!-- AUTOAVALUACIÓ -->
-    <div id="jaAutoavalSection" style="background:#f0fdf4;border:1.5px solid #86efac;border-radius:12px;
-                padding:18px 20px;margin-bottom:20px;${autoavalData ? '' : 'opacity:0.6;'}">
-      <div style="font-size:13px;font-weight:700;color:#166534;margin-bottom:8px;">
-        📝 Autoavaluació de l'alumne/a
-        ${autoavalData ? `<span style="font-size:11px;font-weight:500;color:#16a34a;margin-left:6px;">${_jaEsH(autoavalData.periodeNom||'')}</span>` : ''}
-      </div>
-      ${autoavalData ? `
-        <div style="margin-bottom:12px;background:#fff;border-radius:8px;padding:12px 14px;
-                    font-size:12px;color:#374151;max-height:180px;overflow-y:auto;line-height:1.7;">
-          ${(autoavalData.preguntes||[]).map((p,i) => `
-            <div style="margin-bottom:8px;">
-              <strong style="color:#166534;">${_jaEsH(p.text||`Pregunta ${i+1}`)}</strong><br>
-              ${_jaEsH((autoavalData.respostes||[])[i]||'—')}
-            </div>
-          `).join('')}
-        </div>
-        <div style="font-size:13px;font-weight:700;color:#166534;margin-bottom:6px;">
-          💬 Valoració del tutor/a
-        </div>
-        <textarea id="jaComentariAutoaval" rows="3" placeholder="Afegeix la valoració del tutor/a..."
-          style="width:100%;box-sizing:border-box;padding:10px 12px;border:1.5px solid #86efac;
-                 border-radius:8px;font-size:13px;font-family:inherit;resize:vertical;outline:none;
-                 background:#fff;"
-        >${_jaEsH(autoavalData.comentariTutor||'')}</textarea>
-        <div style="display:flex;justify-content:flex-end;margin-top:8px;">
-          <button id="jaGuardarAutoaval" style="padding:7px 16px;background:#059669;color:#fff;
-            border:none;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer;
-            font-family:inherit;">
-            💾 Guardar valoració tutor/a
-          </button>
-        </div>
-      ` : `<div style="font-size:12px;color:#6b7280;">Aquest alumne/a no té autoavaluació enviada.</div>`}
-    </div>
-  `;
-
-  // Renderitzar matèries editables
-  const materiesDiv = detallEl.querySelector('#jaMateries');
-  materiesTotals.forEach(mat => {
-    const items = mat.items || [];
-    const div = document.createElement('div');
-    div.style.cssText = 'margin-bottom:20px;border:1.5px solid #e5e7eb;border-radius:12px;overflow:hidden;';
-    div.innerHTML = `
-      <div style="background:linear-gradient(135deg,#1e1b4b,#312e81);padding:12px 16px;
-                  display:flex;justify-content:space-between;align-items:center;">
-        <div style="font-weight:800;color:#fff;font-size:14px;">📚 ${_jaEsH(mat.nom)}</div>
-        ${mat.periodeNom ? `<span style="background:rgba(255,255,255,0.2);color:#fff;padding:2px 8px;
-          border-radius:5px;font-size:11px;font-weight:700;">${_jaEsH(mat.periodeNom)}</span>` : ''}
-      </div>
-      ${mat.descripcioComuna ? `
-        <div style="background:#f9fafb;padding:8px 14px;font-size:12px;color:#6b7280;
-                    border-bottom:1px solid #f3f4f6;font-style:italic;">
-          ${_jaEsH(mat.descripcioComuna.substring(0,200))}
-        </div>` : ''}
-      <div class="jaItemsContainer" data-matid="${mat.id}" style="padding:12px;display:flex;flex-direction:column;gap:8px;"></div>
-      <div style="padding:10px 14px;border-top:1px solid #f3f4f6;display:flex;gap:8px;justify-content:flex-end;
-                  background:#fafafa;">
-        <button class="jaGuardarMateria" data-matid="${mat.id}" data-docid="${mat.docId||''}"
-          style="padding:7px 16px;background:#0891b2;color:#fff;border:none;border-radius:8px;
-                 font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;">
-          💾 Guardar ${_jaEsH(mat.nom)}
-        </button>
-      </div>
-    `;
-
-    const itemsContainer = div.querySelector('.jaItemsContainer');
-    if (items.length === 0) {
-      itemsContainer.innerHTML = `<div style="padding:12px;color:#9ca3af;font-size:12px;text-align:center;">
-        Sense ítems introduïts pel professor/a</div>`;
-    } else {
-      items.forEach((item, idx) => {
-        const c = _jaColorAss(item.assoliment||'');
-        const itemDiv = document.createElement('div');
-        itemDiv.style.cssText = `background:#f9fafb;border:1px solid #e5e7eb;border-radius:10px;padding:12px 14px;`;
-        itemDiv.innerHTML = `
-          <div style="font-size:12px;font-weight:700;color:#374151;margin-bottom:8px;">
-            ${_jaEsH(item.titol||`Ítem ${idx+1}`)}
-          </div>
-          <div style="display:grid;grid-template-columns:1fr auto;gap:8px;align-items:start;">
-            <textarea class="jaItemCom" data-idx="${idx}" rows="2"
-              style="padding:7px 10px;border:1px solid #d1d5db;border-radius:8px;font-size:12px;
-                     font-family:inherit;resize:vertical;outline:none;width:100%;box-sizing:border-box;"
-            >${_jaEsH(item.comentari||'')}</textarea>
-            <select class="jaItemAss" data-idx="${idx}"
-              style="padding:7px 10px;border:2px solid ${c.border};border-radius:8px;font-size:12px;
-                     font-weight:700;color:${c.text};background:${c.bg};outline:none;cursor:pointer;
-                     white-space:nowrap;min-width:170px;">
-              ${JA_ASSOLIMENTS.map(a => `<option value="${a}" ${a===item.assoliment?'selected':''}>${a}</option>`).join('')}
-            </select>
-          </div>
-        `;
-        // Actualitzar color del select en canviar
-        itemDiv.querySelector('.jaItemAss').addEventListener('change', function() {
-          const nc = _jaColorAss(this.value);
-          this.style.borderColor = nc.border;
-          this.style.background  = nc.bg;
-          this.style.color       = nc.text;
-        });
-        itemsContainer.appendChild(itemDiv);
-      });
-    }
-    materiesDiv.appendChild(div);
-  });
-
-  // Listeners guardar matèria
-  detallEl.querySelectorAll('.jaGuardarMateria').forEach(btn => {
-    btn.addEventListener('click', async () => {
-      const matId  = btn.dataset.matid;
-      const mat    = alumne.materies[matId];
-      if (!mat || !mat.docRef) { window.mostrarToast?.('⚠️ No es pot guardar: referència no trobada'); return; }
-
-      const container = detallEl.querySelector(`.jaItemsContainer[data-matid="${matId}"]`);
-      const nouItems = (mat.items||[]).map((item, idx) => ({
-        ...item,
-        comentari:  container.querySelector(`.jaItemCom[data-idx="${idx}"]`)?.value?.trim() || item.comentari||'',
-        assoliment: container.querySelector(`.jaItemAss[data-idx="${idx}"]`)?.value || item.assoliment||'No avaluat',
-      }));
-
-      btn.textContent = '⏳ Guardant...';
-      btn.disabled = true;
-      try {
-        await mat.docRef.update({ items: nouItems, updatedAt: window.firebase.firestore.FieldValue.serverTimestamp() });
-        // Actualitzar dades en memòria
-        alumne.materies[matId].items = nouItems;
-        btn.textContent = '✅ Guardat!';
-        setTimeout(() => { btn.textContent = `💾 Guardar ${mat.nom||matId}`; btn.disabled = false; }, 2000);
-        window.mostrarToast?.(`✅ ${mat.nom||matId} guardat`);
-      } catch(e) {
-        btn.textContent = '❌ Error';
-        btn.disabled = false;
-        window.mostrarToast?.('❌ Error guardant: ' + e.message);
-      }
-    });
-  });
-
-  // Listener guardar comentari tutoria
-  const btnTutoria = detallEl.querySelector('#jaGuardarTutoria');
-  if (btnTutoria) {
-    btnTutoria.addEventListener('click', async () => {
-      const text = detallEl.querySelector('#jaComentariTutoria')?.value?.trim() || '';
-      if (!alumneDocId) { window.mostrarToast?.('⚠️ No s\'ha pogut identificar l\'alumne/a a la classe del professor/a'); return; }
-      if (!periodeIdTutoria) { window.mostrarToast?.('⚠️ No s\'ha trobat cap període de tutoria per a aquest alumne/a'); return; }
-      btnTutoria.textContent = '⏳ Guardant...'; btnTutoria.disabled = true;
-      try {
-        await db.collection('alumnes').doc(alumneDocId).update({
-          [`comentarisPerPeriode.${periodeIdTutoria}.comentari`]: text,
-        });
-        btnTutoria.textContent = '✅ Guardat!';
-        setTimeout(() => { btnTutoria.textContent = '💾 Guardar comentari tutoria'; btnTutoria.disabled = false; }, 2000);
-        window.mostrarToast?.('✅ Comentari de tutoria guardat');
-      } catch(e) {
-        btnTutoria.textContent = '❌ Error'; btnTutoria.disabled = false;
-        window.mostrarToast?.('❌ Error: ' + e.message);
-      }
-    });
+  if (!dadesMateries.length && !alumneDocId && !autoavalData) {
+    contenidor.innerHTML = `<div style="color:#9ca3af;text-align:center;padding:30px;font-size:12px;">
+      No s'han trobat dades editables per a aquest alumne/a.</div>`; return;
   }
 
-  // Listener guardar valoració autoavaluació
-  const btnAA = detallEl.querySelector('#jaGuardarAutoaval');
-  if (btnAA && autoavalDocId) {
-    btnAA.addEventListener('click', async () => {
-      const comentari = detallEl.querySelector('#jaComentariAutoaval')?.value?.trim() || '';
-      btnAA.textContent = '⏳ Guardant...'; btnAA.disabled = true;
+  // ── Matèries ──
+  dadesMateries.forEach(mat => {
+    const div = document.createElement('div');
+    div.style.cssText = 'margin-bottom:16px;border:1.5px solid #e5e7eb;border-radius:10px;overflow:hidden;';
+
+    div.innerHTML = `
+      <div style="background:linear-gradient(135deg,#1e1b4b,#312e81);padding:9px 12px;
+                  display:flex;justify-content:space-between;align-items:center;">
+        <div style="font-weight:700;color:#fff;font-size:12px;">📚 ${_jaEsH(mat.matNom)}</div>
+        ${mat.periodeNom?`<span style="background:rgba(255,255,255,.2);color:#fff;padding:1px 7px;border-radius:4px;font-size:10px;">${_jaEsH(mat.periodeNom)}</span>`:''}
+      </div>
+      ${mat.items.length===0
+        ? `<div style="padding:10px 12px;font-size:11px;color:#9ca3af;text-align:center;">Sense ítems</div>`
+        : mat.items.map((item,idx) => {
+            const c = _jaColorAss(item.assoliment||'');
+            return `
+              <div style="border-top:1px solid #f3f4f6;padding:10px 12px;background:#f9fafb;">
+                <div style="font-size:11px;font-weight:700;color:#374151;margin-bottom:6px;">
+                  ${_jaEsH(item.titol||`Ítem ${idx+1}`)}</div>
+                <textarea class="ja-item-com" data-idx="${idx}" rows="2"
+                  style="width:100%;box-sizing:border-box;padding:6px 8px;border:1px solid #d1d5db;
+                         border-radius:6px;font-size:11px;font-family:inherit;resize:vertical;
+                         outline:none;margin-bottom:5px;"
+                >${_jaEsH(item.comentari||'')}</textarea>
+                <select class="ja-item-ass" data-idx="${idx}"
+                  style="width:100%;padding:6px 8px;border:2px solid ${c.border};border-radius:6px;
+                         font-size:11px;font-weight:700;color:${c.text};background:${c.bg};
+                         outline:none;cursor:pointer;">
+                  ${JA_ASSOLIMENTS.map(a=>`<option value="${a}" ${a===item.assoliment?'selected':''}>${a}</option>`).join('')}
+                </select>
+              </div>`;
+          }).join('')}
+      <div style="padding:8px 12px;border-top:1px solid #f3f4f6;background:#fff;
+                  display:flex;justify-content:flex-end;">
+        <button class="ja-btn-mat" style="padding:5px 12px;background:#0891b2;color:#fff;
+          border:none;border-radius:6px;font-size:11px;font-weight:700;cursor:pointer;
+          font-family:inherit;">💾 Guardar</button>
+      </div>`;
+
+    div.querySelectorAll('.ja-item-ass').forEach(sel => {
+      sel.addEventListener('change', function() {
+        const nc = _jaColorAss(this.value);
+        Object.assign(this.style, {borderColor:nc.border, background:nc.bg, color:nc.text});
+      });
+    });
+    div.querySelector('.ja-btn-mat').addEventListener('click', async function() {
+      const nouItems = mat.items.map((item,idx) => ({...item,
+        comentari: div.querySelector(`.ja-item-com[data-idx="${idx}"]`)?.value?.trim()||item.comentari||'',
+        assoliment: div.querySelector(`.ja-item-ass[data-idx="${idx}"]`)?.value||item.assoliment||'No avaluat',
+      }));
+      this.textContent='⏳'; this.disabled=true;
+      try {
+        await mat.docRef.update({items:nouItems, updatedAt:window.firebase.firestore.FieldValue.serverTimestamp()});
+        mat.items=nouItems; this.textContent='✅';
+        setTimeout(()=>{this.textContent='💾 Guardar';this.disabled=false;},2000);
+        window.mostrarToast?.(`✅ ${mat.matNom} guardat`);
+      } catch(e) { this.textContent='❌';this.disabled=false; window.mostrarToast?.('❌ '+e.message); }
+    });
+    contenidor.appendChild(div);
+  });
+
+  // ── Comentari tutoria ──
+  const divTut = document.createElement('div');
+  divTut.style.cssText = 'background:#f5f3ff;border:1.5px solid #a78bfa;border-radius:10px;padding:14px;margin-bottom:14px;';
+  divTut.innerHTML = `
+    <div style="font-size:12px;font-weight:700;color:#4c1d95;margin-bottom:7px;">💬 Comentari tutoria</div>
+    <textarea id="ja-com-tut" rows="4" placeholder="Sense comentari..."
+      style="width:100%;box-sizing:border-box;padding:8px 10px;border:1.5px solid #ddd6fe;
+             border-radius:7px;font-size:12px;font-family:inherit;resize:vertical;outline:none;
+             background:#fff;">${_jaEsH(comentariTutoria)}</textarea>
+    <div style="display:flex;justify-content:flex-end;margin-top:7px;">
+      <button id="ja-btn-tut" style="padding:5px 12px;background:#7c3aed;color:#fff;border:none;
+        border-radius:6px;font-size:11px;font-weight:700;cursor:pointer;font-family:inherit;"
+        ${!alumneDocId||!periodeIdTutoria?'disabled':''}>💾 Guardar</button>
+    </div>`;
+  divTut.querySelector('#ja-btn-tut').addEventListener('click', async function() {
+    if (!alumneDocId||!periodeIdTutoria) { window.mostrarToast?.('⚠️ Alumne/a no identificat'); return; }
+    const text = divTut.querySelector('#ja-com-tut').value.trim();
+    this.textContent='⏳'; this.disabled=true;
+    try {
+      await db.collection('alumnes').doc(alumneDocId).update({
+        [`comentarisPerPeriode.${periodeIdTutoria}.comentari`]: text });
+      this.textContent='✅'; setTimeout(()=>{this.textContent='💾 Guardar';this.disabled=false;},2000);
+      window.mostrarToast?.('✅ Comentari tutoria guardat');
+    } catch(e) { this.textContent='❌';this.disabled=false; window.mostrarToast?.('❌ '+e.message); }
+  });
+  contenidor.appendChild(divTut);
+
+  // ── Autoavaluació ──
+  const divAA = document.createElement('div');
+  divAA.style.cssText = `background:#f0fdf4;border:1.5px solid #86efac;border-radius:10px;padding:14px;margin-bottom:14px;${autoavalData?'':'opacity:0.55;'}`;
+  divAA.innerHTML = `
+    <div style="font-size:12px;font-weight:700;color:#166534;margin-bottom:7px;">📝 Autoavaluació</div>
+    ${autoavalData ? `
+      <div style="background:#fff;border-radius:7px;padding:8px 10px;font-size:11px;color:#374151;
+                  max-height:130px;overflow-y:auto;line-height:1.6;margin-bottom:8px;">
+        ${(autoavalData.preguntes||[]).map((p,i)=>`
+          <div style="margin-bottom:5px;">
+            <strong style="color:#166534;">${_jaEsH(p.text||`P${i+1}`)}</strong><br>
+            ${_jaEsH((autoavalData.respostes||[])[i]||'—')}</div>`).join('')}
+      </div>
+      <div style="font-size:11px;font-weight:700;color:#166534;margin-bottom:5px;">💬 Valoració tutor/a</div>
+      <textarea id="ja-com-aa" rows="3" placeholder="Valoració del tutor/a..."
+        style="width:100%;box-sizing:border-box;padding:8px 10px;border:1.5px solid #86efac;
+               border-radius:7px;font-size:12px;font-family:inherit;resize:vertical;outline:none;
+               background:#fff;">${_jaEsH(autoavalData.comentariTutor||'')}</textarea>
+      <div style="display:flex;justify-content:flex-end;margin-top:7px;">
+        <button id="ja-btn-aa" style="padding:5px 12px;background:#059669;color:#fff;border:none;
+          border-radius:6px;font-size:11px;font-weight:700;cursor:pointer;font-family:inherit;">
+          💾 Guardar</button>
+      </div>` :
+    `<div style="font-size:11px;color:#6b7280;">Sense autoavaluació enviada.</div>`}`;
+
+  if (autoavalData && autoavalDocId) {
+    divAA.querySelector('#ja-btn-aa').addEventListener('click', async function() {
+      const comentari = divAA.querySelector('#ja-com-aa').value.trim();
+      this.textContent='⏳'; this.disabled=true;
       try {
         await db.collection('autoaval_respostes').doc(autoavalDocId).update({
-          comentariTutor: comentari,
-          estat: autoavalData.estat === 'enviatButlleti' ? 'enviatButlleti' : 'revisat',
-          revisatAt: window.firebase.firestore.FieldValue.serverTimestamp(),
-        });
-        autoavalData.comentariTutor = comentari;
-        btnAA.textContent = '✅ Guardat!';
-        setTimeout(() => { btnAA.textContent = '💾 Guardar valoració tutor/a'; btnAA.disabled = false; }, 2000);
-        window.mostrarToast?.('✅ Valoració de l\'autoavaluació guardada');
-      } catch(e) {
-        btnAA.textContent = '❌ Error'; btnAA.disabled = false;
-        window.mostrarToast?.('❌ Error: ' + e.message);
-      }
+          comentariTutor:comentari,
+          estat:autoavalData.estat==='enviatButlleti'?'enviatButlleti':'revisat',
+          revisatAt:window.firebase.firestore.FieldValue.serverTimestamp() });
+        autoavalData.comentariTutor=comentari;
+        this.textContent='✅'; setTimeout(()=>{this.textContent='💾 Guardar';this.disabled=false;},2000);
+        window.mostrarToast?.('✅ Valoració guardada');
+      } catch(e) { this.textContent='❌';this.disabled=false; window.mostrarToast?.('❌ '+e.message); }
     });
   }
-}
-
-/* ══════════════════════════════════════════════════════
-   HELPERS ADDICIONALS
-══════════════════════════════════════════════════════ */
-async function _jaCarregarCurs() {
-  if (window._cursActiu) return window._cursActiu;
-  try {
-    const doc = await window.db.collection('_sistema').doc('config').get();
-    const c = doc.data()?.cursActiu;
-    if (c) { window._cursActiu = c; return c; }
-  } catch(e) {}
-  const ara = new Date();
-  const any = ara.getMonth() >= 8 ? ara.getFullYear() : ara.getFullYear()-1;
-  return `${any}-${String(any+1).slice(-2)}`;
+  contenidor.appendChild(divAA);
 }
 
 window.obrirJuntaAvaluacio = obrirJuntaAvaluacio;
