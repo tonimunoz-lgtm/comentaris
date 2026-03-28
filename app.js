@@ -1659,7 +1659,7 @@ document.getElementById('btnAbout')?.addEventListener('click', () => {
 
         <!-- Versió -->
         <div style="text-align:center;font-size:11px;color:#d1d5db;">
-          Ultracomentator · Versió Beta · ${new Date().getFullYear()}
+          Notia · Versió Beta · ${new Date().getFullYear()}
         </div>
 
       </div>
