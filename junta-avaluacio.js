@@ -105,24 +105,35 @@ function _jaInterceptarMostrarDetall() {
     `;
     colEsquerra.innerHTML = contingutOriginal;
 
-    // Columna dreta: edició (placeholder inicial)
-    const colDreta = document.createElement('div');
-    colDreta.id = 'ja-col-edicio';
-    colDreta.style.cssText = `
-      width:420px;flex-shrink:0;overflow-y:auto;
-      background:#fafafa;border-left:3px solid #7c3aed;
-    `;
-    colDreta.innerHTML = `
-      <div style="background:#7c3aed;color:#fff;padding:12px 18px;
-                  font-size:13px;font-weight:700;position:sticky;top:0;z-index:1;">
-        ✏️ Mode edició — Junta d'Avaluació
-      </div>
-      <div id="ja-edicio-contingut" style="padding:18px;">
-        <div style="color:#9ca3af;text-align:center;padding:30px 10px;font-size:13px;">
-          ⏳ Carregant dades editables...
+    // Columna dreta: reutilitzar si ja existia (re-render), crear si és nova
+    const colDretaExistent = document.getElementById('ja-col-edicio');
+    const estaRecarregant  = detallEl.dataset.jaRecarregant === '1';
+    let colDreta;
+
+    if (colDretaExistent && estaRecarregant) {
+      // Re-render: desacoblar la columna dreta per re-adjuntar-la
+      colDreta = colDretaExistent;
+      colDreta.remove();
+    } else {
+      // Primera vegada: crear la columna dreta
+      colDreta = document.createElement('div');
+      colDreta.id = 'ja-col-edicio';
+      colDreta.style.cssText = `
+        width:420px;flex-shrink:0;overflow-y:auto;
+        background:#fafafa;border-left:3px solid #7c3aed;
+      `;
+      colDreta.innerHTML = `
+        <div style="background:#7c3aed;color:#fff;padding:12px 18px;
+                    font-size:13px;font-weight:700;position:sticky;top:0;z-index:1;">
+          ✏️ Mode edició — Junta d'Avaluació
         </div>
-      </div>
-    `;
+        <div id="ja-edicio-contingut" style="padding:18px;">
+          <div style="color:#9ca3af;text-align:center;padding:30px 10px;font-size:13px;">
+            ⏳ Carregant dades editables...
+          </div>
+        </div>
+      `;
+    }
 
     detallEl.innerHTML = '';
     detallEl.appendChild(colEsquerra);
@@ -210,25 +221,71 @@ async function _jaCarregarEdicio(alumneId, curs, periode) {
     }
 
     // Comentari tutoria
+    // El comentari de tutoria està a: alumnes/{docId}.comentarisPerPeriode.{periodeId}.comentari
+    // On el doc d'alumne pertany a la CLASSE del tutor (classId = classe del tutor)
+    // i el periodeId és l'ID intern del període (p_123...)
     let comentariTutoria='', alumneDocId=null, periodeIdTutoria=null;
     try {
       const ralc = (alumneId||'').includes('_') ? null : alumneId;
-      let snapAl = ralc ? await db.collection('alumnes').where('ralc','==',ralc).limit(5).get() : null;
-      if (!snapAl?.empty === false || !snapAl) {
-        const nomRef = dadesMateries[0]?.alumneNom;
-        if (nomRef) snapAl = await db.collection('alumnes').where('nom','==',nomRef).limit(10).get();
+      const alumneNom = dadesMateries[0]?.alumneNom || '';
+      const alumneCognoms = dadesMateries[0]?.alumneCognoms || '';
+
+      // Buscar el doc d'alumne que tingui comentarisPerPeriode
+      // Primer per RALC, si no per nom+cognoms
+      let snapAl = null;
+      if (ralc) {
+        snapAl = await db.collection('alumnes').where('ralc','==',ralc).get();
       }
-      if (snapAl && !snapAl.empty) {
-        for (const d of snapAl.docs) {
-          const periodes = d.data().comentarisPerPeriode || {};
-          const claus = Object.keys(periodes);
-          let k = periode ? claus.find(c => periodes[c]?.periodeNom===periode || c===periode) : null;
-          if (!k && claus.length) k = claus[claus.length-1];
-          if (k) { comentariTutoria=periodes[k]?.comentari||''; alumneDocId=d.id; periodeIdTutoria=k; break; }
-          else if (!alumneDocId) alumneDocId=d.id;
+      if (!snapAl || snapAl.empty) {
+        // Fallback: buscar per nom complet
+        const nomComplet = alumneCognoms
+          ? `${alumneNom} ${alumneCognoms}`.trim()
+          : alumneNom;
+        if (alumneNom) {
+          snapAl = await db.collection('alumnes').where('nom','==',alumneNom).get();
         }
       }
-    } catch(e) {}
+
+      if (snapAl && !snapAl.empty) {
+        // Agafar el doc que tingui comentarisPerPeriode (pot haver-ne diversos de classes diferents)
+        // Prioritzar el que coincideixi amb el periode seleccionat
+        let millorDoc = null, millorClau = null, millorComentari = '';
+
+        for (const d of snapAl.docs) {
+          const data = d.data();
+          const periodes = data.comentarisPerPeriode || {};
+          const claus = Object.keys(periodes);
+          if (!claus.length) continue;
+
+          // Buscar la clau que coincideixi amb el periode filtrat (per nom)
+          let clauTriada = null;
+          if (periode) {
+            // El periodeNom pot estar desat dins el periode o podem identificar-lo
+            // per l'índex de claus si l'ordre coincideix
+            clauTriada = claus.find(k => {
+              const pd = periodes[k];
+              return pd?.periodeNom === periode || pd?.nom === periode;
+            });
+          }
+          // Si no trobem per nom, agafar l'última clau (el més recent)
+          if (!clauTriada) clauTriada = claus[claus.length - 1];
+
+          const comentari = periodes[clauTriada]?.comentari || '';
+          // Prioritzar docs que tinguin comentari real
+          if (!millorDoc || (comentari && !millorComentari)) {
+            millorDoc = d.id;
+            millorClau = clauTriada;
+            millorComentari = comentari;
+          }
+        }
+
+        if (millorDoc) {
+          alumneDocId      = millorDoc;
+          periodeIdTutoria = millorClau;
+          comentariTutoria = millorComentari;
+        }
+      }
+    } catch(e) { console.warn('ja: comentari tutoria:', e.message); }
 
     // Autoavaluació
     let autoavalData=null, autoavalDocId=null;
@@ -336,17 +393,22 @@ function _jaRenderEdicio(contenidor, dadesMateries, comentariTutoria,
         mat.items=nouItems; this.textContent='✅';
         setTimeout(()=>{this.textContent='💾 Guardar';this.disabled=false;},2000);
         window.mostrarToast?.(`✅ ${mat.matNom} guardat`);
+        // ── Bug 1 fix: re-renderitzar la columna esquerra de tutoria ──
+        _jaRecarregarDetallTutoria();
       } catch(e) { this.textContent='❌';this.disabled=false; window.mostrarToast?.('❌ '+e.message); }
     });
     contenidor.appendChild(div);
   });
 
-  // ── Comentari tutoria ──
+  // ── Comentari butlletí principal (generat per IA / tutor) ──
   const divTut = document.createElement('div');
   divTut.style.cssText = 'background:#f5f3ff;border:1.5px solid #a78bfa;border-radius:10px;padding:14px;margin-bottom:14px;';
   divTut.innerHTML = `
-    <div style="font-size:12px;font-weight:700;color:#4c1d95;margin-bottom:7px;">💬 Comentari tutoria</div>
-    <textarea id="ja-com-tut" rows="4" placeholder="Sense comentari..."
+    <div style="font-size:12px;font-weight:700;color:#4c1d95;margin-bottom:4px;">
+      💬 Comentari del butlletí principal</div>
+    <div style="font-size:10px;color:#7c3aed;margin-bottom:7px;">
+      El text que genera la IA i que apareix al butlletí com a comentari del tutor/a</div>
+    <textarea id="ja-com-tut" rows="4" placeholder="Sense comentari al butlletí..."
       style="width:100%;box-sizing:border-box;padding:8px 10px;border:1.5px solid #ddd6fe;
              border-radius:7px;font-size:12px;font-family:inherit;resize:vertical;outline:none;
              background:#fff;">${_jaEsH(comentariTutoria)}</textarea>
@@ -363,7 +425,7 @@ function _jaRenderEdicio(contenidor, dadesMateries, comentariTutoria,
       await db.collection('alumnes').doc(alumneDocId).update({
         [`comentarisPerPeriode.${periodeIdTutoria}.comentari`]: text });
       this.textContent='✅'; setTimeout(()=>{this.textContent='💾 Guardar';this.disabled=false;},2000);
-      window.mostrarToast?.('✅ Comentari tutoria guardat');
+      window.mostrarToast?.('✅ Comentari del butlletí guardat');
     } catch(e) { this.textContent='❌';this.disabled=false; window.mostrarToast?.('❌ '+e.message); }
   });
   contenidor.appendChild(divTut);
@@ -412,3 +474,46 @@ function _jaRenderEdicio(contenidor, dadesMateries, comentariTutoria,
 }
 
 window.obrirJuntaAvaluacio = obrirJuntaAvaluacio;
+
+/* ══════════════════════════════════════════════════════
+   RE-RENDERITZAR DETALL TUTORIA (columna esquerra)
+   Quan es guarda un canvi, refrescar el detall de tutoria
+   sense tancar el panell ni perdre la columna d'edició
+══════════════════════════════════════════════════════ */
+async function _jaRecarregarDetallTutoria() {
+  const itemActiu = document.querySelector('.alumne-semafor-item[data-ja-actiu="1"]');
+  if (!itemActiu) return;
+
+  const colEsquerra = document.getElementById('ja-col-tutoria');
+  if (!colEsquerra) return;
+
+  // Mostrar indicador de recàrrega
+  const indicador = document.createElement('div');
+  indicador.style.cssText = `
+    position:sticky;top:0;z-index:10;background:#7c3aed;color:#fff;
+    padding:6px 14px;font-size:11px;font-weight:700;text-align:center;
+  `;
+  indicador.textContent = '⏳ Actualitzant vista...';
+  colEsquerra.prepend(indicador);
+
+  try {
+    // Simular el clic a l'alumne actiu per que tutoria-nova re-renderitzi el detall
+    // Però primer cal desactivar temporalment el nostre observer per evitar loop
+    const detallEl = document.getElementById('detallAlumneTutoria');
+    if (detallEl) detallEl.dataset.jaRecarregant = '1';
+
+    // Clicar l'alumne actiu — tutoria-nova renderitzarà el detall sencer
+    itemActiu.click();
+
+    // Esperar que tutoria renderitzi
+    await new Promise(r => setTimeout(r, 800));
+
+    // El MutationObserver haurà detectat el canvi i re-estructurat les columnes
+    if (detallEl) delete detallEl.dataset.jaRecarregant;
+
+  } catch(e) {
+    console.warn('ja recarregar:', e.message);
+  } finally {
+    indicador.remove();
+  }
+}
