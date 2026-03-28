@@ -308,10 +308,10 @@ function openCrearPlantillaModal(plantillaExistent = null, codiEdicio = null) {
 
   document.body.appendChild(modal);
 
-  document.getElementById('ucCrearClose').addEventListener('click', () => { modal.remove(); openUltracomentatorModal(); });
+  document.getElementById('ucCrearClose').addEventListener('click', () => { modal.remove(); window._tcStudentId ? openMevesPlantillesModal() : openUltracomentatorModal(); });
   document.getElementById('ucDescarregarPlantillaExcel').addEventListener('click', () => descarregarPlantillaExcel());
   document.getElementById('ucImportarExcel').addEventListener('click', () => importarExcelModal());
-  document.getElementById('ucCrearCancel').addEventListener('click', () => { modal.remove(); openUltracomentatorModal(); });
+  document.getElementById('ucCrearCancel').addEventListener('click', () => { modal.remove(); window._tcStudentId ? openMevesPlantillesModal() : openUltracomentatorModal(); });
   document.getElementById('ucAfegirItem').addEventListener('click', () => afegirItemUI());
   document.getElementById('ucGuardarPlantilla').addEventListener('click', guardarPlantilla);
   document.getElementById('ucGuardarActualitzar').addEventListener('click', actualitzarPlantilla);
@@ -816,7 +816,7 @@ function openCarregarPlantillaModal() {
   input.addEventListener('input', () => { input.value = input.value.toUpperCase(); });
   input.addEventListener('keydown', (e) => { if (e.key === 'Enter') document.getElementById('ucBtnCarregarOk').click(); });
 
-  document.getElementById('ucCarregarCancel').addEventListener('click', () => { modal.remove(); openUltracomentatorModal(); });
+  document.getElementById('ucCarregarCancel').addEventListener('click', () => { modal.remove(); window._tcStudentId ? openMevesPlantillesModal() : openUltracomentatorModal(); });
   document.getElementById('ucBtnCarregarOk').addEventListener('click', async () => {
     const codi = input.value.trim().toUpperCase();
     if (codi.length < 4) {
