@@ -480,7 +480,7 @@ async function renderEstructura(body) {
       cont.innerHTML = `
         <div style="text-align:center;padding:24px;color:#9ca3af;">
           <div style="font-size:28px;margin-bottom:6px;">👤</div>
-          Cap alumne. Afegeix-ne o importa des d'Excel.
+          Cap alumne/a. Afegeix-ne o importa des d'Excel.
         </div>`;
       return;
     }
@@ -1353,7 +1353,7 @@ function modalImportExcel(grup, onRefresh) {
       const colCfg = llegirCfgCols();
       sessionStorage.setItem(cfgKey, JSON.stringify(colCfg));
       const nous = await parseExcelAlumnes(file, colCfg);
-      if (!nous.length) { window.mostrarToast('⚠️ Cap alumne trobat. Revisa la configuració'); return false; }
+      if (!nous.length) { window.mostrarToast('⚠️ Cap alumne/a trobat. Revisa la configuració'); return false; }
       const actuals = grup.alumnes || [];
       const nodupl = nous.filter(a => !actuals.some(ex =>
         (a.ralc && ex.ralc === a.ralc) || (ex.nom===a.nom && ex.cognoms===a.cognoms)
@@ -1382,7 +1382,7 @@ function modalImportExcel(grup, onRefresh) {
     const div = document.getElementById('previewImport');
     if (!div) return;
     if (!alumnes.length) {
-      div.innerHTML = '<div style="color:#ef4444;padding:8px;font-size:12px;">⚠️ Cap alumne amb aquesta config. Ajusta les columnes o la fila inici.</div>';
+      div.innerHTML = '<div style="color:#ef4444;padding:8px;font-size:12px;">⚠️ Cap alumne/a amb aquesta config. Ajusta les columnes o la fila inici.</div>';
       return;
     }
     div.innerHTML = `
@@ -1844,11 +1844,11 @@ function modalNouUsuari(onCreat) {
       <!-- Camp RALC — visible només quan es marca el rol alumne -->
       <div id="secRALC" style="display:none;margin-bottom:14px;padding:12px;background:#e0f2fe;border:1.5px solid #7dd3fc;border-radius:10px;">
         <label style="font-size:12px;font-weight:700;color:#0369a1;display:block;margin-bottom:6px;">
-          🎓 RALC de l'alumne <span style="color:#ef4444;">*</span>
+          🎓 RALC de l'alumne/a <span style="color:#ef4444;">*</span>
         </label>
         <input id="inpRalcAlumne" type="text" placeholder="Ex: 12345678A"
           style="width:100%;box-sizing:border-box;padding:9px 11px;border:1.5px solid #7dd3fc;border-radius:8px;font-size:13px;outline:none;background:#fff;">
-        <div style="font-size:11px;color:#0369a1;margin-top:5px;">Identifica l'alumne i permet associar les seves autoavaluacions.</div>
+        <div style="font-size:11px;color:#0369a1;margin-top:5px;">Identifica l'alumne/a i permet associar les seves autoavaluacions.</div>
       </div>
       <div>
         <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:13px;color:#374151;">
@@ -2197,7 +2197,7 @@ async function modalEditarRols(usuari, onGuardat) {
     <!-- Camp RALC editar rols — visible només quan es marca alumne -->
     <div id="secRalcEdit" style="margin-top:12px;padding:12px;background:#e0f2fe;border:1.5px solid #7dd3fc;border-radius:10px;display:${rolsActuals.includes('alumne')?'block':'none'};">
       <label style="font-size:12px;font-weight:700;color:#0369a1;display:block;margin-bottom:6px;">
-        🎓 RALC de l'alumne
+        🎓 RALC de l'alumne/a
       </label>
       <input id="inpRalcEdit" type="text" value="${esH(usuari.ralc||'')}" placeholder="Ex: 12345678A"
         style="width:100%;box-sizing:border-box;padding:9px 11px;border:1.5px solid #7dd3fc;border-radius:8px;font-size:13px;outline:none;background:#fff;">
@@ -2919,7 +2919,7 @@ async function carregarDadesButlletins(grups) {
     const senseDades = alumnes.filter(a => Object.keys(a.materies).length === 0);
 
     if (alumnes.length === 0) {
-      resDiv.innerHTML = '<p style="color:#9ca3af;text-align:center;padding:30px;">Cap alumne trobat per a aquest grup.</p>';
+      resDiv.innerHTML = '<p style="color:#9ca3af;text-align:center;padding:30px;">Cap alumne/a trobat per a aquest grup.</p>';
       return;
     }
 
