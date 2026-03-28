@@ -169,33 +169,48 @@ async function _jaCarregarEdicio(alumneId, curs) {
       } catch(e) {}
     }
 
-    // 3. Comentari del butlletí
-    // El comentari va a alumnes/{docId}.comentarisPerPeriode.{periodeId}.comentari
-    // Cal buscar el doc d'alumne per RALC i agafar tots els períodes disponibles
+    // 3. Comentari tutor/a
+    // És el camp comentariGlobal de avaluacio_centre/{curs}/{grupTutoriaId}/{doc}
+    // El mateix que mostra pi.js a #comentariTutoriaSection i que edita el revisor
     const ralc = dadesMateries[0]?.ralc || (alumneId.includes('_')?null:alumneId);
-    const alumneNom = dadesMateries[0]?.alumneNom || '';
-    let comentarisButlleti = []; // [{periodeId, periodeNom, comentari, studentId}]
+    let comentariTutor = '', comentariTutorDocRef = null;
     try {
-      let snapAl = null;
-      if (ralc) snapAl = await db.collection('alumnes').where('ralc','==',ralc).get();
-      if (!snapAl||snapAl.empty) {
-        if (alumneNom) snapAl = await db.collection('alumnes').where('nom','==',alumneNom).get();
-      }
-      if (snapAl && !snapAl.empty) {
-        for (const d of snapAl.docs) {
-          const periodes = d.data().comentarisPerPeriode || {};
-          for (const [pid, pdata] of Object.entries(periodes)) {
-            if (!pdata.comentari && !pdata.periodeNom) continue;
-            comentarisButlleti.push({
-              periodeId: pid,
-              periodeNom: pdata.periodeNom || pdata.nom || pid,
-              comentari: pdata.comentari || '',
-              studentId: d.id
-            });
-          }
+      if (ralc && grupId && cursActual) {
+        const db2 = window.db;
+        // Trobar el grup tutoria: pot ser el grup seleccionat o un fill de tipus tutoria
+        const grupDoc2 = await db2.collection('grups_centre').doc(grupId).get();
+        const grupData2 = grupDoc2.data() || {};
+        let grupTutoriaId = grupId;
+        let grupClasseId = grupId;
+
+        if (grupData2.tipus !== 'tutoria') {
+          // És un grup classe: buscar el fill tutoria
+          const tutSnap = await db2.collection('grups_centre')
+            .where('parentGrupId','==',grupId).where('tipus','==','tutoria').limit(1).get();
+          if (!tutSnap.empty) grupTutoriaId = tutSnap.docs[0].id;
+        } else {
+          grupClasseId = grupData2.parentGrupId || grupId;
+        }
+
+        // Buscar el doc de tutoria per RALC
+        let snapTut = await db2.collection('avaluacio_centre').doc(cursActual)
+          .collection(grupTutoriaId).where('grupClasseId','==',grupClasseId).get();
+        if (snapTut.empty) {
+          snapTut = await db2.collection('avaluacio_centre').doc(cursActual)
+            .collection(grupTutoriaId).get();
+        }
+
+        const docTut = snapTut.docs.find(d => {
+          const data = d.data();
+          return data.ralc === ralc && (!periode || data.periodeNom === periode);
+        }) || snapTut.docs.find(d => d.data().ralc === ralc);
+
+        if (docTut) {
+          comentariTutor = docTut.data().comentariGlobal || '';
+          comentariTutorDocRef = docTut.ref;
         }
       }
-    } catch(e) {}
+    } catch(e) { console.warn('ja: comentari tutor:', e.message); }
 
     // 4. Autoavaluació
     let autoavalData=null, autoavalDocId=null;
@@ -213,7 +228,7 @@ async function _jaCarregarEdicio(alumneId, curs) {
       }
     } catch(e) {}
 
-    _jaRenderEdicio(edit, dadesMateries, comentarisButlleti, autoavalData, autoavalDocId);
+    _jaRenderEdicio(edit, dadesMateries, comentariTutor, comentariTutorDocRef, autoavalData, autoavalDocId);
 
   } catch(e) {
     edit.innerHTML = `<div style="color:#ef4444;padding:16px;font-size:12px;">Error: ${_esH(e.message)}</div>`;
@@ -235,7 +250,7 @@ function _cAss(s) {
 }
 function _esH(s){ return s?String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'):''; }
 
-function _jaRenderEdicio(edit, dadesMateries, comentarisButlleti, autoavalData, autoavalDocId) {
+function _jaRenderEdicio(edit, dadesMateries, comentariTutor, comentariTutorDocRef, autoavalData, autoavalDocId) {
   const db = window.db;
   edit.innerHTML = '';
 
@@ -294,56 +309,40 @@ function _jaRenderEdicio(edit, dadesMateries, comentarisButlleti, autoavalData, 
     edit.appendChild(div);
   });
 
-  // ── Comentaris del butlletí ──
+  // ── Comentari tutor/a ──
+  // És el comentariGlobal de avaluacio_centre/{curs}/{grupTutoria}/{doc}
+  // El mateix que es veu a la fitxa de tutoria i que edita el revisor
   const divTut = document.createElement('div');
-  divTut.style.cssText = 'background:#f5f3ff;border:1.5px solid #a78bfa;border-radius:10px;padding:14px;margin-bottom:14px;';
+  divTut.style.cssText = 'background:#f0fdf4;border:1.5px solid #86efac;border-radius:10px;padding:14px;margin-bottom:14px;';
+  divTut.innerHTML = `
+    <div style="font-size:12px;font-weight:700;color:#166534;margin-bottom:4px;">💬 Comentari tutor/a</div>
+    <div style="font-size:10px;color:#059669;margin-bottom:8px;">
+      El comentari que apareix a la fitxa de tutoria i al panell de revisió</div>
+    <textarea id="ja-com-tut" rows="5" placeholder="${comentariTutorDocRef ? 'Sense comentari...' : 'No s\'ha trobat el document de tutoria per a aquest alumne/a'}"
+      style="width:100%;box-sizing:border-box;padding:8px 10px;border:1.5px solid #86efac;
+             border-radius:7px;font-size:12px;font-family:inherit;resize:vertical;outline:none;
+             background:#fff;" ${!comentariTutorDocRef ? 'disabled' : ''}
+    >${_esH(comentariTutor)}</textarea>
+    <div style="display:flex;justify-content:flex-end;margin-top:7px;">
+      <button id="ja-btn-tut" style="padding:5px 12px;background:#059669;color:#fff;border:none;
+        border-radius:6px;font-size:11px;font-weight:700;cursor:pointer;font-family:inherit;"
+        ${!comentariTutorDocRef ? 'disabled' : ''}>💾 Guardar</button>
+    </div>`;
 
-  if (comentarisButlleti.length === 0) {
-    divTut.innerHTML = `
-      <div style="font-size:12px;font-weight:700;color:#4c1d95;margin-bottom:4px;">💬 Comentari butlletí (IA)</div>
-      <div style="font-size:11px;color:#9ca3af;">No s'ha trobat cap comentari de butlletí per a aquest alumne/a.<br>
-      El professor/a ha de tenir una classe amb aquest alumne/a i un comentari guardat.</div>`;
-  } else {
-    // Mostrar tots els períodes disponibles
-    const opcions = comentarisButlleti.map((c,i)=>
-      `<option value="${i}">${_esH(c.periodeNom||c.periodeId)}</option>`).join('');
-
-    divTut.innerHTML = `
-      <div style="font-size:12px;font-weight:700;color:#4c1d95;margin-bottom:4px;">💬 Comentari butlletí (IA)</div>
-      <div style="font-size:10px;color:#7c3aed;margin-bottom:8px;">
-        El text generat per la IA que apareix al butlletí com a comentari del tutor/a</div>
-      <select id="ja-sel-periode" style="width:100%;padding:5px 8px;border:1px solid #ddd6fe;
-        border-radius:6px;font-size:11px;margin-bottom:8px;outline:none;background:#fff;">
-        ${opcions}
-      </select>
-      <textarea id="ja-com-but" rows="5"
-        style="width:100%;box-sizing:border-box;padding:8px 10px;border:1.5px solid #ddd6fe;
-               border-radius:7px;font-size:12px;font-family:inherit;resize:vertical;outline:none;background:#fff;"
-      >${_esH(comentarisButlleti[0]?.comentari||'')}</textarea>
-      <div style="display:flex;justify-content:flex-end;margin-top:7px;">
-        <button id="ja-btn-but" style="padding:5px 12px;background:#7c3aed;color:#fff;border:none;
-          border-radius:6px;font-size:11px;font-weight:700;cursor:pointer;font-family:inherit;">💾 Guardar</button>
-      </div>`;
-
-    // Canviar textarea en canviar el selector de període
-    divTut.querySelector('#ja-sel-periode').addEventListener('change', function() {
-      const c = comentarisButlleti[parseInt(this.value)];
-      divTut.querySelector('#ja-com-but').value = c?.comentari || '';
-    });
-
-    divTut.querySelector('#ja-btn-but').addEventListener('click', async function() {
-      const idx = parseInt(divTut.querySelector('#ja-sel-periode').value);
-      const c = comentarisButlleti[idx];
-      if (!c) return;
-      const text = divTut.querySelector('#ja-com-but').value.trim();
+  if (comentariTutorDocRef) {
+    divTut.querySelector('#ja-btn-tut').addEventListener('click', async function() {
+      const text = divTut.querySelector('#ja-com-tut').value.trim();
       this.textContent='⏳'; this.disabled=true;
       try {
-        await db.collection('alumnes').doc(c.studentId).update({
-          [`comentarisPerPeriode.${c.periodeId}.comentari`]: text });
-        comentarisButlleti[idx].comentari = text;
+        await comentariTutorDocRef.update({
+          comentariGlobal: text,
+          revisatPer: window.firebase.auth().currentUser?.email || '',
+          revisatAt: window.firebase.firestore.FieldValue.serverTimestamp()
+        });
         this.textContent='✅';
         setTimeout(()=>{this.textContent='💾 Guardar';this.disabled=false;},2000);
-        window.mostrarToast?.('✅ Comentari butlletí guardat');
+        window.mostrarToast?.('✅ Comentari tutor/a guardat');
+        _jaRecarregarColEsquerra();
       } catch(e){this.textContent='❌';this.disabled=false;window.mostrarToast?.('❌ '+e.message);}
     });
   }
