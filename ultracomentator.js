@@ -1622,7 +1622,7 @@ async function openMevesPlantillesModal() {
           </div>
         </div>
         <div style="margin-top:16px;text-align:center;">
-          <button id="ucMevesBack" style="background:none;border:none;color:#6b7280;font-size:13px;cursor:pointer;font-family:inherit;">← Tornar</button>
+          <button id="ucMevesBack" style="background:linear-gradient(135deg,#7c3aed,#a855f7);color:#fff;border:none;border-radius:10px;padding:10px 20px;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit;">✨ Crear nova plantilla</button>
         </div>
       </div>
     </div>
@@ -1630,7 +1630,7 @@ async function openMevesPlantillesModal() {
   document.body.appendChild(modal);
 
   document.getElementById('ucMevesClose').addEventListener('click', () => { modal.remove(); });
-  document.getElementById('ucMevesBack').addEventListener('click', () => { modal.remove(); openUltracomentatorModal(); });
+  document.getElementById('ucMevesBack').addEventListener('click', () => { modal.remove(); openCrearPlantillaModal(); });
 
   // Carregar plantilles on l'usuari és propietari o membre
   try {
