@@ -142,7 +142,7 @@ function mostrarModalTermes(onAccept) {
     ">
       <!-- Capçalera fixa -->
       <div style="background:linear-gradient(135deg,#1e1b4b,#4c1d95);padding:22px 28px;color:#fff;border-radius:20px 20px 0 0;flex-shrink:0;">
-        <div style="font-size:11px;opacity:.7;margin-bottom:4px;text-transform:uppercase;letter-spacing:.05em;">⚡ Ultracomentator</div>
+        <div style="font-size:11px;opacity:.7;margin-bottom:4px;text-transform:uppercase;letter-spacing:.05em;">⚡ Notia</div>
         <h2 style="margin:0;font-size:19px;font-weight:800;">Condicions d'ús i avís legal</h2>
         <p style="margin:6px 0 0;font-size:12px;opacity:.8;">Has de llegir i acceptar les condicions per crear un compte.</p>
       </div>
@@ -152,7 +152,7 @@ function mostrarModalTermes(onAccept) {
 
         <div>
           <strong style="color:#1a1a2e;font-size:14px;">1. Programari lliure i gratuït</strong><br>
-          Ultracomentator és una aplicació de programari lliure distribuïda gratuïtament per a ús educatiu. Qualsevol docent o centre educatiu pot usar-la, copiar-la i adaptar-la sense restriccions comercials.
+          Notia és una aplicació de programari lliure distribuïda gratuïtament per a ús educatiu. Qualsevol docent o centre educatiu pot usar-la, copiar-la i adaptar-la sense restriccions comercials.
         </div>
 
         <div>
