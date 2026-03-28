@@ -2479,23 +2479,7 @@ function _mostrarAssistentImport(wb, nomFitxer, dropZone, mostrarError, onSucces
         </div>
         <div style="display:flex;align-items:center;gap:12px;margin-bottom:10px;">
           <label style="font-weight:600;color:#374151;font-size:13px;">Fila número:</label>
-          <div style="display:flex;gap:6px;flex-wrap:wrap;">
-            ${Array.from({length: Math.min(maxRows, 12)}, (_,i) => i).map(r => {
-              // Resumir contingut de la fila
-              let preview = '';
-              for (let c = 0; c < Math.min(range.e.c + 1, 5); c++) {
-                const v = _getCellWs(ws, r, c) || '';
-                if (v && v.length > 1) { preview = v.substring(0, 25) + (v.length > 25 ? '…' : ''); break; }
-              }
-              const isS = r === estat.filaEst;
-              return `<button onclick="document.getElementById('ucAssistentImport')._selFila(${r})"
-                style="padding:5px 12px;border-radius:8px;border:2px solid ${isS ? '#7c3aed' : '#e5e7eb'};
-                background:${isS ? '#7c3aed' : '#fff'};color:${isS ? '#fff' : '#374151'};
-                font-size:12px;cursor:pointer;font-weight:600;text-align:left;max-width:160px;overflow:hidden;white-space:nowrap;">
-                ${r + 1}${preview ? ': <span style="font-weight:400;font-size:11px;">' + preview + '</span>' : ''}
-              </button>`;
-            }).join('')}
-          </div>
+          <div id="ucFilesBotons" style="display:flex;gap:6px;flex-wrap:wrap;"></div>
         </div>
         <div style="margin-bottom:10px;">
           <label style="font-weight:600;color:#374151;font-size:12px;display:block;margin-bottom:4px;">
@@ -2517,6 +2501,23 @@ function _mostrarAssistentImport(wb, nomFitxer, dropZone, mostrarError, onSucces
       cont._selFila = (r) => { estat.filaEst = r; renderPas(); };
       cont._back = () => { estat.pas = 0; renderPas(); };
       cont._next2 = () => { estat.pas = 2; _analitzarFila(); renderPas(); };
+
+      // Crear botons de fila via DOM per evitar problemes amb caràcters especials i span interior
+      const filesContainer = cont.querySelector('#ucFilesBotons');
+      Array.from({length: Math.min(maxRows, 12)}, (_, i) => i).forEach(r => {
+        let preview = '';
+        for (let c = 0; c < Math.min(range.e.c + 1, 5); c++) {
+          const v = _getCellWs(ws, r, c) || '';
+          if (v && v.length > 1) { preview = (r + 1) + ': ' + v.substring(0, 25) + (v.length > 25 ? '…' : ''); break; }
+        }
+        if (!preview) preview = String(r + 1);
+        const isS = r === estat.filaEst;
+        const btn = document.createElement('button');
+        btn.textContent = preview;
+        btn.style.cssText = `padding:5px 12px;border-radius:8px;border:2px solid ${isS ? '#7c3aed' : '#e5e7eb'};background:${isS ? '#7c3aed' : '#fff'};color:${isS ? '#fff' : '#374151'};font-size:12px;cursor:pointer;font-weight:600;text-align:left;max-width:200px;overflow:hidden;white-space:nowrap;`;
+        btn.addEventListener('click', () => cont._selFila(r));
+        filesContainer.appendChild(btn);
+      });
     }
 
     // ── PAS 2: mostrar ítems detectats i confirmar ──
