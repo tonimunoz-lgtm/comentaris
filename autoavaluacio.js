@@ -911,7 +911,7 @@ async function obrirModalEnviarPlantilla(plantillaId, plantillaTitol) {
       });
 
       if (totAlumnesGrup.length === 0) {
-        checkCont.innerHTML = '<div style="padding:16px;text-align:center;color:#9ca3af;font-size:13px;">Cap alumne trobat en aquest grup.</div>';
+        checkCont.innerHTML = '<div style="padding:16px;text-align:center;color:#9ca3af;font-size:13px;">Cap alumne/a trobat en aquest grup.</div>';
         document.getElementById('btnConfirmarEnviar').disabled = true;
         return;
       }
@@ -960,7 +960,7 @@ async function obrirModalEnviarPlantilla(plantillaId, plantillaTitol) {
       .map(c => c.dataset.uid).filter(Boolean);
 
     if (alumnesSeleccionats.length === 0) {
-      errEl.textContent = '⚠️ Selecciona almenys un alumne.';
+      errEl.textContent = '⚠️ Selecciona almenys un/a alumne/a.';
       return;
     }
 
@@ -1107,7 +1107,7 @@ async function carregarTabRespostes() {
     if (respostes.length === 0) {
       cont.innerHTML = `<div style="text-align:center;padding:40px;background:#f9fafb;border-radius:12px;border:2px dashed #e5e7eb;">
         <div style="font-size:40px;margin-bottom:12px;">📥</div>
-        <p style="color:#9ca3af;font-size:14px;margin:0;">Encara no has rebut cap resposta d'alumne.</p>
+        <p style="color:#9ca3af;font-size:14px;margin:0;">Encara no has rebut cap resposta d'alumne/a.</p>
       </div>`;
       return;
     }
