@@ -2407,6 +2407,12 @@ function _mostrarAssistentImport(wb, nomFitxer, dropZone, mostrarError, onSucces
     return html;
   }
 
+  // Ampliar el modal per acollir l'assistent (scroll + max-width més gran)
+  const modalInner = dropZone.closest('div[style*="border-radius:20px"]') || dropZone.parentNode;
+  modalInner.style.maxWidth = '680px';
+  modalInner.style.maxHeight = '90vh';
+  modalInner.style.overflowY = 'auto';
+
   // Contenidor de l'assistent (substitueix la drop zone)
   const cont = document.createElement('div');
   cont.id = 'ucAssistentImport';
@@ -2431,26 +2437,34 @@ function _mostrarAssistentImport(wb, nomFitxer, dropZone, mostrarError, onSucces
           <label style="font-weight:600;color:#374151;font-size:13px;display:block;margin-bottom:6px;">
             📋 Quin full conté les plantilles de comentaris?
           </label>
-          <div style="display:flex;gap:8px;flex-wrap:wrap;">
-            ${wb.SheetNames.map(s => `
-              <button onclick="document.getElementById('ucAssistentImport')._selFull('${s.replace(/'/g,"\\'")}')"
-                style="padding:6px 14px;border-radius:8px;border:2px solid ${s === estat.fullNom ? '#7c3aed' : '#e5e7eb'};
-                background:${s === estat.fullNom ? '#7c3aed' : '#fff'};color:${s === estat.fullNom ? '#fff' : '#374151'};
-                font-size:13px;cursor:pointer;font-weight:600;">${s}</button>
-            `).join('')}
-          </div>
+          <div id="ucFullsBotons" style="display:flex;gap:8px;flex-wrap:wrap;"></div>
         </div>
         <div style="margin-bottom:10px;">
           <label style="font-weight:600;color:#374151;font-size:12px;display:block;margin-bottom:4px;">Previsualització del full <strong>${estat.fullNom}</strong>:</label>
           ${renderPreview(wb.Sheets[estat.fullNom])}
         </div>
-        <button onclick="document.getElementById('ucAssistentImport')._next()"
-          style="padding:8px 20px;background:#7c3aed;color:#fff;border:none;border-radius:8px;font-weight:700;cursor:pointer;font-size:13px;">
-          Continuar →
-        </button>`;
+        <div id="ucPas0Accions"></div>`;
 
       cont._selFull = (s) => { estat.fullNom = s; estat.ws = wb.Sheets[s]; renderPas(); };
       cont._next = () => { estat.ws = wb.Sheets[estat.fullNom]; estat.pas = 1; renderPas(); };
+
+      // Botons de fulls via DOM
+      const fullsContainer = cont.querySelector('#ucFullsBotons');
+      wb.SheetNames.forEach(s => {
+        const isS = s === estat.fullNom;
+        const btn = document.createElement('button');
+        btn.textContent = s;
+        btn.style.cssText = `padding:6px 14px;border-radius:8px;border:2px solid ${isS ? '#7c3aed' : '#e5e7eb'};background:${isS ? '#7c3aed' : '#fff'};color:${isS ? '#fff' : '#374151'};font-size:13px;cursor:pointer;font-weight:600;font-family:inherit;`;
+        btn.addEventListener('click', () => cont._selFull(s));
+        fullsContainer.appendChild(btn);
+      });
+
+      // Botó continuar via DOM
+      const btnContinuar = document.createElement('button');
+      btnContinuar.textContent = 'Continuar →';
+      btnContinuar.style.cssText = 'padding:8px 20px;background:#7c3aed;color:#fff;border:none;border-radius:8px;font-weight:700;cursor:pointer;font-size:13px;font-family:inherit;';
+      btnContinuar.addEventListener('click', () => cont._next());
+      cont.querySelector('#ucPas0Accions').appendChild(btnContinuar);
     }
 
     // ── PAS 1: triar fila on estan els títols/capçaleres ──
@@ -2487,16 +2501,7 @@ function _mostrarAssistentImport(wb, nomFitxer, dropZone, mostrarError, onSucces
           </label>
           ${renderPreview(ws, 10, 12, estat.filaEst)}
         </div>
-        <div style="display:flex;gap:8px;">
-          <button onclick="document.getElementById('ucAssistentImport')._back()"
-            style="padding:8px 16px;background:#f3f4f6;color:#374151;border:none;border-radius:8px;font-weight:600;cursor:pointer;font-size:13px;">
-            ← Enrere
-          </button>
-          <button onclick="document.getElementById('ucAssistentImport')._next2()"
-            style="padding:8px 20px;background:#7c3aed;color:#fff;border:none;border-radius:8px;font-weight:700;cursor:pointer;font-size:13px;">
-            Analitzar aquesta fila →
-          </button>
-        </div>`;
+        <div style="display:flex;gap:8px;" id="ucFilesAccions"></div>`;
 
       cont._selFila = (r) => { estat.filaEst = r; renderPas(); };
       cont._back = () => { estat.pas = 0; renderPas(); };
@@ -2518,6 +2523,19 @@ function _mostrarAssistentImport(wb, nomFitxer, dropZone, mostrarError, onSucces
         btn.addEventListener('click', () => cont._selFila(r));
         filesContainer.appendChild(btn);
       });
+
+      // Botons acció via DOM (evitar onclick inline)
+      const accions = cont.querySelector('#ucFilesAccions');
+      const btnBack = document.createElement('button');
+      btnBack.textContent = '← Enrere';
+      btnBack.style.cssText = 'padding:8px 16px;background:#f3f4f6;color:#374151;border:none;border-radius:8px;font-weight:600;cursor:pointer;font-size:13px;font-family:inherit;';
+      btnBack.addEventListener('click', () => cont._back());
+      const btnNext = document.createElement('button');
+      btnNext.textContent = 'Analitzar aquesta fila →';
+      btnNext.style.cssText = 'padding:8px 20px;background:#7c3aed;color:#fff;border:none;border-radius:8px;font-weight:700;cursor:pointer;font-size:13px;font-family:inherit;';
+      btnNext.addEventListener('click', () => cont._next2());
+      accions.appendChild(btnBack);
+      accions.appendChild(btnNext);
     }
 
     // ── PAS 2: mostrar ítems detectats i confirmar ──
@@ -2546,17 +2564,7 @@ function _mostrarAssistentImport(wb, nomFitxer, dropZone, mostrarError, onSucces
             </div>
           `).join('')}
         </div>` : ''}
-        <div style="display:flex;gap:8px;flex-wrap:wrap;">
-          <button onclick="document.getElementById('ucAssistentImport')._back2()"
-            style="padding:8px 16px;background:#f3f4f6;color:#374151;border:none;border-radius:8px;font-weight:600;cursor:pointer;font-size:13px;">
-            ← Tornar a triar fila
-          </button>
-          ${ok ? `
-          <button onclick="document.getElementById('ucAssistentImport')._confirmar()"
-            style="padding:8px 20px;background:#059669;color:#fff;border:none;border-radius:8px;font-weight:700;cursor:pointer;font-size:13px;">
-            ✅ Usar aquests ítems
-          </button>` : ''}
-        </div>`;
+        <div id="ucPas2Accions" style="display:flex;gap:8px;flex-wrap:wrap;"></div>`;
 
       cont._back2 = () => { estat.pas = 1; renderPas(); };
       cont._confirmar = () => {
@@ -2564,6 +2572,20 @@ function _mostrarAssistentImport(wb, nomFitxer, dropZone, mostrarError, onSucces
         dropZone.style.display = '';
         onSuccess({ nom: nomFitxer || 'Plantilla importada', descripcio: '', items: estat.items });
       };
+
+      const accions2 = cont.querySelector('#ucPas2Accions');
+      const btnBack2 = document.createElement('button');
+      btnBack2.textContent = '← Tornar a triar fila';
+      btnBack2.style.cssText = 'padding:8px 16px;background:#f3f4f6;color:#374151;border:none;border-radius:8px;font-weight:600;cursor:pointer;font-size:13px;font-family:inherit;';
+      btnBack2.addEventListener('click', () => cont._back2());
+      accions2.appendChild(btnBack2);
+      if (ok) {
+        const btnConf = document.createElement('button');
+        btnConf.textContent = '✅ Usar aquests ítems';
+        btnConf.style.cssText = 'padding:8px 20px;background:#059669;color:#fff;border:none;border-radius:8px;font-weight:700;cursor:pointer;font-size:13px;font-family:inherit;';
+        btnConf.addEventListener('click', () => cont._confirmar());
+        accions2.appendChild(btnConf);
+      }
     }
   }
 
