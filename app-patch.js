@@ -618,10 +618,6 @@ window.actualitzarUIRols = function() {
   // Revisió: revisor (o admin). Secretaria, tutor, pedagog NO.
   if (esAdmin || rols.includes('revisor'))
     window.injectarBotoRevisor?.();
-
-  // Junta Avaluació: rol explícit o admin
-  if (esAdmin || rols.includes('juntaavaluacio'))
-    window.injectarBotoJuntaAvaluacio?.();
 };
 
 // Panell flotant per superadmins fixos
@@ -899,7 +895,6 @@ function mostrarBannerActualitzacio(nCentre, nClasse, grupCentreId, vistaKey, up
   });
 
   document.getElementById('_btnActualitzarClasse').addEventListener('click', async () => {
-    // Marcar com vist
     if (vistaKey && updatedAt) localStorage.setItem(vistaKey, String(updatedAt));
     banner.innerHTML = '<div style="padding:4px 20px;">⏳ Actualitzant alumnes...</div>';
     try {
@@ -907,47 +902,82 @@ function mostrarBannerActualitzacio(nCentre, nClasse, grupCentreId, vistaKey, up
       const alumnesCentre = grupDoc.data()?.alumnes || [];
       const classId = window.currentClassId;
 
-      // Crear alumnes nous a la col·lecció alumnes
       const classeDoc = await window.db.collection('classes').doc(classId).get();
       const alumnesActuals = classeDoc.data()?.alumnes || [];
 
-      // Llegir RALCs i noms actuals
+      // Llegir docs dels alumnes actuals
       const docsActuals = await Promise.all(
         alumnesActuals.map(id => window.db.collection('alumnes').doc(id).get())
       );
-      const ralcsActuals = new Set(docsActuals.map(d=>d.data()?.ralc).filter(Boolean));
-      const nomsActuals  = new Set(docsActuals.map(d=>`${d.data()?.nom}_${d.data()?.cognoms}`));
 
-      const nousBatch = window.db.batch();
-      const nousIds = [...alumnesActuals];
+      // Normalitzar noms per comparació robusta (independentment de si nom és complet o separat)
+      const _norm = s => (s||'').toLowerCase().replace(/\s+/g,' ').trim();
+
+      // Conjunts de RALCs i noms del centre (font de veritat)
+      const ralcsCentre = new Set(alumnesCentre.map(a => a.ralc).filter(Boolean));
+      const nomsCentre  = new Set(alumnesCentre.map(a => _norm(`${a.nom||''} ${a.cognoms||''}`)));
+
+      const batch = window.db.batch();
       const profUID = firebase.auth().currentUser?.uid;
 
+      // ── 1. ELIMINAR: alumnes de la classe que ja no són al centre ──
+      const idsEliminar = [];
+      for (const doc of docsActuals) {
+        if (!doc.exists) { idsEliminar.push(doc.id); continue; }
+        const data = doc.data();
+        const nomDoc = data.cognoms
+          ? _norm(`${data.nom||''} ${data.cognoms||''}`)
+          : _norm(data.nom || '');
+        const ralcDoc = data.ralc || '';
+
+        const alCentre = (ralcDoc && ralcsCentre.has(ralcDoc)) || nomsCentre.has(nomDoc);
+        if (!alCentre) {
+          idsEliminar.push(doc.id);
+          batch.delete(window.db.collection('alumnes').doc(doc.id));
+        }
+      }
+
+      // ── 2. AFEGIR: alumnes del centre que no estan a la classe ──
+      const ralcsActuals = new Set(docsActuals.map(d => d.data()?.ralc).filter(Boolean));
+      const nomsActuals  = new Set(docsActuals.map(d => {
+        const data = d.data() || {};
+        return data.cognoms ? _norm(`${data.nom} ${data.cognoms}`) : _norm(data.nom || '');
+      }));
+
+      const idsAfegir = [];
       for (const a of alumnesCentre) {
-        const key = `${a.nom}_${a.cognoms}`;
+        const key = _norm(`${a.nom||''} ${a.cognoms||''}`);
         if ((a.ralc && ralcsActuals.has(a.ralc)) || nomsActuals.has(key)) continue;
         const ref = window.db.collection('alumnes').doc();
-        nousBatch.set(ref, {
-          nom: a.nom, cognoms: a.cognoms, ralc: a.ralc||'',
-          comentari:'', ownerUid: profUID, classId
+        batch.set(ref, {
+          nom: a.nom, cognoms: a.cognoms || '', ralc: a.ralc || '',
+          comentari: '', ownerUid: profUID, classId
         });
-        nousIds.push(ref.id);
+        idsAfegir.push(ref.id);
       }
-      nousBatch.update(window.db.collection('classes').doc(classId), { alumnes: nousIds });
-      await nousBatch.commit();
 
-      // Marcar com resolt per a aquesta sessió
+      // ── 3. Nova llista d'IDs: actuals - eliminats + afegits ──
+      const nousIds = [
+        ...alumnesActuals.filter(id => !idsEliminar.includes(id)),
+        ...idsAfegir
+      ];
+      batch.update(window.db.collection('classes').doc(classId), { alumnes: nousIds });
+      await batch.commit();
+
       sessionStorage.setItem(`_bannerResolt_${window.currentClassId}_${grupCentreId}`, '1');
       banner.remove();
-      const nouCount = nousIds.length - alumnesActuals.length;
-      window.mostrarToast?.(`✅ ${nouCount} alumnes nous afegits`);
-      // Recarregar la classe completament
+
+      const missatge = [];
+      if (idsAfegir.length)   missatge.push(`${idsAfegir.length} afegit${idsAfegir.length !== 1 ? 's' : ''}`);
+      if (idsEliminar.length) missatge.push(`${idsEliminar.length} eliminat${idsEliminar.length !== 1 ? 's' : ''}`);
+      window.mostrarToast?.(`✅ Alumnes actualitzats: ${missatge.join(', ') || 'sense canvis'}`);
+
       if (typeof window.renderStudentsList === 'function') {
-        // Actualitzar classStudents directament
         window.classStudents = nousIds;
         window.renderStudentsList();
       }
-      // Forçar recàrrega completa de la classe si la funció és accessible
       if (typeof loadClassData === 'function') loadClassData();
+
     } catch(e) {
       banner.remove();
       window.mostrarToast?.('❌ Error: ' + e.message);
