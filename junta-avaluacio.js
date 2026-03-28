@@ -9,36 +9,24 @@ const JA_ROL = 'juntaavaluacio';
 /* ══════════════════════════════════════════════════════
    INJECTOR BOTÓ SIDEBAR
 ══════════════════════════════════════════════════════ */
-(function initJuntaAvaluacio() {
-  function _teAcces() {
-    if (window._isSuperAdmin) return true;
-    const rols = window._userRols || [];
-    return rols.includes(JA_ROL) || rols.includes('admin') || rols.includes('superadmin');
-  }
+window.injectarBotoJuntaAvaluacio = function() {
+  if (document.getElementById('btnJuntaAvaluacioSidebar')) return;
+  const rols = window._userRols || [];
+  const teAcces = window._isSuperAdmin ||
+    rols.includes(JA_ROL) || rols.includes('admin') || rols.includes('superadmin');
+  if (!teAcces) return;
 
-  function _injectar() {
-    if (document.getElementById('btnJuntaAvaluacioSidebar')) return;
-    if (!_teAcces()) return;
-    const nav = document.querySelector('.sidebar-nav') || document.querySelector('#sidebar nav');
-    if (!nav) return;
+  const nav = document.querySelector('.sidebar-nav') || document.querySelector('#sidebar nav');
+  if (!nav) return;
 
-    const btn = document.createElement('button');
-    btn.id = 'btnJuntaAvaluacioSidebar';
-    btn.className = 'nav-item nav-item-rol';
-    btn.innerHTML = `<span class="nav-icon">🏫</span><span>Junta Avaluació</span>`;
-    btn.addEventListener('click', obrirJuntaAvaluacio);
-    nav.appendChild(btn);
-    console.log('✅ Botó Junta Avaluació injectat');
-  }
-
-  // Esperar que rols.js hagi carregat el perfil
-  let intents = 0;
-  const interval = setInterval(() => {
-    intents++;
-    if (window._userRols !== undefined) { clearInterval(interval); _injectar(); }
-    if (intents > 30) clearInterval(interval);
-  }, 300);
-})();
+  const btn = document.createElement('button');
+  btn.id = 'btnJuntaAvaluacioSidebar';
+  btn.className = 'nav-item nav-item-rol';
+  btn.innerHTML = `<span class="nav-icon">🏫</span><span>Junta Avaluació</span>`;
+  btn.addEventListener('click', obrirJuntaAvaluacio);
+  nav.appendChild(btn);
+  console.log('✅ Botó Junta Avaluació injectat');
+};
 
 /* ══════════════════════════════════════════════════════
    HELPERS
