@@ -1017,7 +1017,7 @@ function renderStudentsList() {
   }
 
   if (!classStudents.length) {
-    studentsList.innerHTML = `<li style="color:var(--ink-20);font-size:13px;padding:8px;">Cap alumne. Afegeix-ne!</li>`;
+    studentsList.innerHTML = `<li style="color:var(--ink-20);font-size:13px;padding:8px;">Cap alumne/a. Afegeix-ne!</li>`;
     return;
   }
 
@@ -1132,7 +1132,7 @@ function filterStudents() {
 
 async function deleteSelectedStudents() {
   const checks = [...document.querySelectorAll('#studentsList .delete-checkbox')].filter(c => c.checked);
-  if (!checks.length) return alert('Selecciona almenys un alumne');
+  if (!checks.length) return alert('Selecciona almenys un alumne/a');
   const items = checks.map(c => c.closest('.student-item'));
   confirmAction('Eliminar alumnes', `Eliminar ${items.length} alumne(s)?`, async () => {
     const ids = items.map(li => li.dataset.id);
@@ -1379,7 +1379,7 @@ document.getElementById('cancelCommentsBtn').addEventListener('click', () => clo
 
 document.getElementById('saveCommentBtn').addEventListener('click', async () => {
   if (!currentCommentStudent?.id) {
-    alert('Error: no hi ha alumne seleccionat. Tanca el modal i torna a clicar l\'alumne.');
+    alert('Error: no hi ha alumne seleccionat. Tanca el modal i torna a clicar l\'alumne/a.');
     return;
   }
   const nouText = document.getElementById('commentTextarea').value.trim();
