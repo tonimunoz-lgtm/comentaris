@@ -8,18 +8,19 @@ console.log('🔐 rols.js carregat');
    CONSTANTS DE ROLS
 ══════════════════════════════════════════════════════ */
 window.ROLS = {
-  SUPERADMIN: 'superadmin',
-  ADMIN:      'admin',
-  SECRETARIA: 'secretaria',
-  TUTOR:      'tutor',
-  PEDAGOG:    'pedagog',
-  PROFESSOR:  'professor',
-  REVISOR:    'revisor'
+  SUPERADMIN:       'superadmin',
+  ADMIN:            'admin',
+  SECRETARIA:       'secretaria',
+  TUTOR:            'tutor',
+  PEDAGOG:          'pedagog',
+  PROFESSOR:        'professor',
+  REVISOR:          'revisor',
+  JUNTAAVALUACIO:   'juntaavaluacio',
 };
 
 // Jerarquia: cada rol inclou els permisos dels inferiors
 const ROL_JERARQUIA = [
-  'superadmin', 'admin', 'secretaria', 'pedagog', 'tutor', 'professor', 'revisor'
+  'superadmin', 'admin', 'secretaria', 'pedagog', 'tutor', 'professor', 'revisor', 'juntaavaluacio'
 ];
 
 // Perfil de l'usuari actual
