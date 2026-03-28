@@ -2445,8 +2445,8 @@ function _mostrarAssistentImport(wb, nomFitxer, dropZone, mostrarError, onSucces
         </div>
         <div id="ucPas0Accions"></div>`;
 
-      cont._selFull = (s) => { estat.fullNom = s; estat.ws = wb.Sheets[s]; renderPas(); };
-      cont._next = () => { estat.ws = wb.Sheets[estat.fullNom]; estat.pas = 1; renderPas(); };
+      cont._selFull = (s) => { estat.fullNom = s; estat.ws = wb.Sheets[s]; estat._filaAutodetectada = undefined; renderPas(); };
+      cont._next = () => { estat.ws = wb.Sheets[estat.fullNom]; estat._filaAutodetectada = undefined; estat.pas = 1; renderPas(); };
 
       // Botons de fulls via DOM
       const fullsContainer = cont.querySelector('#ucFullsBotons');
@@ -2472,16 +2472,19 @@ function _mostrarAssistentImport(wb, nomFitxer, dropZone, mostrarError, onSucces
       const ws = estat.ws;
       const range = XLSX.utils.decode_range(ws['!ref'] || 'A1:Z10');
       const maxRows = Math.min(range.e.r + 1, 20);
-      // Detectar suggeriment: fila amb el text més llarg o "COMENTARI"
-      let sugFila = 0;
-      for (let r = 0; r < Math.min(maxRows, 10); r++) {
-        for (let c = 0; c < Math.min(range.e.c + 1, 20); c++) {
-          const v = _getCellWs(ws, r, c) || '';
-          if (/COMENTARI/i.test(v) || /ASSOLIMENT/i.test(v)) { sugFila = r; break; }
+      // Detectar suggeriment NOMÉS si filaEst no ha estat triat manualment encara
+      if (estat.filaEst === undefined || estat._filaAutodetectada === undefined) {
+        let sugFila = 0;
+        for (let r = 0; r < Math.min(maxRows, 10); r++) {
+          for (let c = 0; c < Math.min(range.e.c + 1, 20); c++) {
+            const v = _getCellWs(ws, r, c) || '';
+            if (/COMENTARI/i.test(v) || /ASSOLIMENT/i.test(v)) { sugFila = r; break; }
+          }
+          if (sugFila) break;
         }
-        if (sugFila) break;
+        estat.filaEst = sugFila;
+        estat._filaAutodetectada = true;
       }
-      estat.filaEst = sugFila;
 
       cont.innerHTML = `
         <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px;">
