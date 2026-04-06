@@ -80,6 +80,7 @@ async function renderFirmes(body) {
     const tutorsMap   = cfg.tutors   || {};   // { grupId: { nom, cognom1, cognom2, firmaBase64 } }
     const directorData = cfg.director || {};  // { nom, cognom1, cognom2, firmaBase64, segellBase64 }
     const logosData    = cfg.logos    || {};  // { generalitat: base64, institut: base64 }
+    const textosData   = cfg.textos   || {};  // { linia1, linia2, linia3, faltesAssistencia }
 
     const grups = grupsSnap.docs.map(d => ({ id: d.id, ...d.data() }))
       .sort((a,b) =>
@@ -345,10 +346,39 @@ async function renderFirmes(body) {
           </div>
         </div>
 
-        <div style="display:flex;justify-content:flex-end;">
+        <!-- Textos encapçalament i peu -->
+        <div style="border-top:1px solid #e5e7eb;margin-top:8px;padding-top:16px;">
+          <div style="font-size:12px;font-weight:700;color:#374151;margin-bottom:10px;">📝 Textos de l'encapçalament i peu de pàgina</div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px;">
+            <div>
+              <label style="font-size:11px;font-weight:600;color:#374151;display:block;margin-bottom:3px;">Línia 1 (ex: Generalitat de Catalunya)</label>
+              <input id="txtLinia1" type="text" value="${esHF(textosData.linia1||'Generalitat de Catalunya')}"
+                style="width:100%;padding:7px 10px;border:1.5px solid #e5e7eb;border-radius:7px;font-size:12px;outline:none;">
+            </div>
+            <div>
+              <label style="font-size:11px;font-weight:600;color:#374151;display:block;margin-bottom:3px;">Línia 2 (ex: Departament d'Educació)</label>
+              <input id="txtLinia2" type="text" value="${esHF(textosData.linia2||"Departament d'Educació")}"
+                style="width:100%;padding:7px 10px;border:1.5px solid #e5e7eb;border-radius:7px;font-size:12px;outline:none;">
+            </div>
+          </div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px;">
+            <div>
+              <label style="font-size:11px;font-weight:600;color:#374151;display:block;margin-bottom:3px;">Línia 3 — negreta (ex: INS Matadepera)</label>
+              <input id="txtLinia3" type="text" value="${esHF(textosData.linia3||'INS Matadepera')}"
+                style="width:100%;padding:7px 10px;border:1.5px solid #e5e7eb;border-radius:7px;font-size:12px;outline:none;">
+            </div>
+            <div>
+              <label style="font-size:11px;font-weight:600;color:#374151;display:block;margin-bottom:3px;">Text "Faltes d'assistència" (peu del butlletí)</label>
+              <input id="txtFaltes" type="text" value="${esHF(textosData.faltesAssistencia||"podeu consultar-les a l'aplicació Acàcia.")}"
+                style="width:100%;padding:7px 10px;border:1.5px solid #e5e7eb;border-radius:7px;font-size:12px;outline:none;">
+            </div>
+          </div>
+        </div>
+
+        <div style="display:flex;justify-content:flex-end;margin-top:12px;">
           <button id="btnGuardarLogos"
             style="padding:9px 20px;background:#4c1d95;color:#fff;border:none;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;">
-            💾 Guardar logos
+            💾 Guardar logos i textos
           </button>
         </div>
       </div>
@@ -367,8 +397,8 @@ async function renderFirmes(body) {
     // ── Events firmes de tutors ──
     setupEventsFirmesTutors();
 
-    // ── Events logos ──
-    setupEventsLogos(logosData);
+    // ── Events logos i textos ──
+    setupEventsLogos(logosData, textosData);
 
   } catch(e) {
     body.innerHTML = `<div style="color:#ef4444;padding:20px;">❌ Error: ${e.message}</div>`;
@@ -756,7 +786,7 @@ function aplicarExcelTutors(rows, grups) {
 /* ══════════════════════════════════════════════════════
    EVENTS I GUARDAT LOGOS
 ══════════════════════════════════════════════════════ */
-function setupEventsLogos(logosData) {
+function setupEventsLogos(logosData, textosData) {
   // Logo Generalitat — triar imatge
   document.getElementById('inpLogoGen')?.addEventListener('change', e => {
     const f = e.target.files[0];
@@ -809,8 +839,8 @@ function setupEventsLogos(logosData) {
     _setupEsborrarLogo('btnEsborrarLogoIns', 'prevLogoIns', '_firmes_logoInsB64');
   }
 
-  // Guardar logos
-  document.getElementById('btnGuardarLogos')?.addEventListener('click', () => guardarLogos(logosData));
+  // Guardar logos i textos
+  document.getElementById('btnGuardarLogos')?.addEventListener('click', () => guardarLogos(logosData, textosData));
 }
 
 function _setupEsborrarLogo(btnId, prevId, varName) {
@@ -827,7 +857,7 @@ function _setupEsborrarLogo(btnId, prevId, varName) {
   }, { once: true });
 }
 
-async function guardarLogos(logosData) {
+async function guardarLogos(logosData, textosData) {
   const btn = document.getElementById('btnGuardarLogos');
   if (btn) { btn.disabled = true; btn.textContent = '⏳ Guardant...'; }
 
@@ -844,7 +874,14 @@ async function guardarLogos(logosData) {
       institut:    insB64 === '__ESBORRAR__' ? '' : (insB64 || logosActuals.institut    || ''),
     };
 
-    await window.db.doc(FIRMES_CONFIG_DOC).set({ logos }, { merge: true });
+    const textos = {
+      linia1:            document.getElementById('txtLinia1')?.value?.trim() || textosData?.linia1 || 'Generalitat de Catalunya',
+      linia2:            document.getElementById('txtLinia2')?.value?.trim() || textosData?.linia2 || "Departament d'Educació",
+      linia3:            document.getElementById('txtLinia3')?.value?.trim() || textosData?.linia3 || 'INS Matadepera',
+      faltesAssistencia: document.getElementById('txtFaltes')?.value?.trim() || textosData?.faltesAssistencia || "podeu consultar-les a l'aplicació Acàcia.",
+    };
+
+    await window.db.doc(FIRMES_CONFIG_DOC).set({ logos, textos }, { merge: true });
 
     window._firmes_logoGenB64 = null;
     window._firmes_logoInsB64 = null;
