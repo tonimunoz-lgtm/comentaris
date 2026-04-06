@@ -3243,7 +3243,7 @@ async function generarButlleti(alumne, curs, grupNom, trimestre, grupId, nivellN
     <!-- Tutor/a -->
     <div class="firma-box">
       <div class="firma-img-area">
-        ${tutorFirmaBase64 ? `<img src="${tutorFirmaBase64}" style="max-height:55px;max-width:90px;object-fit:contain;">` : ''}
+        ${tutorFirmaBase64 ? `<img src="${tutorFirmaBase64}" style="max-height:55px;max-width:90px;object-fit:contain;mix-blend-mode:multiply;">` : ''}
       </div>
       <div class="firma-linia">Tutor/a</div>
       ${tutorNomComplet ? `<div class="firma-nom">${esH(tutorNomComplet)}</div>` : ''}
@@ -3252,8 +3252,8 @@ async function generarButlleti(alumne, curs, grupNom, trimestre, grupId, nivellN
     <!-- Director/a (amb firma i segell si disponibles) -->
     <div class="firma-box">
       <div class="firma-img-area" style="gap:8px;">
-        ${firmaBase64  ? `<img src="${firmaBase64}"  style="max-height:55px;max-width:90px;object-fit:contain;">` : ''}
-        ${segellBase64 ? `<img src="${segellBase64}" style="max-height:55px;max-width:90px;object-fit:contain;">` : ''}
+        ${firmaBase64  ? `<img src="${firmaBase64}"  style="max-height:55px;max-width:90px;object-fit:contain;mix-blend-mode:multiply;">` : ''}
+        ${segellBase64 ? `<img src="${segellBase64}" style="max-height:55px;max-width:90px;object-fit:contain;mix-blend-mode:multiply;">` : ''}
       </div>
       <div class="firma-linia">Director/a</div>
       ${directorNomComplet ? `<div class="firma-nom">${esH(directorNomComplet)}</div>` : ''}
