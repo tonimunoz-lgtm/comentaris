@@ -77,7 +77,7 @@ async function renderFirmes(body) {
     ]);
 
     const cfg = cfgSnap?.data() || {};
-    const tutorsMap   = cfg.tutors   || {};   // { grupId: { nom, cognom1, cognom2 } }
+    const tutorsMap   = cfg.tutors   || {};   // { grupId: { nom, cognom1, cognom2, firmaBase64 } }
     const directorData = cfg.director || {};  // { nom, cognom1, cognom2, firmaBase64, segellBase64 }
 
     const grups = grupsSnap.docs.map(d => ({ id: d.id, ...d.data() }))
@@ -236,11 +236,46 @@ async function renderFirmes(body) {
                   <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:10px;">
                     ${grupsDelCurs.map(g => {
                       const t = tutorsMap[g.id] || {};
+                      const teFirma = !!t.firmaBase64;
                       return `
                         <div class="fila-tutor" data-grup-id="${g.id}"
                           style="background:#fff;border:1.5px solid #e5e7eb;border-radius:10px;padding:12px 14px;">
-                          <div style="font-size:12px;font-weight:700;color:#1e1b4b;margin-bottom:8px;">
-                            🏫 ${esHF(g.nom)} <span style="font-weight:400;color:#9ca3af;">${esHF(g.nivellNom||'')}</span>
+                          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;gap:6px;flex-wrap:wrap;">
+                            <div style="font-size:12px;font-weight:700;color:#1e1b4b;">
+                              🏫 ${esHF(g.nom)} <span style="font-weight:400;color:#9ca3af;">${esHF(g.nivellNom||'')}</span>
+                            </div>
+                            <button class="btn-firma-tutor" data-grup-id="${g.id}"
+                              style="padding:4px 10px;background:${teFirma ? '#d1fae5' : '#ede9fe'};
+                                     color:${teFirma ? '#065f46' : '#4c1d95'};
+                                     border:1.5px solid ${teFirma ? '#6ee7b7' : '#c4b5fd'};
+                                     border-radius:7px;font-size:11px;font-weight:600;cursor:pointer;white-space:nowrap;">
+                              ${teFirma ? '✅ Firma inclosa' : '✏️ Incloure firma'}
+                            </button>
+                          </div>
+                          <!-- Zona firma tutor (oculta per defecte) -->
+                          <div class="zona-firma-tutor" data-grup-id="${g.id}"
+                            style="display:none;border:1.5px dashed #c4b5fd;border-radius:9px;padding:10px;
+                                   background:#faf5ff;text-align:center;margin-bottom:8px;">
+                            <div style="font-size:11px;font-weight:600;color:#4c1d95;margin-bottom:6px;">✏️ Firma del tutor/a</div>
+                            ${teFirma
+                              ? `<img class="prev-firma-tutor" src="${t.firmaBase64}"
+                                   style="max-height:60px;max-width:100%;object-fit:contain;display:block;margin:0 auto 6px;">`
+                              : `<div class="prev-firma-tutor" style="height:50px;display:flex;align-items:center;
+                                   justify-content:center;color:#9ca3af;font-size:11px;">Cap imatge</div>`
+                            }
+                            <label style="display:inline-block;padding:5px 12px;background:#7c3aed;color:#fff;
+                                          border-radius:6px;font-size:11px;font-weight:600;cursor:pointer;margin-top:4px;">
+                              📂 Triar imatge
+                              <input type="file" accept="image/*" class="inp-firma-tutor" style="display:none;">
+                            </label>
+                            ${teFirma
+                              ? `<button class="btn-esborrar-firma-tutor"
+                                   style="display:block;margin:5px auto 0;padding:3px 10px;background:#fee2e2;
+                                          color:#dc2626;border:none;border-radius:6px;font-size:10px;cursor:pointer;">
+                                   🗑 Esborrar firma
+                                 </button>`
+                              : ''
+                            }
                           </div>
                           <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;">
                             <input type="text" class="inp-tutor-nom" placeholder="Nom"
@@ -271,6 +306,9 @@ async function renderFirmes(body) {
     document.getElementById('btnCancelExcel')?.addEventListener('click', () => {
       document.getElementById('excelTutorsInfo').style.display = 'none';
     });
+
+    // ── Events firmes de tutors ──
+    setupEventsFirmesTutors();
 
   } catch(e) {
     body.innerHTML = `<div style="color:#ef4444;padding:20px;">❌ Error: ${e.message}</div>`;
@@ -366,23 +404,132 @@ function setupEventsDirectorFirmes(directorData) {
 }
 
 /* ══════════════════════════════════════════════════════
-   GUARDAR TUTORS
+   EVENTS FIRMES DE TUTORS
 ══════════════════════════════════════════════════════ */
+function setupEventsFirmesTutors() {
+  // Mapa en memòria per les imatges pendents de guardar: { grupId: base64|'__ESBORRAR__' }
+  window._firmesTutorsPendents = window._firmesTutorsPendents || {};
+
+  // Botó "Incloure firma" de cada grup: mostra/amaga la zona de firma
+  document.querySelectorAll('.btn-firma-tutor').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const gid = btn.dataset.grupId;
+      const zona = document.querySelector(`.zona-firma-tutor[data-grup-id="${gid}"]`);
+      if (!zona) return;
+      const visible = zona.style.display !== 'none';
+      zona.style.display = visible ? 'none' : 'block';
+    });
+  });
+
+  // Input file de cada grup: previsualitzar i guardar en memòria
+  document.querySelectorAll('.inp-firma-tutor').forEach(inp => {
+    inp.addEventListener('change', e => {
+      const f = e.target.files[0];
+      if (!f) return;
+      const fila = inp.closest('.fila-tutor');
+      const gid  = fila?.dataset.grupId;
+      if (!gid) return;
+
+      imgToBase64(f, b64 => {
+        window._firmesTutorsPendents[gid] = b64;
+
+        // Actualitzar previsualització
+        const zona = fila.querySelector('.zona-firma-tutor');
+        const prev = zona?.querySelector('.prev-firma-tutor');
+        if (prev) {
+          prev.outerHTML = `<img class="prev-firma-tutor" src="${b64}"
+            style="max-height:60px;max-width:100%;object-fit:contain;display:block;margin:0 auto 6px;">`;
+        }
+
+        // Afegir botó esborrar si no existia
+        if (!zona?.querySelector('.btn-esborrar-firma-tutor')) {
+          const btnEsb = document.createElement('button');
+          btnEsb.className = 'btn-esborrar-firma-tutor';
+          btnEsb.style.cssText = 'display:block;margin:5px auto 0;padding:3px 10px;background:#fee2e2;color:#dc2626;border:none;border-radius:6px;font-size:10px;cursor:pointer;';
+          btnEsb.textContent = '🗑 Esborrar firma';
+          zona?.appendChild(btnEsb);
+          _setupEsborrarFirmaTutor(btnEsb, gid, zona, fila);
+        }
+
+        // Actualitzar estil del botó principal
+        const btnPrincipal = document.querySelector(`.btn-firma-tutor[data-grup-id="${gid}"]`);
+        if (btnPrincipal) {
+          btnPrincipal.style.background = '#d1fae5';
+          btnPrincipal.style.color = '#065f46';
+          btnPrincipal.style.borderColor = '#6ee7b7';
+          btnPrincipal.textContent = '✅ Firma inclosa';
+        }
+      });
+    });
+  });
+
+  // Botó esborrar firma dels grups que ja en tenien
+  document.querySelectorAll('.btn-esborrar-firma-tutor').forEach(btnEsb => {
+    const fila = btnEsb.closest('.fila-tutor');
+    const gid  = fila?.dataset.grupId;
+    const zona = btnEsb.closest('.zona-firma-tutor');
+    if (gid && zona) _setupEsborrarFirmaTutor(btnEsb, gid, zona, fila);
+  });
+}
+
+function _setupEsborrarFirmaTutor(btnEsb, gid, zona, fila) {
+  btnEsb.addEventListener('click', () => {
+    window._firmesTutorsPendents[gid] = '__ESBORRAR__';
+
+    // Substituir la imatge per el text "Cap imatge"
+    const prev = zona?.querySelector('.prev-firma-tutor');
+    if (prev) {
+      prev.outerHTML = `<div class="prev-firma-tutor" style="height:50px;display:flex;align-items:center;
+        justify-content:center;color:#9ca3af;font-size:11px;">Cap imatge</div>`;
+    }
+    btnEsb.remove();
+
+    // Actualitzar estil del botó principal
+    const btnPrincipal = fila?.querySelector(`.btn-firma-tutor`);
+    if (btnPrincipal) {
+      btnPrincipal.style.background = '#ede9fe';
+      btnPrincipal.style.color = '#4c1d95';
+      btnPrincipal.style.borderColor = '#c4b5fd';
+      btnPrincipal.textContent = '✏️ Incloure firma';
+    }
+  }, { once: true });
+}
+
+
 async function guardarTutors(grups) {
   const btn = document.getElementById('btnGuardarTutors');
   if (btn) { btn.disabled = true; btn.textContent = '\u23f3 Guardant...'; }
 
   try {
-    // Usem dot-notation per actualitzar cada grup independentment
-    // i no sobreescriure tutors d'altres cursos/grups no visibles
+    // Llegir config actual per preservar firmaBase64 existents
+    const cfgSnap = await window.db.doc(FIRMES_CONFIG_DOC).get().catch(() => null);
+    const cfgActual = cfgSnap?.data() || {};
+    const tutorsActuals = cfgActual.tutors || {};
+
+    const pendents = window._firmesTutorsPendents || {};
     const updatePayload = {};
+
     document.querySelectorAll('.fila-tutor').forEach(fila => {
       const gid = fila.dataset.grupId;
       if (!gid) return;
+
+      const firmaB64Pendent = pendents[gid];
+      const firmaB64Actual  = tutorsActuals[gid]?.firmaBase64 || '';
+
+      let firmaFinal;
+      if (firmaB64Pendent === '__ESBORRAR__') {
+        firmaFinal = '';
+      } else if (firmaB64Pendent) {
+        firmaFinal = firmaB64Pendent;
+      } else {
+        firmaFinal = firmaB64Actual;
+      }
+
       updatePayload['tutors.' + gid] = {
-        nom:     fila.querySelector('.inp-tutor-nom')?.value?.trim()  || '',
-        cognom1: fila.querySelector('.inp-tutor-cog1')?.value?.trim() || '',
-        cognom2: fila.querySelector('.inp-tutor-cog2')?.value?.trim() || '',
+        nom:         fila.querySelector('.inp-tutor-nom')?.value?.trim()  || '',
+        cognom1:     fila.querySelector('.inp-tutor-cog1')?.value?.trim() || '',
+        cognom2:     fila.querySelector('.inp-tutor-cog2')?.value?.trim() || '',
+        firmaBase64: firmaFinal,
       };
     });
 
@@ -392,11 +539,11 @@ async function guardarTutors(grups) {
       return;
     }
 
-    // Primer assegurem que el document existeix, despres actualitzem
     await window.db.doc(FIRMES_CONFIG_DOC).set({}, { merge: true });
     await window.db.doc(FIRMES_CONFIG_DOC).update(updatePayload);
 
-    // Invalidar cache perque generarButlleti llegeixi les dades noves
+    // Netejar pendents i invalidar cache
+    window._firmesTutorsPendents = {};
     _firmesCache   = null;
     _firmesCacheTs = 0;
 
