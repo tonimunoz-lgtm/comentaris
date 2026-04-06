@@ -3249,11 +3249,11 @@ async function generarButlleti(alumne, curs, grupNom, trimestre, grupId, nivellN
       ${tutorNomComplet ? `<div class="firma-nom">${esH(tutorNomComplet)}</div>` : ''}
     </div>
 
-    <!-- Director/a (amb firma i segell si disponibles) -->
+    <!-- Director/a (amb firma i segell superposat) -->
     <div class="firma-box">
-      <div class="firma-img-area" style="gap:8px;">
-        ${firmaBase64  ? `<img src="${firmaBase64}"  style="max-height:55px;max-width:90px;object-fit:contain;">` : ''}
-        ${segellBase64 ? `<img src="${segellBase64}" style="max-height:55px;max-width:90px;object-fit:contain;">` : ''}
+      <div class="firma-img-area" style="position:relative;width:130px;height:60px;">
+        ${firmaBase64  ? `<img src="${firmaBase64}"  style="position:absolute;bottom:0;left:0;max-height:55px;max-width:110px;object-fit:contain;">` : ''}
+        ${segellBase64 ? `<img src="${segellBase64}" style="position:absolute;bottom:-6px;right:-10px;max-height:62px;max-width:70px;object-fit:contain;opacity:0.88;">` : ''}
       </div>
       <div class="firma-linia">Director/a</div>
       ${directorNomComplet ? `<div class="firma-nom">${esH(directorNomComplet)}</div>` : ''}
