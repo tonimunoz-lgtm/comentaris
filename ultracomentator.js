@@ -2377,41 +2377,67 @@ function _capFirst(s) { return s ? s.charAt(0).toUpperCase() + s.slice(1) : s; }
 // perquè identifiqui manualment l'estructura del seu Excel
 // ──────────────────────────────────────────────────────────────
 function _mostrarAssistentImport(wb, nomFitxer, dropZone, mostrarError, onSuccess) {
-  // Estat de l'assistent
+
+  // ── Estat de l'assistent ──────────────────────────────────────────────────
   const estat = {
-    pas: 0,           // 0=triar full, 1=triar fila, 2=confirmar ítems
+    pas: 0,          // 0=full, 1=fila, 2=columnes, 3=confirmar
     fullNom: wb.SheetNames[0],
-    filaEst: 1,       // fila (1-indexed) on estan els títols/capçaleres
     ws: null,
-    previewData: [],  // matriu de cel·les per mostrar
+    filaItems: 0,    // fila (0-indexed) on estan els títols dels ítems
+    colCapcelera: -1,// columna (0-indexed) de la capçalera, -1 = sense capçalera
+    colPrimerCom: 1, // columna (0-indexed) del primer comentari
+    numComs: 4,      // nombre de comentaris per ítem
     items: []
   };
 
-  // Renderitzar vista previsualització d'un full com a taula HTML
-  function renderPreview(ws, maxRows = 8, maxCols = 12, highlightRow = -1) {
+  // ── Ampliar el modal ──────────────────────────────────────────────────────
+  const modalInner = dropZone.closest('div[style*="border-radius:20px"]') || dropZone.parentNode;
+  modalInner.style.maxWidth = '780px';
+  modalInner.style.maxHeight = '92vh';
+  modalInner.style.overflowY = 'auto';
+
+  // ── Contenidor de l'assistent ─────────────────────────────────────────────
+  const cont = document.createElement('div');
+  cont.id = 'ucAssistentImport';
+  cont.style.cssText = 'margin-top:12px;padding:16px;background:#faf5ff;border:2px solid #a855f7;border-radius:12px;';
+  dropZone.parentNode.insertBefore(cont, dropZone.nextSibling);
+  dropZone.style.display = 'none';
+
+  // ── Helper: render taula previsualització ─────────────────────────────────
+  function renderPreview(ws, opts = {}) {
     if (!ws || !ws['!ref']) return '<em>Full buit</em>';
+    const { maxRows = 10, maxCols = 14, highlightRow = -1,
+            highlightCols = [], colorCols = {} } = opts;
     const range = XLSX.utils.decode_range(ws['!ref']);
     const rows = Math.min(range.e.r + 1, maxRows);
     const cols = Math.min(range.e.c + 1, maxCols);
     const cel = (r, c) => _getCellWs(ws, r, c) || '';
     const colLetter = c => String.fromCharCode(65 + c);
 
-    let html = `<div style="overflow-x:auto;max-height:260px;overflow-y:auto;border:1px solid #e5e7eb;border-radius:8px;">
+    let html = `<div style="overflow-x:auto;max-height:280px;overflow-y:auto;border:1px solid #e5e7eb;border-radius:8px;">
       <table style="border-collapse:collapse;font-size:11px;min-width:100%;">
         <thead><tr style="background:#f3f4f6;position:sticky;top:0;">
-          <th style="padding:4px 6px;border:1px solid #e5e7eb;color:#9ca3af;font-weight:500;">#</th>`;
-    for (let c = 0; c < cols; c++)
-      html += `<th style="padding:4px 8px;border:1px solid #e5e7eb;color:#9ca3af;font-weight:500;">${colLetter(c)}</th>`;
+          <th style="padding:4px 6px;border:1px solid #e5e7eb;color:#9ca3af;">#</th>`;
+    for (let c = 0; c < cols; c++) {
+      const isHL = highlightCols.includes(c);
+      const col = colorCols[c];
+      const bg = col ? col.bg : (isHL ? '#fef9c3' : '');
+      html += `<th style="padding:4px 8px;border:1px solid #e5e7eb;color:${col ? col.color : '#9ca3af'};font-weight:${isHL || col ? '700' : '500'};${bg ? 'background:' + bg + ';' : ''}">${colLetter(c)}</th>`;
+    }
     html += `</tr></thead><tbody>`;
     for (let r = 0; r < rows; r++) {
-      const isHL = r === highlightRow;
-      html += `<tr style="background:${isHL ? '#fef9c3' : r % 2 === 0 ? '#fff' : '#f9fafb'};">`;
+      const isHLrow = r === highlightRow;
+      html += `<tr style="background:${isHLrow ? '#fef9c3' : r % 2 === 0 ? '#fff' : '#f9fafb'};">`;
       html += `<td style="padding:3px 6px;border:1px solid #e5e7eb;color:#9ca3af;font-weight:600;text-align:center;">${r + 1}</td>`;
       for (let c = 0; c < cols; c++) {
         const v = cel(r, c);
-        const short = v.length > 28 ? v.substring(0, 26) + '…' : v;
-        const bg = isHL && v ? '#fde047' : '';
-        html += `<td style="padding:3px 8px;border:1px solid #e5e7eb;max-width:180px;overflow:hidden;white-space:nowrap;${bg ? 'background:' + bg + ';font-weight:600;' : ''}" title="${v.replace(/"/g,"'")}">${short || '<span style="color:#e5e7eb;">·</span>'}</td>`;
+        const short = v.length > 22 ? v.substring(0, 20) + '…' : v;
+        const col = colorCols[c];
+        const isHLcol = highlightCols.includes(c);
+        let cellBg = isHLrow && v ? '#fde047' : '';
+        if (col) cellBg = col.bg;
+        else if (isHLcol && v) cellBg = '#fef9c3';
+        html += `<td style="padding:3px 8px;border:1px solid #e5e7eb;max-width:160px;overflow:hidden;white-space:nowrap;${cellBg ? 'background:' + cellBg + ';' : ''}${col || isHLcol ? 'font-weight:600;' : ''}" title="${v.replace(/"/g, "'")}">${short || '<span style="color:#e5e7eb;">·</span>'}</td>`;
       }
       html += `</tr>`;
     }
@@ -2420,267 +2446,388 @@ function _mostrarAssistentImport(wb, nomFitxer, dropZone, mostrarError, onSucces
     return html;
   }
 
-  // Ampliar el modal per acollir l'assistent (scroll + max-width més gran)
-  const modalInner = dropZone.closest('div[style*="border-radius:20px"]') || dropZone.parentNode;
-  modalInner.style.maxWidth = '680px';
-  modalInner.style.maxHeight = '90vh';
-  modalInner.style.overflowY = 'auto';
-
-  // Contenidor de l'assistent (substitueix la drop zone)
-  const cont = document.createElement('div');
-  cont.id = 'ucAssistentImport';
-  cont.style.cssText = 'margin-top:12px;padding:16px;background:#faf5ff;border:2px solid #a855f7;border-radius:12px;';
-  dropZone.parentNode.insertBefore(cont, dropZone.nextSibling);
-  dropZone.style.display = 'none';
-
-  function renderPas() {
-    cont.innerHTML = '';
-
-    // ── PAS 0: triar quin full ──
-    if (estat.pas === 0) {
-      cont.innerHTML = `
-        <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px;">
-          <span style="font-size:20px;">🔍</span>
-          <div>
-            <div style="font-weight:700;color:#7c3aed;font-size:14px;">No he pogut detectar l'estructura automàticament</div>
-            <div style="color:#6b7280;font-size:12px;">Et faré unes preguntes per identificar-la manualment.</div>
-          </div>
-        </div>
-        <div style="margin-bottom:10px;">
-          <label style="font-weight:600;color:#374151;font-size:13px;display:block;margin-bottom:6px;">
-            📋 Quin full conté les plantilles de comentaris?
-          </label>
-          <div id="ucFullsBotons" style="display:flex;gap:8px;flex-wrap:wrap;"></div>
-        </div>
-        <div style="margin-bottom:10px;">
-          <label style="font-weight:600;color:#374151;font-size:12px;display:block;margin-bottom:4px;">Previsualització del full <strong>${estat.fullNom}</strong>:</label>
-          ${renderPreview(wb.Sheets[estat.fullNom])}
-        </div>
-        <div id="ucPas0Accions"></div>`;
-
-      cont._selFull = (s) => { estat.fullNom = s; estat.ws = wb.Sheets[s]; estat._filaAutodetectada = undefined; renderPas(); };
-      cont._next = () => { estat.ws = wb.Sheets[estat.fullNom]; estat._filaAutodetectada = undefined; estat.pas = 1; renderPas(); };
-
-      // Botons de fulls via DOM
-      const fullsContainer = cont.querySelector('#ucFullsBotons');
-      wb.SheetNames.forEach(s => {
-        const isS = s === estat.fullNom;
-        const btn = document.createElement('button');
-        btn.textContent = s;
-        btn.style.cssText = `padding:6px 14px;border-radius:8px;border:2px solid ${isS ? '#7c3aed' : '#e5e7eb'};background:${isS ? '#7c3aed' : '#fff'};color:${isS ? '#fff' : '#374151'};font-size:13px;cursor:pointer;font-weight:600;font-family:inherit;`;
-        btn.addEventListener('click', () => cont._selFull(s));
-        fullsContainer.appendChild(btn);
-      });
-
-      // Botó continuar via DOM
-      const btnContinuar = document.createElement('button');
-      btnContinuar.textContent = 'Continuar →';
-      btnContinuar.style.cssText = 'padding:8px 20px;background:#7c3aed;color:#fff;border:none;border-radius:8px;font-weight:700;cursor:pointer;font-size:13px;font-family:inherit;';
-      btnContinuar.addEventListener('click', () => cont._next());
-      cont.querySelector('#ucPas0Accions').appendChild(btnContinuar);
-    }
-
-    // ── PAS 1: triar fila on estan els títols/capçaleres ──
-    else if (estat.pas === 1) {
-      const ws = estat.ws;
-      const range = XLSX.utils.decode_range(ws['!ref'] || 'A1:Z10');
-      const maxRows = Math.min(range.e.r + 1, 20);
-      // Detectar suggeriment NOMÉS si filaEst no ha estat triat manualment encara
-      if (estat.filaEst === undefined || estat._filaAutodetectada === undefined) {
-        let sugFila = 0;
-        for (let r = 0; r < Math.min(maxRows, 10); r++) {
-          for (let c = 0; c < Math.min(range.e.c + 1, 20); c++) {
-            const v = _getCellWs(ws, r, c) || '';
-            if (/COMENTARI/i.test(v) || /ASSOLIMENT/i.test(v)) { sugFila = r; break; }
-          }
-          if (sugFila) break;
-        }
-        estat.filaEst = sugFila;
-        estat._filaAutodetectada = true;
-      }
-
-      cont.innerHTML = `
-        <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px;">
-          <span style="font-size:20px;">📍</span>
-          <div>
-            <div style="font-weight:700;color:#7c3aed;font-size:14px;">A quina fila estan els títols i comentaris?</div>
-            <div style="color:#6b7280;font-size:12px;">Selecciona la fila que conté els títols dels ítems i els seus comentaris opcionals.</div>
-          </div>
-        </div>
-        <div style="display:flex;align-items:center;gap:12px;margin-bottom:10px;">
-          <label style="font-weight:600;color:#374151;font-size:13px;">Fila número:</label>
-          <div id="ucFilesBotons" style="display:flex;gap:6px;flex-wrap:wrap;"></div>
-        </div>
-        <div style="margin-bottom:10px;">
-          <label style="font-weight:600;color:#374151;font-size:12px;display:block;margin-bottom:4px;">
-            Previsualització (fila ${estat.filaEst + 1} ressaltada):
-          </label>
-          ${renderPreview(ws, 10, 12, estat.filaEst)}
-        </div>
-        <div style="display:flex;gap:8px;" id="ucFilesAccions"></div>`;
-
-      cont._selFila = (r) => { estat.filaEst = r; renderPas(); };
-      cont._back = () => { estat.pas = 0; renderPas(); };
-      cont._next2 = () => { estat.pas = 2; _analitzarFila(); renderPas(); };
-
-      // Crear botons de fila via DOM per evitar problemes amb caràcters especials i span interior
-      const filesContainer = cont.querySelector('#ucFilesBotons');
-      Array.from({length: Math.min(maxRows, 12)}, (_, i) => i).forEach(r => {
-        let preview = '';
-        for (let c = 0; c < Math.min(range.e.c + 1, 5); c++) {
-          const v = _getCellWs(ws, r, c) || '';
-          if (v && v.length > 1) { preview = (r + 1) + ': ' + v.substring(0, 25) + (v.length > 25 ? '…' : ''); break; }
-        }
-        if (!preview) preview = String(r + 1);
-        const isS = r === estat.filaEst;
-        const btn = document.createElement('button');
-        btn.textContent = preview;
-        btn.style.cssText = `padding:5px 12px;border-radius:8px;border:2px solid ${isS ? '#7c3aed' : '#e5e7eb'};background:${isS ? '#7c3aed' : '#fff'};color:${isS ? '#fff' : '#374151'};font-size:12px;cursor:pointer;font-weight:600;text-align:left;max-width:200px;overflow:hidden;white-space:nowrap;`;
-        btn.addEventListener('click', () => cont._selFila(r));
-        filesContainer.appendChild(btn);
-      });
-
-      // Botons acció via DOM (evitar onclick inline)
-      const accions = cont.querySelector('#ucFilesAccions');
-      const btnBack = document.createElement('button');
-      btnBack.textContent = '← Enrere';
-      btnBack.style.cssText = 'padding:8px 16px;background:#f3f4f6;color:#374151;border:none;border-radius:8px;font-weight:600;cursor:pointer;font-size:13px;font-family:inherit;';
-      btnBack.addEventListener('click', () => cont._back());
-      const btnNext = document.createElement('button');
-      btnNext.textContent = 'Analitzar aquesta fila →';
-      btnNext.style.cssText = 'padding:8px 20px;background:#7c3aed;color:#fff;border:none;border-radius:8px;font-weight:700;cursor:pointer;font-size:13px;font-family:inherit;';
-      btnNext.addEventListener('click', () => cont._next2());
-      accions.appendChild(btnBack);
-      accions.appendChild(btnNext);
-    }
-
-    // ── PAS 2: mostrar ítems detectats i confirmar ──
-    else if (estat.pas === 2) {
-      const ok = estat.items.length > 0;
-      cont.innerHTML = `
-        <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px;">
-          <span style="font-size:20px;">${ok ? '✅' : '⚠️'}</span>
-          <div>
-            <div style="font-weight:700;color:${ok ? '#059669' : '#d97706'};font-size:14px;">
-              ${ok ? estat.items.length + ' ítems detectats a la fila ' + (estat.filaEst + 1) : 'No s\'he pogut detectar ítems en aquesta fila'}
-            </div>
-            <div style="color:#6b7280;font-size:12px;">
-              ${ok ? 'Comprova que els ítems semblen correctes abans de continuar.' : 'Prova una altra fila o un altre full.'}
-            </div>
-          </div>
-        </div>
-        ${ok ? `
-        <div style="margin-bottom:12px;max-height:200px;overflow-y:auto;">
-          ${estat.items.map((it, i) => `
-            <div style="background:#fff;border:1px solid #e5e7eb;border-radius:8px;padding:10px 12px;margin-bottom:6px;">
-              <div style="font-weight:700;color:#7c3aed;font-size:13px;margin-bottom:2px;">Ítem ${i+1}: ${it.titol}</div>
-              <div style="font-size:11px;color:#6b7280;">${it.comentaris.length} comentari${it.comentaris.length !== 1 ? 's' : ''} detectat${it.comentaris.length !== 1 ? 's' : ''}</div>
-              ${it.comentaris.slice(0,2).map(c => `<div style="font-size:11px;color:#374151;margin-top:2px;padding-left:8px;border-left:2px solid #e5e7eb;">• ${c.text.substring(0,80)}${c.text.length>80?'…':''}</div>`).join('')}
-              ${it.comentaris.length > 2 ? `<div style="font-size:11px;color:#9ca3af;padding-left:8px;">… i ${it.comentaris.length - 2} més</div>` : ''}
-            </div>
-          `).join('')}
-        </div>` : ''}
-        <div id="ucPas2Accions" style="display:flex;gap:8px;flex-wrap:wrap;"></div>`;
-
-      cont._back2 = () => { estat.pas = 1; renderPas(); };
-      cont._confirmar = () => {
-        cont.remove();
-        dropZone.style.display = '';
-        onSuccess({ nom: nomFitxer || 'Plantilla importada', descripcio: '', items: estat.items });
-      };
-
-      const accions2 = cont.querySelector('#ucPas2Accions');
-      const btnBack2 = document.createElement('button');
-      btnBack2.textContent = '← Tornar a triar fila';
-      btnBack2.style.cssText = 'padding:8px 16px;background:#f3f4f6;color:#374151;border:none;border-radius:8px;font-weight:600;cursor:pointer;font-size:13px;font-family:inherit;';
-      btnBack2.addEventListener('click', () => cont._back2());
-      accions2.appendChild(btnBack2);
-      if (ok) {
-        const btnConf = document.createElement('button');
-        btnConf.textContent = '✅ Usar aquests ítems';
-        btnConf.style.cssText = 'padding:8px 20px;background:#059669;color:#fff;border:none;border-radius:8px;font-weight:700;cursor:pointer;font-size:13px;font-family:inherit;';
-        btnConf.addEventListener('click', () => cont._confirmar());
-        accions2.appendChild(btnConf);
-      }
-    }
+  // ── Helper: botons de selecció ─────────────────────────────────────────────
+  function renderBotons(container, items, valorActual, onSelect, style = {}) {
+    container.innerHTML = '';
+    items.forEach(item => {
+      const isS = item.val === valorActual;
+      const btn = document.createElement('button');
+      btn.textContent = item.label;
+      btn.title = item.title || '';
+      btn.style.cssText = `padding:5px 11px;border-radius:8px;border:2px solid ${isS ? (style.color || '#7c3aed') : '#e5e7eb'};
+        background:${isS ? (style.color || '#7c3aed') : '#fff'};color:${isS ? '#fff' : '#374151'};
+        font-size:12px;cursor:pointer;font-weight:600;font-family:inherit;white-space:nowrap;
+        overflow:hidden;text-overflow:ellipsis;max-width:180px;`;
+      btn.addEventListener('click', () => onSelect(item.val));
+      container.appendChild(btn);
+    });
   }
 
-  // Analitzar la fila seleccionada per trobar ítems
-  function _analitzarFila() {
+  // ── Helper: etiqueta de pas ────────────────────────────────────────────────
+  function header(icon, titol, subtitol, pas, total) {
+    return `
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;">
+        <div style="display:flex;align-items:center;gap:8px;">
+          <span style="font-size:20px;">${icon}</span>
+          <div>
+            <div style="font-weight:700;color:#7c3aed;font-size:14px;">${titol}</div>
+            <div style="color:#6b7280;font-size:12px;">${subtitol}</div>
+          </div>
+        </div>
+        <div style="font-size:11px;color:#9ca3af;font-weight:600;">Pas ${pas}/${total}</div>
+      </div>`;
+  }
+
+  // ── PAS 0: triar full ──────────────────────────────────────────────────────
+  function renderPas0() {
+    cont.innerHTML = `
+      ${header('📋', 'Quin full conté les plantilles?', 'Selecciona el full de l\'Excel que vols importar.', 1, 4)}
+      <div id="uc_fulls" style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px;"></div>
+      <div style="margin-bottom:12px;">
+        <div style="font-size:12px;font-weight:600;color:#374151;margin-bottom:4px;">Previsualització de <strong>${estat.fullNom}</strong>:</div>
+        <div id="uc_prev0">${renderPreview(wb.Sheets[estat.fullNom])}</div>
+      </div>
+      <div style="display:flex;justify-content:flex-end;">
+        <button id="uc_p0next" style="padding:8px 20px;background:#7c3aed;color:#fff;border:none;border-radius:8px;font-weight:700;cursor:pointer;font-size:13px;font-family:inherit;">Continuar →</button>
+      </div>`;
+
+    const fullsCont = cont.querySelector('#uc_fulls');
+    wb.SheetNames.forEach(s => {
+      const isS = s === estat.fullNom;
+      const btn = document.createElement('button');
+      btn.textContent = s;
+      btn.style.cssText = `padding:6px 14px;border-radius:8px;border:2px solid ${isS ? '#7c3aed' : '#e5e7eb'};background:${isS ? '#7c3aed' : '#fff'};color:${isS ? '#fff' : '#374151'};font-size:13px;cursor:pointer;font-weight:600;font-family:inherit;`;
+      btn.addEventListener('click', () => {
+        estat.fullNom = s;
+        estat.ws = wb.Sheets[s];
+        renderPas0();
+      });
+      fullsCont.appendChild(btn);
+    });
+
+    cont.querySelector('#uc_p0next').addEventListener('click', () => {
+      estat.ws = wb.Sheets[estat.fullNom];
+      // Autodetectar fila
+      _autodetectarFila();
+      renderPas1();
+    });
+  }
+
+  // ── PAS 1: triar fila dels ítems ───────────────────────────────────────────
+  function _autodetectarFila() {
+    const ws = estat.ws;
+    if (!ws || !ws['!ref']) return;
+    const range = XLSX.utils.decode_range(ws['!ref']);
+    const maxRows = Math.min(range.e.r + 1, 20);
+    // Heurística: fila amb més cel·les plenes
+    let millorFila = 0, millorCount = 0;
+    for (let r = 0; r < maxRows; r++) {
+      let count = 0;
+      for (let c = 0; c <= range.e.c; c++) {
+        if (_getCellWs(ws, r, c)) count++;
+      }
+      if (count > millorCount) { millorCount = count; millorFila = r; }
+    }
+    estat.filaItems = millorFila;
+  }
+
+  function renderPas1() {
     const ws = estat.ws;
     const range = XLSX.utils.decode_range(ws['!ref'] || 'A1:Z10');
-    const maxCol = range.e.c + 1;
-    const r = estat.filaEst;
-    const cel = (c) => _getCellWs(ws, r, c) || '';
-    const isHdr = v => !v || _IS_HEADER(v) || /^[xX]$/.test(v.trim()) || v.startsWith('=') || v.includes('#REF');
+    const maxRows = Math.min(range.e.r + 1, 15);
 
-    estat.items = [];
+    cont.innerHTML = `
+      ${header('📍', 'A quina fila estan els ítems?', 'Selecciona la fila que conté els títols dels ítems d\'avaluació i els seus comentaris.', 2, 4)}
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px;flex-wrap:wrap;">
+        <span style="font-size:13px;font-weight:600;color:#374151;">Fila:</span>
+        <div id="uc_files" style="display:flex;gap:5px;flex-wrap:wrap;"></div>
+      </div>
+      <div style="margin-bottom:12px;">
+        <div style="font-size:12px;font-weight:600;color:#374151;margin-bottom:4px;">Previsualització (fila ${estat.filaItems + 1} ressaltada en groc):</div>
+        <div id="uc_prev1">${renderPreview(ws, { maxRows: maxRows, highlightRow: estat.filaItems })}</div>
+      </div>
+      <div style="display:flex;gap:8px;justify-content:space-between;">
+        <button id="uc_p1back" style="padding:8px 16px;background:#f3f4f6;color:#374151;border:none;border-radius:8px;font-weight:600;cursor:pointer;font-size:13px;font-family:inherit;">← Enrere</button>
+        <button id="uc_p1next" style="padding:8px 20px;background:#7c3aed;color:#fff;border:none;border-radius:8px;font-weight:700;cursor:pointer;font-size:13px;font-family:inherit;">Continuar →</button>
+      </div>`;
 
-    // Estratègia A: patró [títol][COMENTARI][ASSOLIMENT][coms...]
-    for (let c = 0; c < maxCol - 2; c++) {
-      const v = cel(c), v1 = cel(c+1), v2 = cel(c+2);
-      if (!v || isHdr(v) || v.length < 3) continue;
-      if (!/COMENTARI/i.test(v1)) continue;
-      if (!/ASSOLIMENT/i.test(v2)) continue;
-      const coms = [];
-      for (let c2 = c+3; c2 < maxCol; c2++) {
-        const t = cel(c2);
-        if (!t || t.length < 5 || isHdr(t)) continue;
-        coms.push({ id: 'com_' + Date.now() + '_' + c2, text: t, nivell: 'general' });
+    const filesCont = cont.querySelector('#uc_files');
+    Array.from({ length: maxRows }, (_, i) => i).forEach(r => {
+      // Preview primer text de la fila
+      let preview = '';
+      for (let c = 0; c <= range.e.c && c < 6; c++) {
+        const v = _getCellWs(ws, r, c) || '';
+        if (v && v.length > 1) { preview = v.substring(0, 20) + (v.length > 20 ? '…' : ''); break; }
       }
-      if (coms.length > 0) {
-        estat.items.push({ id: 'item_' + Date.now() + '_' + c, titol: _capFirst(v),
-          capcelera: `Pel que fa a ${v.toLowerCase()}:`, comentaris: coms });
-      }
-      break; // un ítem per full
+      const btn = document.createElement('button');
+      btn.textContent = `${r + 1}${preview ? ': ' + preview : ''}`;
+      btn.title = `Fila ${r + 1}`;
+      const isS = r === estat.filaItems;
+      btn.style.cssText = `padding:5px 11px;border-radius:8px;border:2px solid ${isS ? '#7c3aed' : '#e5e7eb'};background:${isS ? '#7c3aed' : '#fff'};color:${isS ? '#fff' : '#374151'};font-size:12px;cursor:pointer;font-weight:600;font-family:inherit;max-width:180px;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;`;
+      btn.addEventListener('click', () => { estat.filaItems = r; renderPas1(); });
+      filesCont.appendChild(btn);
+    });
+
+    cont.querySelector('#uc_p1back').addEventListener('click', () => {
+      if (wb.SheetNames.length > 1) renderPas0(); // Si hi ha més d'un full, tornar al pas 0
+    });
+    cont.querySelector('#uc_p1next').addEventListener('click', () => {
+      _autodetectarColumnes();
+      renderPas2();
+    });
+  }
+
+  // ── PAS 2: triar columnes ──────────────────────────────────────────────────
+  function _autodetectarColumnes() {
+    const ws = estat.ws;
+    if (!ws || !ws['!ref']) return;
+    const range = XLSX.utils.decode_range(ws['!ref']);
+    const r = estat.filaItems;
+    // Trobar primera columna no buida
+    let primerCol = 0;
+    for (let c = 0; c <= range.e.c; c++) {
+      if (_getCellWs(ws, r, c)) { primerCol = c; break; }
     }
-
-    // Estratègia B: múltiples ítems a la mateixa fila amb TÍTOL ÍTEM o text+COMENTARI+ASSOLIMENT
-    if (estat.items.length === 0) {
-      let c = 0;
-      while (c < maxCol) {
-        const v = cel(c);
-        if (!v || isHdr(v) || v.length < 3) { c++; continue; }
-        const v1 = cel(c+1), v2 = cel(c+2);
-        if (/COMENTARI/i.test(v1) && /ASSOLIMENT/i.test(v2)) {
-          const coms = [];
-          for (let c2 = c+3; c2 < maxCol; c2++) {
-            const t = cel(c2);
-            if (!t) { c2++; continue; }
-            if (/COMENTARI/i.test(t) && /ASSOLIMENT/i.test(cel(c2+1)||'')) break;
-            if (!isHdr(t) && t.length >= 5)
-              coms.push({ id: 'com_'+Date.now()+'_'+c2, text: t, nivell:'general' });
-            c2++;
-          }
-          if (coms.length > 0)
-            estat.items.push({ id:'item_'+Date.now()+'_'+c, titol:_capFirst(v),
-              capcelera:`Pel que fa a ${v.toLowerCase()}:`, comentaris:coms });
-          c += 3 + coms.length;
-        } else { c++; }
-      }
-    }
-
-    // Estratègia C: simplement recollir tots els textos llargs com a comentaris
-    // d'un únic ítem (fallback final)
-    if (estat.items.length === 0) {
-      const coms = [];
-      let titol = '';
-      for (let c = 0; c < maxCol; c++) {
-        const v = cel(c);
-        if (!v || isHdr(v)) continue;
-        if (!titol && v.length >= 3) { titol = _capFirst(v); continue; }
-        if (v.length >= 5) coms.push({ id:'com_'+Date.now()+'_'+c, text:v, nivell:'general' });
-      }
-      if (titol && coms.length > 0)
-        estat.items.push({ id:'item_0', titol, capcelera:`Pel que fa a ${titol.toLowerCase()}:`, comentaris:coms });
+    // Heurística: si el primer text és curt (< 60 cars) probablement és capçalera
+    const primerVal = _getCellWs(ws, r, primerCol) || '';
+    if (primerVal.length < 60 && primerVal.length > 2) {
+      estat.colCapcelera = primerCol;
+      estat.colPrimerCom = primerCol + 1;
+    } else {
+      estat.colCapcelera = -1;
+      estat.colPrimerCom = primerCol;
     }
   }
 
-  // Iniciar
+  function renderPas2() {
+    const ws = estat.ws;
+    const range = XLSX.utils.decode_range(ws['!ref'] || 'A1:Z10');
+    const maxCols = Math.min(range.e.c + 1, 16);
+    const r = estat.filaItems;
+    const cel = c => _getCellWs(ws, r, c) || '';
+    const colLetter = c => String.fromCharCode(65 + c);
+
+    // Calcular colorCols per la previsualització
+    function calcColorCols() {
+      const cc = {};
+      if (estat.colCapcelera >= 0) cc[estat.colCapcelera] = { bg: '#dbeafe', color: '#1d4ed8' };
+      // Color comentaris: cada grup de numComs cols a partir de colPrimerCom
+      let c = estat.colPrimerCom;
+      const colors = ['#f0fdf4', '#fef9c3', '#fce7f3', '#fef3c7'];
+      let grup = 0;
+      while (c < maxCols) {
+        for (let i = 0; i < estat.numComs && c < maxCols; i++, c++) {
+          cc[c] = { bg: colors[grup % colors.length], color: '#374151' };
+        }
+        // Saltar possible col·lumna de capçalera entre grups
+        if (estat.colCapcelera >= 0 && c < maxCols) {
+          cc[c] = { bg: '#dbeafe', color: '#1d4ed8' };
+          c++;
+        }
+        grup++;
+      }
+      return cc;
+    }
+
+    // Explicació de la previsualització
+    function legendaHTML() {
+      let html = '<div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:8px;font-size:11px;">';
+      if (estat.colCapcelera >= 0)
+        html += '<span style="padding:2px 8px;background:#dbeafe;color:#1d4ed8;border-radius:6px;font-weight:600;">🔵 Capçalera ítem</span>';
+      html += '<span style="padding:2px 8px;background:#f0fdf4;color:#059669;border-radius:6px;font-weight:600;">🟢 Comentaris</span>';
+      html += '</div>';
+      return html;
+    }
+
+    cont.innerHTML = `
+      ${header('🗂️', 'Configura les columnes', 'Indica on estan les capçaleres i els comentaris de cada ítem.', 3, 4)}
+
+      <!-- Capçalera -->
+      <div style="background:#fff;border:1px solid #e5e7eb;border-radius:10px;padding:14px;margin-bottom:12px;">
+        <div style="font-weight:700;color:#374151;font-size:13px;margin-bottom:8px;">📌 Columna de capçalera (text introductori de l'ítem)</div>
+        <div style="font-size:12px;color:#6b7280;margin-bottom:10px;">
+          Ex: <em>"Pel que fa al mètode científic:"</em> — apareixerà al butlletí abans dels comentaris.<br>
+          Si els teus ítems <strong>no tenen capçalera</strong>, selecciona "Sense capçalera".
+        </div>
+        <div id="uc_cols_cap" style="display:flex;gap:6px;flex-wrap:wrap;"></div>
+      </div>
+
+      <!-- Primer comentari -->
+      <div style="background:#fff;border:1px solid #e5e7eb;border-radius:10px;padding:14px;margin-bottom:12px;">
+        <div style="font-weight:700;color:#374151;font-size:13px;margin-bottom:8px;">💬 Columna del primer comentari</div>
+        <div style="font-size:12px;color:#6b7280;margin-bottom:10px;">
+          Els comentaris seguents (2n, 3r, 4t) vénen a les columnes correlatives.<br>
+          Després del grup de comentaris, torna a repetir-se el patró (capçalera + comentaris) per al següent ítem.
+        </div>
+        <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:8px;">
+          <div id="uc_cols_com" style="display:flex;gap:6px;flex-wrap:wrap;"></div>
+        </div>
+        <div style="display:flex;align-items:center;gap:10px;margin-top:8px;">
+          <span style="font-size:13px;font-weight:600;color:#374151;">Comentaris per ítem:</span>
+          <div id="uc_numcoms" style="display:flex;gap:5px;"></div>
+        </div>
+      </div>
+
+      <!-- Previsualització -->
+      <div style="margin-bottom:12px;">
+        <div style="font-size:12px;font-weight:600;color:#374151;margin-bottom:4px;">Previsualització amb la configuració actual:</div>
+        ${legendaHTML()}
+        <div id="uc_prev2">${renderPreview(ws, { maxRows: estat.filaItems + 3, maxCols, highlightRow: estat.filaItems, colorCols: calcColorCols() })}</div>
+        <div id="uc_prev2_items" style="margin-top:8px;"></div>
+      </div>
+
+      <div style="display:flex;gap:8px;justify-content:space-between;">
+        <button id="uc_p2back" style="padding:8px 16px;background:#f3f4f6;color:#374151;border:none;border-radius:8px;font-weight:600;cursor:pointer;font-size:13px;font-family:inherit;">← Enrere</button>
+        <button id="uc_p2next" style="padding:8px 20px;background:#7c3aed;color:#fff;border:none;border-radius:8px;font-weight:700;cursor:pointer;font-size:13px;font-family:inherit;">Analitzar i veure resum →</button>
+      </div>`;
+
+    // Botons capçalera
+    const capCols = [{ val: -1, label: '🚫 Sense capçalera', title: 'Els ítems no tenen text introductori' }];
+    for (let c = 0; c < maxCols; c++) {
+      const v = cel(c);
+      capCols.push({ val: c, label: `Col ${colLetter(c)}${v ? ': ' + v.substring(0, 18) + (v.length > 18 ? '…' : '') : ''}`, title: v || '' });
+    }
+    renderBotons(cont.querySelector('#uc_cols_cap'), capCols, estat.colCapcelera, (val) => {
+      estat.colCapcelera = val;
+      if (val >= 0 && estat.colPrimerCom <= val) estat.colPrimerCom = val + 1;
+      renderPas2();
+    }, { color: '#1d4ed8' });
+
+    // Botons primer comentari
+    const comCols = [];
+    for (let c = 0; c < maxCols; c++) {
+      const v = cel(c);
+      comCols.push({ val: c, label: `Col ${colLetter(c)}${v ? ': ' + v.substring(0, 18) + (v.length > 18 ? '…' : '') : ''}`, title: v || '' });
+    }
+    renderBotons(cont.querySelector('#uc_cols_com'), comCols, estat.colPrimerCom, (val) => {
+      estat.colPrimerCom = val;
+      if (estat.colCapcelera >= val) estat.colCapcelera = -1;
+      renderPas2();
+    }, { color: '#059669' });
+
+    // Botons nombre de comentaris per ítem
+    const numComsCont = cont.querySelector('#uc_numcoms');
+    [2, 3, 4, 5, 6].forEach(n => {
+      const isS = n === estat.numComs;
+      const btn = document.createElement('button');
+      btn.textContent = n;
+      btn.style.cssText = `padding:5px 12px;border-radius:8px;border:2px solid ${isS ? '#7c3aed' : '#e5e7eb'};background:${isS ? '#7c3aed' : '#fff'};color:${isS ? '#fff' : '#374151'};font-size:13px;cursor:pointer;font-weight:700;font-family:inherit;`;
+      btn.addEventListener('click', () => { estat.numComs = n; renderPas2(); });
+      numComsCont.appendChild(btn);
+    });
+
+    // Mini-previsualització dels ítems detectats
+    const itemsDetectats = _parsejarAmbConfig();
+    const prevItems = cont.querySelector('#uc_prev2_items');
+    if (itemsDetectats.length > 0) {
+      prevItems.innerHTML = `<div style="font-size:12px;font-weight:700;color:#059669;margin-bottom:6px;">✅ ${itemsDetectats.length} ítem${itemsDetectats.length !== 1 ? 's' : ''} detectat${itemsDetectats.length !== 1 ? 's' : ''} amb la configuració actual:</div>` +
+        itemsDetectats.slice(0, 3).map(it => `
+          <div style="background:#f0fdf4;border:1px solid #86efac;border-radius:8px;padding:8px 12px;margin-bottom:4px;font-size:12px;">
+            <strong style="color:#059669;">🧩 ${it.titol}</strong>
+            ${it.capcelera ? `<span style="color:#6b7280;margin-left:8px;font-style:italic;">"${it.capcelera.substring(0,50)}${it.capcelera.length>50?'…':''}"</span>` : ''}
+            <span style="color:#9ca3af;margin-left:8px;">${it.comentaris.length} comentari${it.comentaris.length !== 1 ? 's' : ''}</span>
+          </div>`).join('') +
+        (itemsDetectats.length > 3 ? `<div style="font-size:11px;color:#9ca3af;">… i ${itemsDetectats.length - 3} ítem${itemsDetectats.length - 3 !== 1 ? 's' : ''} més</div>` : '');
+    } else {
+      prevItems.innerHTML = `<div style="font-size:12px;color:#dc2626;">⚠️ Cap ítem detectat amb la configuració actual. Prova altres columnes.</div>`;
+    }
+
+    cont.querySelector('#uc_p2back').addEventListener('click', renderPas1);
+    cont.querySelector('#uc_p2next').addEventListener('click', () => {
+      estat.items = _parsejarAmbConfig();
+      renderPas3();
+    });
+  }
+
+  // ── Parseig amb la configuració del professor ──────────────────────────────
+  function _parsejarAmbConfig() {
+    const ws = estat.ws;
+    if (!ws || !ws['!ref']) return [];
+    const range = XLSX.utils.decode_range(ws['!ref']);
+    const r = estat.filaItems;
+    const maxCol = range.e.c + 1;
+    const cel = c => (_getCellWs(ws, r, c) || '').trim();
+    const teCapcelera = estat.colCapcelera >= 0;
+    const pasCol = teCapcelera ? 1 + estat.numComs : estat.numComs; // quantes cols ocupa un ítem
+
+    const items = [];
+    let c = teCapcelera ? estat.colCapcelera : estat.colPrimerCom;
+
+    while (c < maxCol) {
+      // Llegir capçalera (si existeix)
+      let capcelera = '';
+      if (teCapcelera) {
+        capcelera = cel(c);
+        c++;
+      }
+      // Llegir comentaris
+      const coms = [];
+      for (let i = 0; i < estat.numComs && c < maxCol; i++, c++) {
+        const t = cel(c);
+        if (t && t.length >= 3) {
+          coms.push({ id: 'com_' + Date.now() + '_' + c + '_' + i, text: t, nivell: 'general' });
+        }
+      }
+      // Necessitem almenys 1 comentari per crear l'ítem
+      if (coms.length === 0) break;
+
+      // Titol: usem la capçalera (sense els : finals), o el primer comentari truncat
+      let titol = capcelera.replace(/:+\s*$/, '').replace(/^[Pp]el que fa a\s*/i, '').trim();
+      if (!titol) titol = coms[0].text.substring(0, 40) + (coms[0].text.length > 40 ? '…' : '');
+      titol = _capFirst(titol);
+
+      items.push({
+        id: 'item_' + Date.now() + '_' + items.length,
+        titol,
+        capcelera: capcelera || '',
+        comentaris: coms
+      });
+    }
+    return items;
+  }
+
+  // ── PAS 3: resum i confirmació ─────────────────────────────────────────────
+  function renderPas3() {
+    const items = estat.items;
+    const ok = items.length > 0;
+
+    cont.innerHTML = `
+      ${header(ok ? '✅' : '⚠️', ok ? `${items.length} ítem${items.length !== 1 ? 's' : ''} detectat${items.length !== 1 ? 's' : ''}` : 'Cap ítem detectat',
+        ok ? 'Comprova el resum i confirma la importació.' : 'Torna enrere i ajusta les columnes.', 4, 4)}
+      ${ok ? `
+      <div style="max-height:280px;overflow-y:auto;margin-bottom:12px;">
+        ${items.map((it, i) => `
+          <div style="background:#fff;border:1px solid #e5e7eb;border-radius:8px;padding:10px 12px;margin-bottom:6px;">
+            <div style="font-weight:700;color:#7c3aed;font-size:13px;margin-bottom:2px;">Ítem ${i + 1}: ${it.titol}</div>
+            ${it.capcelera ? `<div style="font-size:11px;color:#1d4ed8;margin-bottom:3px;font-style:italic;">"${it.capcelera}"</div>` : ''}
+            <div style="font-size:11px;color:#6b7280;margin-bottom:4px;">${it.comentaris.length} comentari${it.comentaris.length !== 1 ? 's' : ''}</div>
+            ${it.comentaris.slice(0, 2).map(c => `<div style="font-size:11px;color:#374151;padding-left:8px;border-left:2px solid #e5e7eb;margin-bottom:2px;">• ${c.text.substring(0, 90)}${c.text.length > 90 ? '…' : ''}</div>`).join('')}
+            ${it.comentaris.length > 2 ? `<div style="font-size:11px;color:#9ca3af;padding-left:8px;">… i ${it.comentaris.length - 2} comentari${it.comentaris.length - 2 !== 1 ? 's' : ''} més</div>` : ''}
+          </div>`).join('')}
+      </div>` : `<div style="background:#fef2f2;border:1px solid #fca5a5;border-radius:8px;padding:12px;margin-bottom:12px;font-size:13px;color:#dc2626;">
+        Cap ítem detectat. Torna enrere i ajusta la fila o les columnes.
+      </div>`}
+      <div style="display:flex;gap:8px;justify-content:space-between;">
+        <button id="uc_p3back" style="padding:8px 16px;background:#f3f4f6;color:#374151;border:none;border-radius:8px;font-weight:600;cursor:pointer;font-size:13px;font-family:inherit;">← Tornar a columnes</button>
+        ${ok ? `<button id="uc_p3ok" style="padding:8px 20px;background:#059669;color:#fff;border:none;border-radius:8px;font-weight:700;cursor:pointer;font-size:13px;font-family:inherit;">✅ Importar ${items.length} ítem${items.length !== 1 ? 's' : ''}</button>` : ''}
+      </div>`;
+
+    cont.querySelector('#uc_p3back').addEventListener('click', renderPas2);
+    cont.querySelector('#uc_p3ok')?.addEventListener('click', () => {
+      cont.remove();
+      dropZone.style.display = '';
+      onSuccess({ nom: nomFitxer || 'Plantilla importada', descripcio: '', items: estat.items });
+    });
+  }
+
+  // ── Iniciar ────────────────────────────────────────────────────────────────
   estat.ws = wb.Sheets[estat.fullNom];
-  // Si només hi ha un full, saltar directament al pas 1
-  if (wb.SheetNames.length === 1) { estat.pas = 1; }
-  renderPas();
+  if (wb.SheetNames.length === 1) {
+    _autodetectarFila();
+    renderPas1();
+  } else {
+    renderPas0();
+  }
 }
 
 function parsejarFullExcel(ws, nomFitxer) {
