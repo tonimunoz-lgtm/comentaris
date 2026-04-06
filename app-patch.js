@@ -884,19 +884,10 @@ function mostrarBannerActualitzacio(nCentre, nClasse, grupCentreId, vistaKey, up
         border:none;border-radius:8px;font-weight:700;cursor:pointer;font-size:13px;">
         🔄 Actualitzar classe
       </button>
-      <button id="_btnTancarBanner" style="padding:8px 14px;background:rgba(255,255,255,0.3);
-        color:#fff;border:none;border-radius:8px;font-size:13px;cursor:pointer;">
-        Ara no
-      </button>
+
     </div>
   `;
   document.body.appendChild(banner);
-
-  document.getElementById('_btnTancarBanner').addEventListener('click', () => {
-    // Marcar com vist — no tornarà a sortir fins al pròxim canvi de secretaria
-    if (vistaKey && updatedAt) localStorage.setItem(vistaKey, String(updatedAt));
-    banner.remove();
-  });
 
   document.getElementById('_btnActualitzarClasse').addEventListener('click', async () => {
     if (vistaKey && updatedAt) localStorage.setItem(vistaKey, String(updatedAt));
