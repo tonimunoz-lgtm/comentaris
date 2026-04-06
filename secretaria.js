@@ -2927,9 +2927,18 @@ async function carregarDadesButlletins(grups) {
     const materiesGrup = grups.filter(g =>
       g.parentGrupId === grupId && g.tipus !== 'tutoria'
     );
+    // Afegir el grup de tutoria a la llista (si existeix)
+    if (grupTutoria) materiesGrup.push(grupTutoria);
     const materiesAmbEnviament = matUniques.map(m=>m.nom);
+    // La tutoria s'ha enviat si algun alumne té comentariTutoria no buit
+    const tutoriaEnviada = grupTutoria
+      ? Object.values(alumnesAmbDades).some(a => a.comentariTutoria)
+      : false;
     const materiesSenseEnviament = materiesGrup
-      .filter(g => !materiesAmbEnviament.includes(g.nom))
+      .filter(g => {
+        if (g.tipus === 'tutoria') return !tutoriaEnviada;
+        return !materiesAmbEnviament.includes(g.nom);
+      })
       .map(g => g.nom);
 
     resDiv.innerHTML = `
@@ -2941,12 +2950,15 @@ async function carregarDadesButlletins(grups) {
         </div>
         <div style="display:flex;gap:6px;flex-wrap:wrap;">
           ${materiesGrup.map(g => {
-            const enviada = materiesAmbEnviament.includes(g.nom);
+            const esTutoria = g.tipus === 'tutoria';
+            const enviada = esTutoria ? tutoriaEnviada : materiesAmbEnviament.includes(g.nom);
+            const nomDisplay = esTutoria ? '🧑‍🏫 ' + esH(g.nom) : esH(g.nom);
             return `<span style="padding:4px 10px;border-radius:7px;font-size:11px;font-weight:600;
               background:${enviada?'#f0fdf4':'#fef2f2'};
               color:${enviada?'#059669':'#dc2626'};
-              border:1px solid ${enviada?'#bbf7d0':'#fca5a5'};">
-              ${enviada?'✅':'⚠️'} ${esH(g.nom)}
+              border:1px solid ${enviada?'#bbf7d0':'#fca5a5'};"
+              ${esTutoria?'title="Enviament de text lliure (comentari de tutoria)"':''}">
+              ${enviada?'✅':'⚠️'} ${nomDisplay}
             </span>`;
           }).join('')}
         </div>
