@@ -79,6 +79,7 @@ async function renderFirmes(body) {
     const cfg = cfgSnap?.data() || {};
     const tutorsMap   = cfg.tutors   || {};   // { grupId: { nom, cognom1, cognom2, firmaBase64 } }
     const directorData = cfg.director || {};  // { nom, cognom1, cognom2, firmaBase64, segellBase64 }
+    const logosData    = cfg.logos    || {};  // { generalitat: base64, institut: base64 }
 
     const grups = grupsSnap.docs.map(d => ({ id: d.id, ...d.data() }))
       .sort((a,b) =>
@@ -295,6 +296,62 @@ async function renderFirmes(body) {
             }).join('')
         }
       </div>
+
+      <!-- ─── SECCIÓ LOGOS ─── -->
+      <div style="background:#f9fafb;border:1.5px solid #e5e7eb;border-radius:14px;padding:20px;margin-bottom:24px;">
+        <div style="font-size:14px;font-weight:700;color:#1e1b4b;margin-bottom:4px;">🖼️ Logos de l'encapçalament</div>
+        <p style="font-size:12px;color:#6b7280;margin-bottom:16px;">
+          Aquests logos apareixeran a l'encapçalament dels butlletins i de l'autodiagnosi de l'alumne.
+          Recomanem imatges en format PNG amb fons transparent o blanc net.
+        </p>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px;">
+
+          <!-- Logo Generalitat (esquerra) -->
+          <div style="border:1.5px dashed #c4b5fd;border-radius:10px;padding:14px;text-align:center;background:#faf5ff;">
+            <div style="font-size:12px;font-weight:600;color:#4c1d95;margin-bottom:8px;">🏛️ Logo Generalitat <span style="font-weight:400;color:#9ca3af;">(esquerra)</span></div>
+            ${logosData.generalitat
+              ? `<img id="prevLogoGen" src="${logosData.generalitat}"
+                   style="max-height:60px;max-width:100%;object-fit:contain;display:block;margin:0 auto 8px;">`
+              : `<div id="prevLogoGen" style="height:55px;display:flex;align-items:center;justify-content:center;color:#9ca3af;font-size:12px;">Cap imatge</div>`
+            }
+            <label style="display:inline-block;padding:6px 14px;background:#7c3aed;color:#fff;border-radius:7px;
+                          font-size:12px;font-weight:600;cursor:pointer;margin-top:4px;">
+              📂 Triar imatge
+              <input id="inpLogoGen" type="file" accept="image/*" style="display:none;">
+            </label>
+            ${logosData.generalitat
+              ? `<button id="btnEsborrarLogoGen" style="display:block;margin:6px auto 0;padding:4px 12px;background:#fee2e2;
+                   color:#dc2626;border:none;border-radius:6px;font-size:11px;cursor:pointer;">🗑 Esborrar</button>`
+              : ''}
+          </div>
+
+          <!-- Logo Institut (dreta) -->
+          <div style="border:1.5px dashed #c4b5fd;border-radius:10px;padding:14px;text-align:center;background:#faf5ff;">
+            <div style="font-size:12px;font-weight:600;color:#4c1d95;margin-bottom:8px;">🏫 Logo Institut <span style="font-weight:400;color:#9ca3af;">(dreta)</span></div>
+            ${logosData.institut
+              ? `<img id="prevLogoIns" src="${logosData.institut}"
+                   style="max-height:60px;max-width:100%;object-fit:contain;display:block;margin:0 auto 8px;">`
+              : `<div id="prevLogoIns" style="height:55px;display:flex;align-items:center;justify-content:center;color:#9ca3af;font-size:12px;">Cap imatge</div>`
+            }
+            <label style="display:inline-block;padding:6px 14px;background:#7c3aed;color:#fff;border-radius:7px;
+                          font-size:12px;font-weight:600;cursor:pointer;margin-top:4px;">
+              📂 Triar imatge
+              <input id="inpLogoIns" type="file" accept="image/*" style="display:none;">
+            </label>
+            ${logosData.institut
+              ? `<button id="btnEsborrarLogoIns" style="display:block;margin:6px auto 0;padding:4px 12px;background:#fee2e2;
+                   color:#dc2626;border:none;border-radius:6px;font-size:11px;cursor:pointer;">🗑 Esborrar</button>`
+              : ''}
+          </div>
+        </div>
+
+        <div style="display:flex;justify-content:flex-end;">
+          <button id="btnGuardarLogos"
+            style="padding:9px 20px;background:#4c1d95;color:#fff;border:none;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;">
+            💾 Guardar logos
+          </button>
+        </div>
+      </div>
     `;
 
     // ── Events director ──
@@ -309,6 +366,9 @@ async function renderFirmes(body) {
 
     // ── Events firmes de tutors ──
     setupEventsFirmesTutors();
+
+    // ── Events logos ──
+    setupEventsLogos(logosData);
 
   } catch(e) {
     body.innerHTML = `<div style="color:#ef4444;padding:20px;">❌ Error: ${e.message}</div>`;
@@ -691,6 +751,112 @@ function aplicarExcelTutors(rows, grups) {
       : '⚠️ Cap grup coincident trobat. Revisa la columna de grup.',
     4000
   );
+}
+
+/* ══════════════════════════════════════════════════════
+   EVENTS I GUARDAT LOGOS
+══════════════════════════════════════════════════════ */
+function setupEventsLogos(logosData) {
+  // Logo Generalitat — triar imatge
+  document.getElementById('inpLogoGen')?.addEventListener('change', e => {
+    const f = e.target.files[0];
+    if (!f) return;
+    imgToBase64(f, b64 => {
+      window._firmes_logoGenB64 = b64;
+      const prev = document.getElementById('prevLogoGen');
+      if (prev) {
+        prev.outerHTML = `<img id="prevLogoGen" src="${b64}"
+          style="max-height:60px;max-width:100%;object-fit:contain;display:block;margin:0 auto 8px;">`;
+      }
+      if (!document.getElementById('btnEsborrarLogoGen')) {
+        const btn = document.createElement('button');
+        btn.id = 'btnEsborrarLogoGen';
+        btn.style.cssText = 'display:block;margin:6px auto 0;padding:4px 12px;background:#fee2e2;color:#dc2626;border:none;border-radius:6px;font-size:11px;cursor:pointer;';
+        btn.textContent = '🗑 Esborrar';
+        document.getElementById('inpLogoGen')?.closest('div[style]')?.appendChild(btn);
+        _setupEsborrarLogo('btnEsborrarLogoGen', 'prevLogoGen', '_firmes_logoGenB64');
+      }
+    });
+  });
+
+  // Logo Institut — triar imatge
+  document.getElementById('inpLogoIns')?.addEventListener('change', e => {
+    const f = e.target.files[0];
+    if (!f) return;
+    imgToBase64(f, b64 => {
+      window._firmes_logoInsB64 = b64;
+      const prev = document.getElementById('prevLogoIns');
+      if (prev) {
+        prev.outerHTML = `<img id="prevLogoIns" src="${b64}"
+          style="max-height:60px;max-width:100%;object-fit:contain;display:block;margin:0 auto 8px;">`;
+      }
+      if (!document.getElementById('btnEsborrarLogoIns')) {
+        const btn = document.createElement('button');
+        btn.id = 'btnEsborrarLogoIns';
+        btn.style.cssText = 'display:block;margin:6px auto 0;padding:4px 12px;background:#fee2e2;color:#dc2626;border:none;border-radius:6px;font-size:11px;cursor:pointer;';
+        btn.textContent = '🗑 Esborrar';
+        document.getElementById('inpLogoIns')?.closest('div[style]')?.appendChild(btn);
+        _setupEsborrarLogo('btnEsborrarLogoIns', 'prevLogoIns', '_firmes_logoInsB64');
+      }
+    });
+  });
+
+  // Botons esborrar existents (si ja hi havia logos guardats)
+  if (document.getElementById('btnEsborrarLogoGen')) {
+    _setupEsborrarLogo('btnEsborrarLogoGen', 'prevLogoGen', '_firmes_logoGenB64');
+  }
+  if (document.getElementById('btnEsborrarLogoIns')) {
+    _setupEsborrarLogo('btnEsborrarLogoIns', 'prevLogoIns', '_firmes_logoInsB64');
+  }
+
+  // Guardar logos
+  document.getElementById('btnGuardarLogos')?.addEventListener('click', () => guardarLogos(logosData));
+}
+
+function _setupEsborrarLogo(btnId, prevId, varName) {
+  const btn = document.getElementById(btnId);
+  if (!btn) return;
+  btn.addEventListener('click', () => {
+    window[varName] = '__ESBORRAR__';
+    const prev = document.getElementById(prevId);
+    if (prev) {
+      prev.outerHTML = `<div id="${prevId}" style="height:55px;display:flex;align-items:center;
+        justify-content:center;color:#9ca3af;font-size:12px;">Cap imatge</div>`;
+    }
+    btn.remove();
+  }, { once: true });
+}
+
+async function guardarLogos(logosData) {
+  const btn = document.getElementById('btnGuardarLogos');
+  if (btn) { btn.disabled = true; btn.textContent = '⏳ Guardant...'; }
+
+  try {
+    const cfgSnap = await window.db.doc(FIRMES_CONFIG_DOC).get().catch(() => null);
+    const cfg = cfgSnap?.data() || {};
+    const logosActuals = cfg.logos || {};
+
+    const genB64 = window._firmes_logoGenB64;
+    const insB64 = window._firmes_logoInsB64;
+
+    const logos = {
+      generalitat: genB64 === '__ESBORRAR__' ? '' : (genB64 || logosActuals.generalitat || ''),
+      institut:    insB64 === '__ESBORRAR__' ? '' : (insB64 || logosActuals.institut    || ''),
+    };
+
+    await window.db.doc(FIRMES_CONFIG_DOC).set({ logos }, { merge: true });
+
+    window._firmes_logoGenB64 = null;
+    window._firmes_logoInsB64 = null;
+    _firmesCache   = null;
+    _firmesCacheTs = 0;
+
+    window.mostrarToast('✅ Logos guardats correctament', 3000);
+  } catch(e) {
+    window.mostrarToast('❌ Error guardant logos: ' + e.message, 4000);
+    console.error('guardarLogos:', e);
+  }
+  if (btn) { btn.disabled = false; btn.textContent = '💾 Guardar logos'; }
 }
 
 /* ══════════════════════════════════════════════════════
