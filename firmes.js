@@ -129,7 +129,7 @@ async function renderFirmes(body) {
             <div style="font-size:12px;font-weight:600;color:#4c1d95;margin-bottom:8px;">✏️ Imatge de la firma</div>
             ${directorData.firmaBase64
               ? `<img id="prevFirma" src="${directorData.firmaBase64}"
-                   style="max-height:70px;max-width:100%;object-fit:contain;display:block;margin:0 auto 8px;">`
+                   style="max-height:70px;max-width:100%;object-fit:contain;display:block;margin:0 auto 8px;mix-blend-mode:multiply;">`
               : `<div id="prevFirma" style="height:60px;display:flex;align-items:center;justify-content:center;color:#9ca3af;font-size:12px;">
                    Cap imatge
                  </div>`
@@ -150,7 +150,7 @@ async function renderFirmes(body) {
             <div style="font-size:12px;font-weight:600;color:#4c1d95;margin-bottom:8px;">🔵 Segell del centre</div>
             ${directorData.segellBase64
               ? `<img id="prevSegell" src="${directorData.segellBase64}"
-                   style="max-height:70px;max-width:100%;object-fit:contain;display:block;margin:0 auto 8px;">`
+                   style="max-height:70px;max-width:100%;object-fit:contain;display:block;margin:0 auto 8px;mix-blend-mode:multiply;">`
               : `<div id="prevSegell" style="height:60px;display:flex;align-items:center;justify-content:center;color:#9ca3af;font-size:12px;">
                    Cap imatge
                  </div>`
@@ -259,7 +259,7 @@ async function renderFirmes(body) {
                             <div style="font-size:11px;font-weight:600;color:#4c1d95;margin-bottom:6px;">✏️ Firma del tutor/a</div>
                             ${teFirma
                               ? `<img class="prev-firma-tutor" src="${t.firmaBase64}"
-                                   style="max-height:60px;max-width:100%;object-fit:contain;display:block;margin:0 auto 6px;">`
+                                   style="max-height:60px;max-width:100%;object-fit:contain;display:block;margin:0 auto 6px;mix-blend-mode:multiply;">`
                               : `<div class="prev-firma-tutor" style="height:50px;display:flex;align-items:center;
                                    justify-content:center;color:#9ca3af;font-size:11px;">Cap imatge</div>`
                             }
@@ -329,7 +329,7 @@ function setupEventsDirectorFirmes(directorData) {
       const prev = document.getElementById('prevFirma');
       if (prev) {
         prev.outerHTML = `<img id="prevFirma" src="${b64}"
-          style="max-height:70px;max-width:100%;object-fit:contain;display:block;margin:0 auto 8px;">`;
+          style="max-height:70px;max-width:100%;object-fit:contain;display:block;margin:0 auto 8px;mix-blend-mode:multiply;">`;
       }
     });
   });
@@ -343,7 +343,7 @@ function setupEventsDirectorFirmes(directorData) {
       const prev = document.getElementById('prevSegell');
       if (prev) {
         prev.outerHTML = `<img id="prevSegell" src="${b64}"
-          style="max-height:70px;max-width:100%;object-fit:contain;display:block;margin:0 auto 8px;">`;
+          style="max-height:70px;max-width:100%;object-fit:contain;display:block;margin:0 auto 8px;mix-blend-mode:multiply;">`;
       }
     });
   });
@@ -438,7 +438,7 @@ function setupEventsFirmesTutors() {
         const prev = zona?.querySelector('.prev-firma-tutor');
         if (prev) {
           prev.outerHTML = `<img class="prev-firma-tutor" src="${b64}"
-            style="max-height:60px;max-width:100%;object-fit:contain;display:block;margin:0 auto 6px;">`;
+            style="max-height:60px;max-width:100%;object-fit:contain;display:block;margin:0 auto 6px;mix-blend-mode:multiply;">`;
         }
 
         // Afegir botó esborrar si no existia
