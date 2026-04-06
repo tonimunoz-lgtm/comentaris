@@ -517,15 +517,22 @@ async function generarPDFAutodiagnosi(alumne, grupNom, grupNivell, curs, trimest
   const trimestreText = trimestre || r.periodeNom || '1r butlletí d\'avaluació';
   const grupDisplay = grupNom || '';  // grupNom ja porta l'etiqueta completa (ex: "1r ESO A")
 
-  // ── Llegir logos de Firestore ──
+  // ── Llegir logos i textos de Firestore ──
   let logoGeneralitatBase64 = '';
   let logoInstitutBase64 = '';
+  let textLinia1 = 'Generalitat de Catalunya';
+  let textLinia2 = "Departament d'ensenyament";
+  let textLinia3 = 'INS Matadepera';
   try {
     if (typeof window.carregarFirmesConfig === 'function') {
       const cfg = await window.carregarFirmesConfig();
       const logos = cfg.logos || {};
       logoGeneralitatBase64 = logos.generalitat || '';
       logoInstitutBase64    = logos.institut     || '';
+      const textos = cfg.textos || {};
+      textLinia1 = textos.linia1 || 'Generalitat de Catalunya';
+      textLinia2 = textos.linia2 || "Departament d'ensenyament";
+      textLinia3 = textos.linia3 || 'INS Matadepera';
     }
   } catch(e) { /* ignorar si firmes.js no disponible */ }
 
@@ -657,9 +664,9 @@ async function generarPDFAutodiagnosi(alumne, grupNom, grupNivell, curs, trimest
     <div class="cap-esquerra">
       <img src="${logoGeneralitatBase64}" alt="Generalitat de Catalunya" style="height:52px;width:auto;display:block;margin-bottom:4px;">
       <div style="font-size:9pt;color:#333;line-height:1.4;">
-        <div>Generalitat de Catalunya</div>
-        <div>Departament d'ensenyament</div>
-        <div><strong>INS Matadepera</strong></div>
+        <div>${adEsH(textLinia1)}</div>
+        <div>${adEsH(textLinia2)}</div>
+        <div><strong>${adEsH(textLinia3)}</strong></div>
       </div>
     </div>
     <div class="cap-titol">
