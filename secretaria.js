@@ -3157,7 +3157,7 @@ async function generarButlleti(alumne, curs, grupNom, trimestre, grupId, nivellN
 <body>
   <div class="cap">
     <div class="cap-esquerra">
-      <img src="${logoGeneralitatBase64 || \'data:image/svg+xml,<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"40\" height=\"50\"/>\' }" alt="Generalitat de Catalunya" style="height:50px;width:auto;display:block;">
+      <img src="${logoGeneralitatBase64}" alt="Generalitat de Catalunya" style="height:50px;width:auto;display:block;">
       <div style="font-size:8.5pt;color:#333;line-height:1.4;">
         <div>Generalitat de Catalunya</div>
         <div>Departament d'Educació</div>
@@ -3169,7 +3169,7 @@ async function generarButlleti(alumne, curs, grupNom, trimestre, grupId, nivellN
       <div class="sub">${esH(curs)} · ${esH(grupNom)}${trimestre ? ' · ' + esH(trimestre) : ''}</div>
     </div>
     <div class="cap-logo">
-      <img src="${logoInstitutBase64 || \'data:image/svg+xml,<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"40\" height=\"50\"/>\' }" alt="Institut" style="height:50px;width:auto;display:block;margin-left:auto;">
+      <img src="${logoInstitutBase64}" alt="Institut" style="height:50px;width:auto;display:block;margin-left:auto;">
     </div>
   </div>
 
