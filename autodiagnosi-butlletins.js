@@ -655,7 +655,7 @@ async function generarPDFAutodiagnosi(alumne, grupNom, grupNivell, curs, trimest
   <!-- CAPÇALERA -->
   <div class="cap">
     <div class="cap-esquerra">
-      <img src="${logoGeneralitatBase64 || \'\'}" alt="Generalitat de Catalunya" style="height:52px;width:auto;display:block;margin-bottom:4px;"${logoGeneralitatBase64 ? \'\' : \' hidden\'}>
+      <img src="${logoGeneralitatBase64}" alt="Generalitat de Catalunya" style="height:52px;width:auto;display:block;margin-bottom:4px;">
       <div style="font-size:9pt;color:#333;line-height:1.4;">
         <div>Generalitat de Catalunya</div>
         <div>Departament d'ensenyament</div>
@@ -666,7 +666,7 @@ async function generarPDFAutodiagnosi(alumne, grupNom, grupNivell, curs, trimest
       ${adEsH(trimestreText)} · Curs ${adEsH(curs)}
     </div>
     <div class="cap-logo">
-      <img src="${logoInstitutBase64 || \'\'}" alt="Institut" style="height:52px;width:auto;display:block;margin-left:auto;"${logoInstitutBase64 ? \'\' : \' hidden\'}>
+      <img src="${logoInstitutBase64}" alt="Institut" style="height:52px;width:auto;display:block;margin-left:auto;">
     </div>
   </div>
 
