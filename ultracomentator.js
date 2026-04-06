@@ -931,7 +931,7 @@ async function carregarIUsarPlantilla(codi, plantillaData = null) {
     }).join('');
 
     return `
-      <div style="background:#fff;border-radius:12px;border:1px solid #e5e7eb;overflow:hidden;margin-bottom:10px;">
+      <div data-uc-item="${item.id}" style="background:#fff;border-radius:12px;border:1px solid #e5e7eb;overflow:hidden;margin-bottom:10px;">
         <!-- Capçalera ítem -->
         <div style="
           padding:12px 16px;background:linear-gradient(135deg,#f5f3ff,#ede9fe);
@@ -1186,6 +1186,19 @@ async function carregarIUsarPlantilla(codi, plantillaData = null) {
       const itemId = chk.dataset.itemId;
       const assolAuto = chk.dataset.assolAuto;  // data-assol-auto → dataset.assolAuto
       const sel = modal.querySelector(`.ucAssolimentSel[data-item-id="${itemId}"]`);
+
+      // ── Scroll automàtic al següent ítem (sempre que es marqui) ──
+      if (chk.checked) {
+        const itemsAll = [...modal.querySelectorAll('[data-uc-item]')];
+        const idxActual = itemsAll.findIndex(el => el.dataset.ucItem === itemId);
+        if (idxActual !== -1 && idxActual < itemsAll.length - 1) {
+          const nextItem = itemsAll[idxActual + 1];
+          setTimeout(() => {
+            nextItem.scrollIntoView({ behavior: 'smooth', block: 'start' });
+          }, 120);
+        }
+      }
+
       if (!sel || !assolAuto) return;
 
       if (chk.checked) {
