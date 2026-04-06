@@ -3097,6 +3097,10 @@ async function generarButlleti(alumne, curs, grupNom, trimestre, grupId, nivellN
   let segellBase64 = '';
   let logoGeneralitatBase64 = '';
   let logoInstitutBase64 = '';
+  let textLinia1 = 'Generalitat de Catalunya';
+  let textLinia2 = "Departament d'Educació";
+  let textLinia3 = 'INS Matadepera';
+  let textFaltes = "podeu consultar-les a l'aplicació Acàcia.";
 
   try {
     if (typeof window.carregarFirmesConfig === 'function') {
@@ -3114,6 +3118,11 @@ async function generarButlleti(alumne, curs, grupNom, trimestre, grupId, nivellN
       const logos = cfg.logos || {};
       logoGeneralitatBase64 = logos.generalitat || '';
       logoInstitutBase64    = logos.institut     || '';
+      const textos = cfg.textos || {};
+      textLinia1   = textos.linia1           || 'Generalitat de Catalunya';
+      textLinia2   = textos.linia2           || "Departament d'Educació";
+      textLinia3   = textos.linia3           || 'INS Matadepera';
+      textFaltes   = textos.faltesAssistencia || "podeu consultar-les a l'aplicació Acàcia.";
     }
   } catch(e) { /* firmes.js potser no carregat, deixem els camps buits */ }
 
@@ -3159,9 +3168,9 @@ async function generarButlleti(alumne, curs, grupNom, trimestre, grupId, nivellN
     <div class="cap-esquerra">
       <img src="${logoGeneralitatBase64}" alt="Generalitat de Catalunya" style="height:50px;width:auto;display:block;">
       <div style="font-size:8.5pt;color:#333;line-height:1.4;">
-        <div>Generalitat de Catalunya</div>
-        <div>Departament d'Educació</div>
-        <div><strong>INS Matadepera</strong></div>
+        <div>${esH(textLinia1)}</div>
+        <div>${esH(textLinia2)}</div>
+        <div><strong>${esH(textLinia3)}</strong></div>
       </div>
     </div>
     <div class="cap-titol">
@@ -3241,7 +3250,7 @@ async function generarButlleti(alumne, curs, grupNom, trimestre, grupId, nivellN
   </div>
 
   <div style="margin-bottom:20px;font-size:10pt;">
-    <strong>Faltes d'assistència:</strong> podeu consultar-les a l'aplicació Acàcia.
+    <strong>Faltes d'assistència:</strong> ${esH(textFaltes)}
   </div>
 
   <div class="peu">
@@ -3257,8 +3266,8 @@ async function generarButlleti(alumne, curs, grupNom, trimestre, grupId, nivellN
     <!-- Director/a (amb firma i segell superposat) -->
     <div class="firma-box">
       <div class="firma-img-area" style="position:relative;width:130px;height:60px;">
-        ${firmaBase64  ? `<img src="${firmaBase64}"  style="position:absolute;bottom:0;left:0;max-height:55px;max-width:110px;object-fit:contain;">` : ''}
-        ${segellBase64 ? `<img src="${segellBase64}" style="position:absolute;bottom:-6px;right:-10px;max-height:62px;max-width:70px;object-fit:contain;opacity:0.88;">` : ''}
+        ${firmaBase64  ? `<img src="${firmaBase64}"  style="position:absolute;bottom:0;left:50%;transform:translateX(-50%);max-height:55px;max-width:110px;object-fit:contain;">` : ''}
+        ${segellBase64 ? `<img src="${segellBase64}" style="position:absolute;bottom:-6px;right:0px;max-height:62px;max-width:70px;object-fit:contain;opacity:0.88;">` : ''}
       </div>
       <div class="firma-linia">Director/a</div>
       ${directorNomComplet ? `<div class="firma-nom">${esH(directorNomComplet)}</div>` : ''}
