@@ -3091,6 +3091,7 @@ async function generarButlleti(alumne, curs, grupNom, trimestre, grupId, nivellN
 
   // ── Llegir firmes (tutor + director) ──
   let tutorNomComplet = '';
+  let tutorFirmaBase64 = '';
   let directorNomComplet = '';
   let firmaBase64 = '';
   let segellBase64 = '';
@@ -3100,8 +3101,9 @@ async function generarButlleti(alumne, curs, grupNom, trimestre, grupId, nivellN
       const cfg = await window.carregarFirmesConfig();
       const tutorData = grupId ? (cfg.tutors || {})[grupId] : null;
       if (tutorData) {
-        tutorNomComplet = [tutorData.nom, tutorData.cognom1, tutorData.cognom2]
+        tutorNomComplet   = [tutorData.nom, tutorData.cognom1, tutorData.cognom2]
           .filter(Boolean).join(' ');
+        tutorFirmaBase64  = tutorData.firmaBase64 || '';
       }
       const dir = cfg.director || {};
       directorNomComplet = [dir.nom, dir.cognom1, dir.cognom2].filter(Boolean).join(' ');
@@ -3240,7 +3242,9 @@ async function generarButlleti(alumne, curs, grupNom, trimestre, grupId, nivellN
   <div class="peu">
     <!-- Tutor/a -->
     <div class="firma-box">
-      <div class="firma-img-area"></div>
+      <div class="firma-img-area">
+        ${tutorFirmaBase64 ? `<img src="${tutorFirmaBase64}" style="max-height:55px;max-width:90px;object-fit:contain;">` : ''}
+      </div>
       <div class="firma-linia">Tutor/a</div>
       ${tutorNomComplet ? `<div class="firma-nom">${esH(tutorNomComplet)}</div>` : ''}
     </div>
