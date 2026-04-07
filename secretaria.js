@@ -3390,8 +3390,13 @@ async function renderQuadreDades(body) {
 
   document.getElementById('qdCarregar').addEventListener('click', () => carregarQuadre(grups, periodes));
 
-  // Auto-carregar
-  if (cursos.length > 0) setTimeout(() => document.getElementById('qdCarregar')?.click(), 100);
+  // Mostrar missatge inicial d'espera (sense fer cap consulta)
+  document.getElementById('resultatsQD').innerHTML = `
+    <div style="text-align:center;padding:48px 20px;color:#9ca3af;">
+      <div style="font-size:40px;margin-bottom:12px;">📊</div>
+      <div style="font-size:15px;font-weight:600;color:#6b7280;margin-bottom:6px;">Selecciona els filtres i clica "Carregar"</div>
+      <div style="font-size:13px;">Es mostraran les dades d'avaluació per grup, matèria i alumne.</div>
+    </div>`;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -3408,10 +3413,27 @@ async function carregarQuadre(grups, periodes) {
 
   if (!curs) { window.mostrarToast('⚠️ Tria un curs', 2000); return; }
 
-  res.innerHTML = `<div style="padding:30px;text-align:center;color:#9ca3af;">
-    <div style="font-size:24px;margin-bottom:8px;">⏳</div>Carregant dades d'avaluació...
-  </div>`;
   resumEl.style.display = 'none';
+
+  // ── Barra de progrés ──────────────────────────────────────────────────────
+  res.innerHTML = `
+    <div id="_qdProgres" style="background:#ede9fe;border:1.5px solid #c4b5fd;border-radius:10px;
+      padding:14px 18px;margin-bottom:12px;">
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px;">
+        <span style="font-size:18px;">⏳</span>
+        <span id="_qdProgresText" style="font-size:13px;font-weight:600;color:#4c1d95;">Preparant consulta...</span>
+      </div>
+      <div style="background:#ddd6fe;border-radius:99px;height:8px;overflow:hidden;">
+        <div id="_qdProgresBar" style="background:#7c3aed;height:100%;width:0%;transition:width .4s;border-radius:99px;"></div>
+      </div>
+    </div>`;
+
+  const setProgres = (txt, pct) => {
+    const el = document.getElementById('_qdProgresText');
+    const bar = document.getElementById('_qdProgresBar');
+    if (el) el.textContent = txt;
+    if (bar) bar.style.width = pct + '%';
+  };
 
   // ── 1. Grups classe filtrats ──────────────────────────────────────────────
   const grupesClasse = grups.filter(g =>
@@ -3426,6 +3448,8 @@ async function carregarQuadre(grups, periodes) {
     return;
   }
 
+  setProgres(`${grupesClasse.length} grup${grupesClasse.length!==1?'s':''} trobats. Carregant professors...`, 5);
+
   // ── 2. Carregar professors (email → nom) ──────────────────────────────────
   const profsMap = {}; // email → { nom, email }
   try {
@@ -3435,6 +3459,8 @@ async function carregarQuadre(grups, periodes) {
       if (data.email) profsMap[data.email] = { nom: data.nom || data.email.split('@')[0], email: data.email };
     });
   } catch(e) {}
+
+  setProgres('Carregant classes i professors assignats...', 15);
 
   // ── 3. Carregar classes (relació grupCentreId → professor) ────────────────
   const classePerGrup = {}; // grupId → { nom, email }
@@ -3453,7 +3479,10 @@ async function carregarQuadre(grups, periodes) {
   let totalMateries = 0, totalAlumnes = 0, totalEnviats = 0, totalPendents = 0;
   const blocksHTML = [];
 
-  for (const gc of grupesClasse) {
+  for (let gi = 0; gi < grupesClasse.length; gi++) {
+    const gc = grupesClasse[gi];
+    const pctBase = 20 + Math.round((gi / grupesClasse.length) * 70);
+    setProgres(`Consultant grup ${gi+1}/${grupesClasse.length}: ${gc.nom}...`, pctBase);
     const alumnesCentre = (gc.alumnes || []).sort((a,b)=>(a.cognoms||'').localeCompare(b.cognoms||'','ca'));
     const materies = grups.filter(g => g.parentGrupId === gc.id && g.tipus !== 'tutoria')
       .sort((a,b)=>(a.ordre||99)-(b.ordre||99));
@@ -3660,6 +3689,8 @@ async function carregarQuadre(grups, periodes) {
     `);
   }
 
+  setProgres('Generant resultat...', 95);
+
   // ── Resum global ──────────────────────────────────────────────────────────
   const pctGlobal = (totalEnviats + totalPendents) > 0
     ? Math.round((totalEnviats / (totalEnviats + totalPendents)) * 100) : 0;
@@ -3678,6 +3709,7 @@ async function carregarQuadre(grups, periodes) {
     </div>`;
   resumEl.style.display = 'block';
 
+  document.getElementById('_qdProgres')?.remove();
   res.innerHTML = blocksHTML.join('');
 
   // ── Events botó "Avisar professor" ────────────────────────────────────────
