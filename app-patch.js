@@ -607,8 +607,8 @@ window.actualitzarUIRols = function() {
 
   const esAdmin = rols.includes('admin') || rols.includes('superadmin') || !!window._isSuperAdmin;
 
-  // Secretaria: rol explícit o admin
-  if (esAdmin || rols.includes('secretaria'))
+  // Secretaria: rol explícit o admin. Revisor: accés limitat només al Quadre de dades
+  if (esAdmin || rols.includes('secretaria') || rols.includes('revisor'))
     window.injectarBotoSecretaria?.();
 
   // Tutoria: tutor o pedagog (o admin). Secretaria NO.
