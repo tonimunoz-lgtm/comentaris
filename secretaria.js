@@ -82,10 +82,11 @@ window.obrirPanellSecretaria = obrirPanellSecretaria;
 let _secretariaInjectTimer = null; // guard anti-race-condition
 window.injectarBotoSecretaria = function() {
   if (document.getElementById('btnSecretariaSidebar')) return;
-  // Guard de rol intern: NOMÉS secretaria, admin, superadmin
+  // Guard de rol intern: secretaria, admin, superadmin i revisor (accés limitat)
   const rols = window._userRols || [];
   const esAdmin = rols.includes('admin') || rols.includes('superadmin') || !!window._isSuperAdmin;
-  if (!esAdmin && !rols.includes('secretaria')) return;
+  const esRevisor = rols.includes('revisor') && !esAdmin && !rols.includes('secretaria');
+  if (!esAdmin && !rols.includes('secretaria') && !esRevisor) return;
   // Debounce anti-race-condition
   if (_secretariaInjectTimer) return;
   _secretariaInjectTimer = setTimeout(() => {
@@ -96,14 +97,14 @@ window.injectarBotoSecretaria = function() {
   const btn = document.createElement('button');
   btn.id = 'btnSecretariaSidebar';
   btn.className = 'nav-item nav-item-rol';
-  btn.innerHTML = `<span class="nav-icon">📋</span><span>Secretaria</span>`;
+  btn.innerHTML = esRevisor
+    ? `<span class="nav-icon">📊</span><span>Quadre dades</span>`
+    : `<span class="nav-icon">📋</span><span>Secretaria</span>`;
     btn.addEventListener('click', obrirPanellSecretaria);
     nav.appendChild(btn);
 
-    // Listener en temps real: actualitza el badge immediatament
-    // quan arriba qualsevol canvi a la col·lecció professors
-    // (registre nou via Google, via email, canvi de rols, etc.)
-    iniciarListenerPendents();
+    // Listener de pendents (només per secretaria/admin, no revisor)
+    if (!esRevisor) iniciarListenerPendents();
   }, 100);
 };
 
@@ -113,12 +114,27 @@ window.injectarBotoSecretaria = function() {
 async function obrirPanellSecretaria() {
   document.getElementById('panellSecretaria')?.remove();
 
+  const rols = window._userRols || [];
+  const esAdmin = rols.includes('admin') || rols.includes('superadmin') || !!window._isSuperAdmin;
+  const soloRevisor = rols.includes('revisor') && !esAdmin && !rols.includes('secretaria');
+
   const overlay = document.createElement('div');
   overlay.id = 'panellSecretaria';
   overlay.style.cssText = `
     position:fixed;inset:0;z-index:8888;background:rgba(15,23,42,0.7);
     display:flex;align-items:stretch;
   `;
+
+  // Tabs visibles: revisor només veu Quadre dades
+  const tabsVisibles = soloRevisor
+    ? [{id:'quadre', icon:'📊', label:'Quadre dades'}]
+    : [
+        {id:'estructura', icon:'🏗️', label:'Estructura'},
+        {id:'usuaris',    icon:'👥', label:'Usuaris'},
+        {id:'periodes',   icon:'🔒', label:'Períodes'},
+        {id:'butlletins', icon:'📄', label:'Butlletins'},
+        {id:'quadre',     icon:'📊', label:'Quadre dades'},
+      ];
 
   overlay.innerHTML = `
     <div style="width:100%;background:#fff;display:flex;flex-direction:column;
@@ -129,21 +145,17 @@ async function obrirPanellSecretaria() {
                   padding:20px 24px;flex-shrink:0;">
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
           <div>
-            <h2 style="font-size:20px;font-weight:800;margin:0;">📋 Secretaria</h2>
-            <p style="font-size:12px;opacity:0.7;margin:4px 0 0;">Gestió institucional del centre</p>
+            <h2 style="font-size:20px;font-weight:800;margin:0;">📊 Quadre de dades</h2>
+            <p style="font-size:12px;opacity:0.7;margin:4px 0 0;">
+              ${soloRevisor ? 'Seguiment d'avaluació del centre' : 'Gestió institucional del centre'}
+            </p>
           </div>
           <button id="btnTancarSec" style="background:rgba(255,255,255,0.2);border:none;
             color:#fff;width:36px;height:36px;border-radius:50%;font-size:18px;cursor:pointer;">✕</button>
         </div>
-        <!-- Tabs -->
-        <div style="display:flex;gap:3px;flex-wrap:wrap;">
-          ${[
-            {id:'estructura', icon:'🏗️', label:'Estructura'},
-            {id:'usuaris',    icon:'👥', label:'Usuaris'},
-            {id:'periodes',   icon:'🔒', label:'Períodes'},
-            {id:'butlletins', icon:'📄', label:'Butlletins'},
-            {id:'quadre',     icon:'📊', label:'Quadre dades'},
-          ].map(t => `
+        <!-- Tabs (ocults si revisor, ja que només n'hi ha un) -->
+        <div style="display:flex;gap:3px;flex-wrap:wrap;${soloRevisor ? 'display:none;' : ''}">
+          ${tabsVisibles.map(t => `
             <button class="sec-tab" data-tab="${t.id}" style="
               padding:7px 14px;border-radius:8px 8px 0 0;border:none;cursor:pointer;
               font-size:13px;font-weight:600;
@@ -163,21 +175,27 @@ async function obrirPanellSecretaria() {
   overlay.querySelector('#btnTancarSec').addEventListener('click', () => overlay.remove());
   overlay.addEventListener('click', e => { if (e.target === overlay) overlay.remove(); });
 
-  overlay.querySelectorAll('.sec-tab').forEach(tab => {
-    tab.addEventListener('click', () => {
-      overlay.querySelectorAll('.sec-tab').forEach(t => {
-        t.style.background = 'rgba(255,255,255,0.15)'; t.style.color = '#fff';
+  if (soloRevisor) {
+    // Revisor: carregar directament el quadre sense tabs
+    const body = document.getElementById('secBody');
+    await renderQuadreDades(body);
+  } else {
+    overlay.querySelectorAll('.sec-tab').forEach(tab => {
+      tab.addEventListener('click', () => {
+        overlay.querySelectorAll('.sec-tab').forEach(t => {
+          t.style.background = 'rgba(255,255,255,0.15)'; t.style.color = '#fff';
+        });
+        tab.style.background = '#fff'; tab.style.color = '#4c1d95';
+        carregarTab(tab.dataset.tab);
       });
-      tab.style.background = '#fff'; tab.style.color = '#4c1d95';
-      carregarTab(tab.dataset.tab);
     });
-  });
 
-  // Carregar primera tab
-  overlay.querySelector('.sec-tab').click();
+    // Carregar primera tab
+    overlay.querySelector('.sec-tab').click();
 
-  // Re-aplicar badge de pendents ara que els tabs ja existeixen al DOM
-  comprovarUsuarisPendents();
+    // Re-aplicar badge de pendents ara que els tabs ja existeixen al DOM
+    comprovarUsuarisPendents();
+  }
 }
 
 /* ══════════════════════════════════════════════════════
