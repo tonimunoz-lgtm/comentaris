@@ -3307,15 +3307,44 @@ async function renderQuadreDades(body) {
   ]);
   const cursos = [...new Set(grups.map(g=>g.curs).filter(Boolean))].sort().reverse();
 
+  // Carregar períodes
+  let periodes = [
+    { codi:'T1', nom:'1r Trimestre' },
+    { codi:'T2', nom:'2n Trimestre' },
+    { codi:'T3', nom:'3r Trimestre' },
+  ];
+  try {
+    const pdoc = await window.db.collection('_sistema').doc('periodes_tancats').get();
+    if (pdoc.exists) {
+      const pd = pdoc.data();
+      const BASE = [
+        {codi:'preav',nom:'Pre-avaluació'},{codi:'T1',nom:'1r Trimestre'},
+        {codi:'T2',nom:'2n Trimestre'},{codi:'T3',nom:'3r Trimestre'},{codi:'final',nom:'Final de curs'}
+      ];
+      const ordre = pd.ordre || BASE.map(p=>p.codi);
+      periodes = ordre.map(codi => {
+        const base = BASE.find(p=>p.codi===codi)||{codi,nom:codi};
+        return { codi, nom: (pd.noms||{})[codi]||base.nom };
+      });
+    }
+  } catch(e) {}
+
   body.innerHTML = `
-    <h3 style="font-size:16px;font-weight:700;color:#1e1b4b;margin-bottom:16px;">📊 Quadre de dades</h3>
+    <h3 style="font-size:16px;font-weight:700;color:#1e1b4b;margin-bottom:4px;">📊 Quadre de dades</h3>
+    <p style="font-size:12px;color:#6b7280;margin-bottom:16px;">Estat d'avaluació per grup, matèria i alumne. Inclou tutoria.</p>
+
     <div style="background:#f9fafb;border:1.5px solid #e5e7eb;border-radius:12px;padding:16px;margin-bottom:16px;">
-      <div style="display:grid;grid-template-columns:1fr 1fr 1fr auto;gap:12px;align-items:end;">
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr auto;gap:12px;align-items:end;flex-wrap:wrap;">
         <div>
           <label style="font-size:12px;font-weight:600;color:#374151;display:block;margin-bottom:5px;">Curs</label>
           <select id="qdCurs" style="width:100%;padding:8px 10px;border:1.5px solid #e5e7eb;border-radius:8px;font-size:13px;outline:none;">
-            <option value="">— Tots —</option>
             ${cursos.map(c=>`<option value="${c}" ${c===cursActiu?'selected':''}>${c}</option>`).join('')}
+          </select>
+        </div>
+        <div>
+          <label style="font-size:12px;font-weight:600;color:#374151;display:block;margin-bottom:5px;">Període</label>
+          <select id="qdPeriode" style="width:100%;padding:8px 10px;border:1.5px solid #e5e7eb;border-radius:8px;font-size:13px;outline:none;">
+            ${periodes.map(p=>`<option value="${p.nom}">${p.nom}</option>`).join('')}
           </select>
         </div>
         <div>
@@ -3336,129 +3365,418 @@ async function renderQuadreDades(body) {
         </button>
       </div>
     </div>
+
+    <div id="qdResum" style="display:none;background:#f0fdf4;border:1.5px solid #86efac;border-radius:10px;padding:12px 16px;margin-bottom:16px;font-size:12px;color:#166534;"></div>
     <div id="resultatsQD"></div>
   `;
 
-  // Cascada: el desplegable de grup mostra NOMÉS grups classe (tipus='classe')
+  // Cascada nivell → grup
   const actualitzarGrups = () => {
-    const curs     = document.getElementById('qdCurs').value;
+    const curs = document.getElementById('qdCurs').value;
     const nivellId = document.getElementById('qdNivell').value;
-    const selGrup  = document.getElementById('qdGrup');
+    const selGrup = document.getElementById('qdGrup');
     const grupsFilt = grups.filter(g =>
       g.tipus === 'classe' &&
       (!curs     || g.curs     === curs) &&
       (!nivellId || g.nivellId === nivellId)
-    ).sort((a,b) => (a.ordre||99) - (b.ordre||99));
+    ).sort((a,b)=>(a.ordre||99)-(b.ordre||99));
     selGrup.innerHTML = '<option value="">— Tots —</option>' +
-      grupsFilt.map(g => `<option value="${g.id}">${esH(g.nom)} (${esH(g.nivellNom||'')})</option>`).join('');
+      grupsFilt.map(g=>`<option value="${g.id}">${esH(g.nom)} (${esH(g.nivellNom||'')})</option>`).join('');
   };
 
   document.getElementById('qdCurs').addEventListener('change', actualitzarGrups);
   document.getElementById('qdNivell').addEventListener('change', actualitzarGrups);
   actualitzarGrups();
 
-  document.getElementById('qdCarregar').addEventListener('click', async () => {
-    const curs     = document.getElementById('qdCurs').value;
-    const nivellId = document.getElementById('qdNivell').value;
-    const grupId   = document.getElementById('qdGrup').value;
-    const res = document.getElementById('resultatsQD');
-    res.innerHTML = `<p style="color:#9ca3af;">⏳ Carregant...</p>`;
+  document.getElementById('qdCarregar').addEventListener('click', () => carregarQuadre(grups, periodes));
 
-    // Carregar classes creades per professors (per columna "Classe creada per")
-    const classesSnap = await window.db.collection('classes').get();
-    const classePerGrup = {};
-    classesSnap.docs.forEach(doc => {
-      const d = doc.data();
-      if (d.grupCentreId) {
-        const email = d.ownerEmail || '';
-        const nom = email ? email.split('@')[0] : (d.ownerUid ? '(usuari)' : '—');
-        classePerGrup[d.grupCentreId] = nom;
+  // Auto-carregar
+  if (cursos.length > 0) setTimeout(() => document.getElementById('qdCarregar')?.click(), 100);
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// CÀRREGA PRINCIPAL DEL QUADRE
+// ─────────────────────────────────────────────────────────────────────────────
+async function carregarQuadre(grups, periodes) {
+  const db      = window.db;
+  const curs    = document.getElementById('qdCurs')?.value || '';
+  const periode = document.getElementById('qdPeriode')?.value || '';
+  const nivellId= document.getElementById('qdNivell')?.value || '';
+  const grupId  = document.getElementById('qdGrup')?.value || '';
+  const res     = document.getElementById('resultatsQD');
+  const resumEl = document.getElementById('qdResum');
+
+  if (!curs) { window.mostrarToast('⚠️ Tria un curs', 2000); return; }
+
+  res.innerHTML = `<div style="padding:30px;text-align:center;color:#9ca3af;">
+    <div style="font-size:24px;margin-bottom:8px;">⏳</div>Carregant dades d'avaluació...
+  </div>`;
+  resumEl.style.display = 'none';
+
+  // ── 1. Grups classe filtrats ──────────────────────────────────────────────
+  const grupesClasse = grups.filter(g =>
+    g.tipus === 'classe' &&
+    g.curs === curs &&
+    (!nivellId || g.nivellId === nivellId) &&
+    (!grupId   || g.id       === grupId)
+  ).sort((a,b)=>(a.ordre||99)-(b.ordre||99));
+
+  if (!grupesClasse.length) {
+    res.innerHTML = '<p style="color:#9ca3af;text-align:center;padding:30px;">Cap grup trobat per a aquest filtre.</p>';
+    return;
+  }
+
+  // ── 2. Carregar professors (email → nom) ──────────────────────────────────
+  const profsMap = {}; // email → { nom, email }
+  try {
+    const ps = await db.collection('professors').get();
+    ps.docs.forEach(d => {
+      const data = d.data();
+      if (data.email) profsMap[data.email] = { nom: data.nom || data.email.split('@')[0], email: data.email };
+    });
+  } catch(e) {}
+
+  // ── 3. Carregar classes (relació grupCentreId → professor) ────────────────
+  const classePerGrup = {}; // grupId → { nom, email }
+  try {
+    const cs = await db.collection('classes').get();
+    cs.docs.forEach(d => {
+      const data = d.data();
+      if (data.grupCentreId && data.ownerEmail) {
+        const prof = profsMap[data.ownerEmail] || { nom: data.ownerEmail.split('@')[0], email: data.ownerEmail };
+        classePerGrup[data.grupCentreId] = prof;
       }
     });
+  } catch(e) {}
 
-    // Grups classe filtrats (tipus='classe')
-    const grupesClasse = grups.filter(g =>
-      g.tipus === 'classe' &&
-      (!curs     || g.curs     === curs) &&
-      (!nivellId || g.nivellId === nivellId) &&
-      (!grupId   || g.id       === grupId)
-    ).sort((a,b) => (a.ordre||99) - (b.ordre||99));
+  // ── 4. Per cada grup classe, obtenir matèries i dades d'avaluació ─────────
+  let totalMateries = 0, totalAlumnes = 0, totalEnviats = 0, totalPendents = 0;
+  const blocksHTML = [];
 
-    if (grupesClasse.length === 0) {
-      res.innerHTML = `<p style="color:#9ca3af;text-align:center;padding:30px;">Cap grup trobat per a aquest filtre.</p>`;
-      return;
+  for (const gc of grupesClasse) {
+    const alumnesCentre = (gc.alumnes || []).sort((a,b)=>(a.cognoms||'').localeCompare(b.cognoms||'','ca'));
+    const materies = grups.filter(g => g.parentGrupId === gc.id && g.tipus !== 'tutoria')
+      .sort((a,b)=>(a.ordre||99)-(b.ordre||99));
+    const grupTutoria = grups.find(g => g.parentGrupId === gc.id && g.tipus === 'tutoria') || null;
+
+    // Totes les matèries incloent tutoria
+    const totesMat = [...materies, ...(grupTutoria ? [grupTutoria] : [])];
+    totalMateries += totesMat.length;
+
+    // ── Llegir dades d'avaluació per cada matèria ────────────────────────
+    // alumnesAval[materiaId] = Set de claus d'alumnes que han enviat
+    const alumnesAval = {}; // materiaId → Set<key>
+
+    for (const mat of totesMat) {
+      try {
+        let snap = await db.collection('avaluacio_centre').doc(curs).collection(mat.id)
+          .where('grupClasseId', '==', gc.id).get();
+        if (snap.empty) {
+          snap = await db.collection('avaluacio_centre').doc(curs).collection(mat.id)
+            .where('grupId', '==', gc.id).get();
+        }
+        const docsFiltre = periode
+          ? snap.docs.filter(d => d.data().periodeNom === periode)
+          : snap.docs;
+
+        if (mat.tipus === 'tutoria') {
+          // Tutoria: considerat enviat si té comentariGlobal no buit
+          alumnesAval[mat.id] = new Set(
+            docsFiltre.filter(d => d.data().comentariGlobal?.trim())
+              .map(d => { const x=d.data(); return x.ralc || `${x.cognoms}_${x.nom}`; })
+          );
+        } else {
+          alumnesAval[mat.id] = new Set(
+            docsFiltre.map(d => { const x=d.data(); return x.ralc || `${x.cognoms}_${x.nom}`; })
+          );
+        }
+      } catch(e) { alumnesAval[mat.id] = new Set(); }
     }
 
-    // Per cada grup classe, agafar les seves matèries (parentGrupId === grup.id)
-    res.innerHTML = grupesClasse.map(gc => {
-      const materies = grups.filter(g =>
-        g.parentGrupId === gc.id &&
-        g.tipus !== 'classe'
-      ).sort((a,b) => (a.ordre||99) - (b.ordre||99));
-
-      const filesMateries = materies.map(m => `
-        <tr style="border-bottom:1px solid #f3f4f6;">
-          <td style="padding:7px 10px;font-size:11px;color:#9ca3af;">
-            ${TIPUS_GRUP[m.tipus]?.icon||'📁'} ${TIPUS_GRUP[m.tipus]?.label||m.tipus||'—'}
-          </td>
-          <td style="padding:7px 10px;color:#374151;">${esH(m.nom||'—')}</td>
-          <td style="padding:7px 10px;text-align:center;color:#6b7280;">${(m.alumnes||[]).length}</td>
-          <td style="padding:7px 10px;text-align:center;color:#6b7280;font-size:11px;">
-            ${classePerGrup[m.id] ? `<span style="background:#e0e7ff;color:#4338ca;padding:2px 8px;border-radius:99px;font-weight:600;">${esH(classePerGrup[m.id])}</span>` : '<span style="color:#d1d5db;">—</span>'}
-          </td>
-          <td style="padding:7px 10px;text-align:center;">
-            <button class="btn-del-qd" data-id="${m.id}" data-nom="${esH(m.nom)}"
-              style="padding:3px 10px;background:#fee2e2;color:#dc2626;border:none;
-                     border-radius:6px;font-size:11px;font-weight:600;cursor:pointer;">
-              🗑️ Eliminar
-            </button>
-          </td>
-        </tr>
-      `).join('');
-
-      return `
-        <div style="margin-bottom:24px;">
-          <!-- Capçalera grup classe -->
-          <div style="display:flex;align-items:center;gap:10px;padding:10px 14px;
-                      background:#e0e7ff;border-radius:8px;margin-bottom:10px;">
-            <span style="font-size:14px;">🏫</span>
+    // ── Construir taula per matèria ──────────────────────────────────────
+    if (!totesMat.length) {
+      blocksHTML.push(`
+        <div style="margin-bottom:20px;">
+          <div style="display:flex;align-items:center;gap:10px;padding:10px 14px;background:#e0e7ff;border-radius:8px;margin-bottom:6px;">
+            <span>🏫</span>
             <span style="font-size:13px;font-weight:700;color:#1e1b4b;">${esH(gc.nom)} — ${esH(gc.nivellNom||'')}</span>
-            <span style="font-size:11px;color:#6366f1;margin-left:auto;">${materies.length} matèrie${materies.length!==1?'s':''}</span>
           </div>
-          ${materies.length > 0 ? `
+          <p style="font-size:12px;color:#9ca3af;padding:6px 14px;">Cap matèria creada per a aquest grup.</p>
+        </div>`);
+      continue;
+    }
+
+    // Resum del grup
+    let grupcEnviats = 0, grupcPendents = 0;
+    totesMat.forEach(mat => {
+      alumnesCentre.forEach(a => {
+        const key = a.ralc || `${a.cognoms}_${a.nom}`;
+        if (alumnesAval[mat.id]?.has(key)) grupcEnviats++;
+        else grupcPendents++;
+      });
+    });
+    totalEnviats  += grupcEnviats;
+    totalPendents += grupcPendents;
+    totalAlumnes  += alumnesCentre.length;
+
+    const pctGrup = alumnesCentre.length && totesMat.length
+      ? Math.round((grupcEnviats / (alumnesCentre.length * totesMat.length)) * 100)
+      : 0;
+
+    // Capçaleres per a les matèries (noms curts)
+    const nomsCurts = totesMat.map(m => {
+      const esTut = m.tipus === 'tutoria';
+      return `<th style="padding:6px 8px;text-align:center;font-weight:600;font-size:10px;min-width:80px;
+        color:${esTut?'#7c3aed':'#374151'};border-bottom:2px solid #e5e7eb;">
+        ${esTut?'🧑‍🏫 ':''}<span title="${esH(m.nom)}">${esH(m.nom.length>14?m.nom.substring(0,13)+'…':m.nom)}</span>
+      </th>`;
+    }).join('');
+
+    // Capçalera professor per matèria
+    const profsRow = totesMat.map(mat => {
+      const prof = classePerGrup[mat.id];
+      return `<td style="padding:4px 8px;text-align:center;font-size:10px;background:#faf5ff;border-bottom:1px solid #e5e7eb;">
+        ${prof
+          ? `<span style="color:#7c3aed;font-weight:600;" title="${esH(prof.email)}">${esH(prof.nom)}</span>`
+          : '<span style="color:#d1d5db;">—</span>'}
+      </td>`;
+    }).join('');
+
+    // Files d'alumnes
+    const filesAlumnes = alumnesCentre.map(a => {
+      const key = a.ralc || `${a.cognoms}_${a.nom}`;
+      const nomAl = a.cognoms ? `${a.cognoms}, ${a.nom}` : a.nom;
+
+      const celMat = totesMat.map(mat => {
+        const enviat = alumnesAval[mat.id]?.has(key);
+        return `<td style="padding:5px 8px;text-align:center;border-bottom:1px solid #f5f5f5;">
+          <span style="font-size:14px;" title="${enviat?'Enviat':'Pendent'}">${enviat?'✅':'⚠️'}</span>
+        </td>`;
+      }).join('');
+
+      // Quantes matèries li falten?
+      const nPendents = totesMat.filter(m => !alumnesAval[m.id]?.has(key)).length;
+
+      return `<tr style="background:${nPendents===0?'#f0fdf4':'#fff'};">
+        <td style="padding:5px 10px;font-size:12px;font-weight:600;color:#1e1b4b;border-bottom:1px solid #f5f5f5;white-space:nowrap;">
+          ${esH(nomAl)}
+          ${a.ralc?`<span style="font-size:10px;color:#9ca3af;margin-left:4px;">${esH(a.ralc)}</span>`:''}
+        </td>
+        ${celMat}
+        <td style="padding:5px 10px;text-align:center;border-bottom:1px solid #f5f5f5;">
+          ${nPendents === 0
+            ? '<span style="font-size:11px;color:#059669;font-weight:600;">✓ Complet</span>'
+            : `<span style="font-size:11px;color:#dc2626;font-weight:600;">${nPendents} pend.</span>`}
+        </td>
+      </tr>`;
+    }).join('');
+
+    // Resum matèries (enviats vs pendents per matèria)
+    const resumMat = totesMat.map(mat => {
+      const enviats = alumnesCentre.filter(a => alumnesAval[mat.id]?.has(a.ralc || `${a.cognoms}_${a.nom}`)).length;
+      const pct = alumnesCentre.length ? Math.round((enviats/alumnesCentre.length)*100) : 0;
+      const prof = classePerGrup[mat.id];
+      const esTut = mat.tipus === 'tutoria';
+      const ok = enviats === alumnesCentre.length;
+
+      return `<div style="display:flex;align-items:center;gap:8px;padding:6px 10px;
+        background:${ok?'#f0fdf4':'#fef2f2'};border-radius:8px;margin-bottom:4px;">
+        <span style="font-size:13px;">${esTut?'🧑‍🏫':(TIPUS_GRUP[mat.tipus]?.icon||'📚')}</span>
+        <div style="flex:1;min-width:0;">
+          <div style="font-size:12px;font-weight:600;color:#374151;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">
+            ${esH(mat.nom)}
+            ${prof?`<span style="font-weight:400;color:#9ca3af;font-size:11px;"> · ${esH(prof.nom)}</span>`:''}
+          </div>
+          <div style="display:flex;align-items:center;gap:6px;margin-top:2px;">
+            <div style="flex:1;background:#e5e7eb;border-radius:99px;height:4px;min-width:60px;">
+              <div style="background:${ok?'#059669':'#f59e0b'};height:4px;border-radius:99px;width:${pct}%;"></div>
+            </div>
+            <span style="font-size:11px;font-weight:600;color:${ok?'#059669':'#dc2626'};">${enviats}/${alumnesCentre.length}</span>
+          </div>
+        </div>
+        ${!ok && prof ? `
+          <button class="btn-avisar-prof" data-email="${esH(prof.email)}" data-nom-prof="${esH(prof.nom)}"
+            data-mat="${esH(mat.nom)}" data-grup="${esH(gc.nom)}" data-periode="${esH(periode)}"
+            style="padding:3px 10px;background:#fff;border:1.5px solid #7c3aed;color:#7c3aed;
+            border-radius:6px;font-size:11px;font-weight:600;cursor:pointer;white-space:nowrap;flex-shrink:0;">
+            📧 Avisar
+          </button>` : ''}
+      </div>`;
+    }).join('');
+
+    blocksHTML.push(`
+      <div style="margin-bottom:28px;border:1.5px solid #e5e7eb;border-radius:12px;overflow:hidden;">
+
+        <!-- Capçalera grup -->
+        <div style="display:flex;align-items:center;gap:10px;padding:12px 16px;
+                    background:linear-gradient(135deg,#e0e7ff,#ede9fe);">
+          <span style="font-size:16px;">🏫</span>
+          <div style="flex:1;">
+            <div style="font-size:14px;font-weight:800;color:#1e1b4b;">${esH(gc.nom)} — ${esH(gc.nivellNom||'')}</div>
+            <div style="font-size:11px;color:#4f46e5;margin-top:2px;">${alumnesCentre.length} alumnes · ${totesMat.length} matèries</div>
+          </div>
+          <!-- Barra de progrés global del grup -->
+          <div style="display:flex;align-items:center;gap:8px;min-width:140px;">
+            <div style="flex:1;background:#c7d2fe;border-radius:99px;height:8px;">
+              <div style="background:${pctGrup===100?'#059669':'#7c3aed'};height:8px;border-radius:99px;width:${pctGrup}%;transition:width .3s;"></div>
+            </div>
+            <span style="font-size:13px;font-weight:700;color:${pctGrup===100?'#059669':'#7c3aed'};">${pctGrup}%</span>
+          </div>
+        </div>
+
+        <div style="padding:14px 16px;">
+
+          <!-- Resum per matèria -->
+          <div style="margin-bottom:14px;">
+            <div style="font-size:11px;font-weight:700;color:#9ca3af;text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px;">
+              Resum per matèria
+            </div>
+            ${resumMat}
+          </div>
+
+          <!-- Taula alumnes -->
+          <div style="font-size:11px;font-weight:700;color:#9ca3af;text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px;">
+            Detall per alumne
+          </div>
           <div style="overflow-x:auto;">
             <table style="width:100%;border-collapse:collapse;font-size:12px;">
               <thead>
-                <tr style="background:#f3f4f6;">
-                  <th style="padding:7px 10px;text-align:left;font-weight:600;">Tipus</th>
-                  <th style="padding:7px 10px;text-align:left;font-weight:600;">Nom</th>
-                  <th style="padding:7px 10px;text-align:center;font-weight:600;">Alumnes</th>
-                  <th style="padding:7px 10px;text-align:center;font-weight:600;">Classe creada per</th>
-                  <th style="padding:7px 10px;text-align:center;font-weight:600;">Accions</th>
+                <tr style="background:#f8fafc;">
+                  <th style="padding:6px 10px;text-align:left;font-weight:600;font-size:11px;border-bottom:2px solid #e5e7eb;">Alumne/a</th>
+                  ${nomsCurts}
+                  <th style="padding:6px 8px;text-align:center;font-weight:600;font-size:10px;border-bottom:2px solid #e5e7eb;">Estat</th>
+                </tr>
+                <tr style="background:#faf5ff;">
+                  <td style="padding:4px 10px;font-size:10px;color:#9ca3af;border-bottom:1px solid #e5e7eb;">Professor/a</td>
+                  ${profsRow}
+                  <td style="border-bottom:1px solid #e5e7eb;"></td>
                 </tr>
               </thead>
-              <tbody>${filesMateries}</tbody>
+              <tbody>${filesAlumnes}</tbody>
             </table>
-          </div>` : `<p style="color:#9ca3af;font-size:12px;padding:8px 14px;">Cap matèria afegida a aquest grup.</p>`}
+          </div>
         </div>
-      `;
-    }).join('');
+      </div>
+    `);
+  }
 
-    // Events eliminar
-    res.querySelectorAll('.btn-del-qd').forEach(btn => {
-      btn.addEventListener('click', async () => {
-        if (!confirm(`Eliminar "${btn.dataset.nom}" i totes les dades associades?`)) return;
-        btn.disabled = true; btn.textContent = '⏳';
-        await eliminarGrupComplet(btn.dataset.id, btn.dataset.nom);
-        document.getElementById('qdCarregar')?.click();
+  // ── Resum global ──────────────────────────────────────────────────────────
+  const pctGlobal = (totalEnviats + totalPendents) > 0
+    ? Math.round((totalEnviats / (totalEnviats + totalPendents)) * 100) : 0;
+
+  resumEl.innerHTML = `
+    <div style="display:flex;gap:20px;align-items:center;flex-wrap:wrap;">
+      <div>📊 <strong>${grupesClasse.length}</strong> grup${grupesClasse.length!==1?'s':''} ·
+           <strong>${totalAlumnes}</strong> alumnes ·
+           <strong>${totalMateries}</strong> matèries (incl. tutoria)</div>
+      <div style="display:flex;align-items:center;gap:8px;flex:1;min-width:160px;">
+        <div style="flex:1;background:#bbf7d0;border-radius:99px;height:8px;">
+          <div style="background:#059669;height:8px;border-radius:99px;width:${pctGlobal}%;"></div>
+        </div>
+        <span style="font-weight:700;white-space:nowrap;">${pctGlobal}% completat · <span style="color:#dc2626;">${totalPendents} pendents</span></span>
+      </div>
+    </div>`;
+  resumEl.style.display = 'block';
+
+  res.innerHTML = blocksHTML.join('');
+
+  // ── Events botó "Avisar professor" ────────────────────────────────────────
+  res.querySelectorAll('.btn-avisar-prof').forEach(btn => {
+    btn.addEventListener('click', () => {
+      _modalAvisarProfessor({
+        email:    btn.dataset.email,
+        nomProf:  btn.dataset.nomProf,
+        mat:      btn.dataset.mat,
+        grup:     btn.dataset.grup,
+        periode:  btn.dataset.periode,
+        grups,
       });
     });
   });
+}
 
-  // Auto-carregar
-  if (cursos.length > 0) {
-    setTimeout(() => document.getElementById('qdCarregar')?.click(), 100);
-  }
+// ─────────────────────────────────────────────────────────────────────────────
+// MODAL AVISAR PROFESSOR
+// ─────────────────────────────────────────────────────────────────────────────
+function _modalAvisarProfessor({ email, nomProf, mat, grup, periode, grups }) {
+  // Recollir alumnes pendents d'aquest professor per aquesta matèria i grup
+  // (ja els tenim al DOM via les files ⚠️)
+  const alumnesPendents = [];
+  document.querySelectorAll('#resultatsQD tr').forEach(tr => {
+    // Buscar la fila que tingui ⚠️ a la columna de la matèria corresponent
+    // Estratègia simple: buscar ⚠️ a la fila i extreure el nom
+    const cels = [...tr.querySelectorAll('td')];
+    if (!cels.length) return;
+    const nomCel = cels[0]?.textContent?.trim();
+    if (!nomCel || nomCel.length < 2) return;
+    const teWarn = cels.some(td => td.textContent.includes('⚠️'));
+    if (teWarn && !alumnesPendents.includes(nomCel)) alumnesPendents.push(nomCel);
+  });
+
+  const defaultMsg = `Hola ${nomProf},\n\nEns posem en contacte des de secretaria per recordar-te que encara no hem rebut l'avaluació del període "${periode}" per a la matèria "${mat}" del grup ${grup}.\n\nSi us plau, accedeix a la plataforma i envia les avaluacions al més aviat possible.\n\nGràcies!`;
+
+  document.getElementById('_modalAvisProf')?.remove();
+  const modal = document.createElement('div');
+  modal.id = '_modalAvisProf';
+  modal.style.cssText = 'position:fixed;inset:0;z-index:99999;background:rgba(0,0,0,0.55);display:flex;align-items:center;justify-content:center;padding:16px;';
+  modal.innerHTML = `
+    <div style="background:#fff;border-radius:18px;padding:28px;width:100%;max-width:540px;max-height:90vh;overflow-y:auto;box-shadow:0 25px 60px rgba(0,0,0,0.3);">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
+        <h3 style="font-size:16px;font-weight:800;color:#1e1b4b;margin:0;">📧 Avisar professor/a</h3>
+        <button id="_tancarAvis" style="background:none;border:none;font-size:22px;cursor:pointer;color:#9ca3af;">✕</button>
+      </div>
+
+      <div style="background:#fef2f2;border:1.5px solid #fca5a5;border-radius:8px;padding:10px 14px;margin-bottom:14px;font-size:12px;color:#991b1b;">
+        <strong>📍 ${esH(nomProf)}</strong> · ${esH(mat)} · ${esH(grup)} · ${esH(periode)}
+      </div>
+
+      <div style="margin-bottom:12px;">
+        <label style="font-size:12px;font-weight:600;color:#374151;display:block;margin-bottom:5px;">Destinatari</label>
+        <input id="_avisEmail" type="email" value="${esH(email)}" style="width:100%;padding:8px 10px;border:1.5px solid #e5e7eb;border-radius:8px;font-size:13px;outline:none;box-sizing:border-box;">
+      </div>
+
+      <div style="margin-bottom:12px;">
+        <label style="font-size:12px;font-weight:600;color:#374151;display:block;margin-bottom:5px;">Missatge</label>
+        <textarea id="_avisMsg" rows="8" style="width:100%;padding:8px 10px;border:1.5px solid #e5e7eb;border-radius:8px;font-size:13px;outline:none;box-sizing:border-box;line-height:1.5;resize:vertical;">${defaultMsg}</textarea>
+      </div>
+
+      <div style="background:#f0f9ff;border:1px solid #bae6fd;border-radius:8px;padding:8px 12px;margin-bottom:14px;font-size:11px;color:#0369a1;">
+        ℹ️ Pots copiar el missatge i enviar-lo manualment per email, o usar el botó "Copiar" per enganxar-lo on vulguis.
+      </div>
+
+      <div style="display:flex;gap:10px;justify-content:flex-end;">
+        <button id="_tancarAvis2" style="padding:9px 18px;background:#f3f4f6;border:none;border-radius:8px;font-weight:600;cursor:pointer;font-size:13px;">Tancar</button>
+        <button id="_copiarAvis" style="padding:9px 18px;background:#7c3aed;color:#fff;border:none;border-radius:8px;font-weight:700;cursor:pointer;font-size:13px;">📋 Copiar missatge</button>
+        <button id="_obrirEmail" style="padding:9px 18px;background:#059669;color:#fff;border:none;border-radius:8px;font-weight:700;cursor:pointer;font-size:13px;">✉️ Obrir correu</button>
+      </div>
+    </div>`;
+
+  document.body.appendChild(modal);
+
+  const tancar = () => modal.remove();
+  modal.querySelector('#_tancarAvis').addEventListener('click', tancar);
+  modal.querySelector('#_tancarAvis2').addEventListener('click', tancar);
+  modal.addEventListener('click', e => { if (e.target === modal) tancar(); });
+
+  modal.querySelector('#_copiarAvis').addEventListener('click', () => {
+    const msg = document.getElementById('_avisMsg').value;
+    navigator.clipboard.writeText(msg).then(() => {
+      window.mostrarToast('✅ Missatge copiat al porta-retalls', 2500);
+    }).catch(() => {
+      // Fallback
+      const ta = document.getElementById('_avisMsg');
+      ta.select(); document.execCommand('copy');
+      window.mostrarToast('✅ Missatge copiat', 2500);
+    });
+  });
+
+  modal.querySelector('#_obrirEmail').addEventListener('click', () => {
+    const dest = document.getElementById('_avisEmail').value;
+    const msg  = document.getElementById('_avisMsg').value;
+    const subj = encodeURIComponent(`Recordatori avaluació: ${mat} · ${grup} · ${periode}`);
+    const body = encodeURIComponent(msg);
+    window.open(`mailto:${dest}?subject=${subj}&body=${body}`, '_blank');
+  });
 }
 
 /* ══════════════════════════════════════════════════════
