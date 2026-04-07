@@ -2374,6 +2374,7 @@ function _mostrarAssistentImport(wb, nomFitxer, dropZone, mostrarError, onSucces
     ws: null,
     filaItems: 0,    // fila (0-indexed) on estan els títols dels ítems
     filaComs: -1,    // fila (0-indexed) on estan els comentaris (-1 = mateixa que filaItems)
+    capcelera2files: 'auto', // mode dues files: 'auto'=detectar, 'si'=sempre hi ha, 'no'=mai
     colCapcelera: -1,// columna (0-indexed) de la capçalera, -1 = sense capçalera
     colPrimerCom: 1, // columna (0-indexed) del primer comentari
     numComs: 4,      // nombre de comentaris per ítem
@@ -2690,6 +2691,18 @@ function _mostrarAssistentImport(wb, nomFitxer, dropZone, mostrarError, onSucces
         </div>
       </div>
 
+      <!-- Capçalera per mode dues files -->
+      <div id="uc_bloc_cap2" style="display:${estat.filaComs >= 0 ? 'block' : 'none'}">
+      <div style="background:#fff;border:1px solid #e5e7eb;border-radius:10px;padding:14px;margin-bottom:12px;">
+        <div style="font-weight:700;color:#374151;font-size:13px;margin-bottom:8px;">📌 La fila de comentaris té capçalera?</div>
+        <div style="font-size:12px;color:#6b7280;margin-bottom:10px;">
+          Ex: <em>"Pel que fa al Model Ecosistema:"</em> — és el text introductori que apareix <strong>abans</strong> dels comentaris de cada ítem dins la fila de comentaris.<br>
+          Si no hi ha capçalera, els comentaris comencen directament.
+        </div>
+        <div id="uc_cap2_botons" style="display:flex;gap:6px;flex-wrap:wrap;"></div>
+      </div>
+      </div><!-- fi uc_bloc_cap2 -->
+
       <!-- Capçalera (només en mode una fila) -->
       <div id="uc_bloc_cap" style="display:${estat.filaComs >= 0 ? 'none' : 'block'}">
       <div style="background:#fff;border:1px solid #e5e7eb;border-radius:10px;padding:14px;margin-bottom:12px;">
@@ -2775,6 +2788,24 @@ function _mostrarAssistentImport(wb, nomFitxer, dropZone, mostrarError, onSucces
         btn.style.cssText = `padding:5px 10px;border-radius:8px;border:2px solid ${isS ? '#059669' : '#e5e7eb'};background:${isS ? '#059669' : '#fff'};color:${isS ? '#fff' : '#374151'};font-size:11px;cursor:pointer;font-weight:600;font-family:inherit;max-width:160px;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;`;
         btn.addEventListener('click', () => { estat.filaComs = r; renderPas2(); });
         filaComsCont.appendChild(btn);
+      });
+    }
+
+    // ── Botons capçalera mode dues files ──
+    const cap2Cont = cont.querySelector('#uc_cap2_botons');
+    if (cap2Cont) {
+      [
+        { val: 'auto', label: '🤖 Detectar automàticament', title: 'El sistema intenta detectar si hi ha capçalera' },
+        { val: 'si',   label: '✅ Sí, hi ha capçalera',     title: 'La primera cel·la de cada grup és la capçalera' },
+        { val: 'no',   label: '🚫 No hi ha capçalera',      title: 'Tots els texts de la fila de comentaris són comentaris' },
+      ].forEach(item => {
+        const isS = estat.capcelera2files === item.val;
+        const btn = document.createElement('button');
+        btn.textContent = item.label;
+        btn.title = item.title;
+        btn.style.cssText = `padding:6px 14px;border-radius:8px;border:2px solid ${isS ? '#1d4ed8' : '#e5e7eb'};background:${isS ? '#1d4ed8' : '#fff'};color:${isS ? '#fff' : '#374151'};font-size:12px;cursor:pointer;font-weight:600;font-family:inherit;`;
+        btn.addEventListener('click', () => { estat.capcelera2files = item.val; renderPas2(); });
+        cap2Cont.appendChild(btn);
       });
     }
 
@@ -2880,14 +2911,21 @@ function _mostrarAssistentImport(wb, nomFitxer, dropZone, mostrarError, onSucces
         // Comentaris: entre colInici i colFi a la fila de comentaris
         const comsItem = celsComs.filter(x => x.c >= colInici && x.c < colFi);
 
-        // Buscar capçalera: primera cel·la de comsItem que sembli una capçalera
+        // Buscar capçalera segons configuració
         let capcelera = '';
         let comsReals = comsItem;
-        if (comsItem.length > 0) {
+        if (comsItem.length > 0 && estat.capcelera2files !== 'no') {
           const primer = comsItem[0].v;
-          const semblaCap = /pel que fa/i.test(primer) || /^\s*[\wÀ-ÿ\s]{3,60}:\s*$/.test(primer) ||
-            (primer.length < 80 && comsItem.length > 1 && primer.length < comsItem[1].v.length * 0.6);
-          if (semblaCap) {
+          let teCapcelera = false;
+          if (estat.capcelera2files === 'si') {
+            teCapcelera = true;
+          } else {
+            // auto: heurística
+            teCapcelera = /pel que fa/i.test(primer) ||
+              (/:[\s]*$/.test(primer)) ||
+              (primer.length < 80 && comsItem.length > 1 && primer.length < comsItem[1].v.length * 0.6);
+          }
+          if (teCapcelera) {
             capcelera = primer;
             comsReals = comsItem.slice(1);
           }
