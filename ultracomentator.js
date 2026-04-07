@@ -2176,28 +2176,17 @@ function _mostrarModalImport() {
         _wbActual = XLSX.read(data, { type: 'array' });
         _nomFitxerActual = file.name.replace(/\.(xlsx|xls)$/i, '');
 
-        plantillaImportada = parsejarWorkbook(_wbActual, _nomFitxerActual);
-
-        if (!plantillaImportada || plantillaImportada.items.length === 0) {
-          // No s'ha pogut detectar automàticament → mode assistent
-          _mostrarAssistentImport(_wbActual, _nomFitxerActual, dropZone, mostrarError,
-            (plantilla) => {
-              plantillaImportada = plantilla;
-              mostrarPreview(plantillaImportada);
-              document.getElementById('ucImportOk').style.display = 'inline-block';
-              dropZone.innerHTML = `<div style="font-size:28px;margin-bottom:8px;">✅</div><div style="color:#059669;font-weight:700;">${file.name}</div><div style="color:#6b7280;font-size:12px;margin-top:4px;">${plantillaImportada.items.length} ítems detectats manualment</div>`;
-              dropZone.style.borderColor = '#34d399';
-              dropZone.style.background = '#f0fdf4';
-            }
-          );
-          return;
-        }
-
-        mostrarPreview(plantillaImportada);
-        document.getElementById('ucImportOk').style.display = 'inline-block';
-        dropZone.innerHTML = `<div style="font-size:28px;margin-bottom:8px;">✅</div><div style="color:#059669;font-weight:700;">${file.name}</div><div style="color:#6b7280;font-size:12px;margin-top:4px;">${plantillaImportada.items.length} ítems trobats</div>`;
-        dropZone.style.borderColor = '#34d399';
-        dropZone.style.background = '#f0fdf4';
+        // Sempre obrir l'assistent — la detecció automàtica només preomple els valors
+        _mostrarAssistentImport(_wbActual, _nomFitxerActual, dropZone, mostrarError,
+          (plantilla) => {
+            plantillaImportada = plantilla;
+            mostrarPreview(plantillaImportada);
+            document.getElementById('ucImportOk').style.display = 'inline-block';
+            dropZone.innerHTML = `<div style="font-size:28px;margin-bottom:8px;">✅</div><div style="color:#059669;font-weight:700;">${file.name}</div><div style="color:#6b7280;font-size:12px;margin-top:4px;">${plantillaImportada.items.length} ítems importats</div>`;
+            dropZone.style.borderColor = '#34d399';
+            dropZone.style.background = '#f0fdf4';
+          }
+        );
 
       } catch (err) {
         mostrarError('Error llegint el fitxer: ' + err.message);
@@ -2583,19 +2572,40 @@ function _mostrarAssistentImport(wb, nomFitxer, dropZone, mostrarError, onSucces
     if (!ws || !ws['!ref']) return;
     const range = XLSX.utils.decode_range(ws['!ref']);
     const r = estat.filaItems;
-    // Trobar primera columna no buida
-    let primerCol = 0;
+
+    // Recollir totes les cel·les no buides de la fila
+    const cels = [];
     for (let c = 0; c <= range.e.c; c++) {
-      if (_getCellWs(ws, r, c)) { primerCol = c; break; }
+      const v = (_getCellWs(ws, r, c) || '').trim();
+      if (v) cels.push({ c, v });
     }
-    // Heurística: si el primer text és curt (< 60 cars) probablement és capçalera
-    const primerVal = _getCellWs(ws, r, primerCol) || '';
-    if (primerVal.length < 60 && primerVal.length > 2) {
-      estat.colCapcelera = primerCol;
-      estat.colPrimerCom = primerCol + 1;
+    if (cels.length === 0) return;
+
+    // Calcular longitud mitjana de tots els valors
+    const mitjana = cels.reduce((s, x) => s + x.v.length, 0) / cels.length;
+
+    // Una capçalera real és:
+    //   1. Significativament més curta que la mitjana (menys del 40%)
+    //   2. O conté patrons típics de capçalera: "pel que fa", ":" al final, etc.
+    //   3. I NO és el cas que tots els textos siguin curts (llavors no hi ha capçalera)
+    const primer = cels[0];
+    const esCapcelera =
+      (primer.v.length < mitjana * 0.5 && primer.v.length < 80) ||
+      /pel que fa/i.test(primer.v) ||
+      /^\s*[\wÀ-ÿ\s]{3,50}:\s*$/.test(primer.v);
+
+    // Si tots els textos tenen longitud similar, probablement no hi ha capçalera
+    const maxLen = Math.max(...cels.map(x => x.v.length));
+    const minLen = Math.min(...cels.map(x => x.v.length));
+    const totsSimilars = maxLen > 0 && (minLen / maxLen) > 0.4;
+
+    if (esCapcelera && !totsSimilars) {
+      estat.colCapcelera = primer.c;
+      estat.colPrimerCom = primer.c + 1;
     } else {
+      // Sense capçalera: primer comentari a la primera cel·la plena
       estat.colCapcelera = -1;
-      estat.colPrimerCom = primerCol;
+      estat.colPrimerCom = primer.c;
     }
   }
 
