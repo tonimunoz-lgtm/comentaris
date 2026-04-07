@@ -2373,6 +2373,7 @@ function _mostrarAssistentImport(wb, nomFitxer, dropZone, mostrarError, onSucces
     fullNom: wb.SheetNames[0],
     ws: null,
     filaItems: 0,    // fila (0-indexed) on estan els títols dels ítems
+    filaComs: -1,    // fila (0-indexed) on estan els comentaris (-1 = mateixa que filaItems)
     colCapcelera: -1,// columna (0-indexed) de la capçalera, -1 = sense capçalera
     colPrimerCom: 1, // columna (0-indexed) del primer comentari
     numComs: 4,      // nombre de comentaris per ítem
@@ -2572,38 +2573,59 @@ function _mostrarAssistentImport(wb, nomFitxer, dropZone, mostrarError, onSucces
     if (!ws || !ws['!ref']) return;
     const range = XLSX.utils.decode_range(ws['!ref']);
     const r = estat.filaItems;
+    const isJunk = v => !v || v.startsWith('=') || v.includes('#REF') ||
+      /^(TÍTOL|COMENTARI|ASSOLIMENT)\s+[IÍ]TEM/i.test(v) || /^[xX]$/.test(v);
 
-    // Recollir totes les cel·les no buides de la fila
+    // Comptar cel·les reals (no junk) a la fila de títols
+    let countFilaTitols = 0;
+    for (let c = 0; c <= range.e.c; c++) {
+      const v = (_getCellWs(ws, r, c) || '').trim();
+      if (!isJunk(v) && v.length >= 2) countFilaTitols++;
+    }
+
+    // Comptar cel·les reals a la fila seguent
+    let millorFilaComs = -1, millorCount = 0;
+    for (let ri = r + 1; ri <= Math.min(r + 5, range.e.r); ri++) {
+      let count = 0;
+      for (let c = 0; c <= range.e.c; c++) {
+        const v = (_getCellWs(ws, ri, c) || '').trim();
+        if (!isJunk(v) && v.length >= 3) count++;
+      }
+      if (count > millorCount) { millorCount = count; millorFilaComs = ri; }
+    }
+
+    // Si la fila seguent té significativament més contingut → mode dues files
+    if (millorFilaComs >= 0 && millorCount > countFilaTitols * 2) {
+      estat.filaComs = millorFilaComs;
+      estat.colCapcelera = -1;
+      estat.colPrimerCom = 0;
+      return;
+    }
+
+    // Mode una sola fila: heurística capçalera
+    estat.filaComs = -1;
     const cels = [];
     for (let c = 0; c <= range.e.c; c++) {
       const v = (_getCellWs(ws, r, c) || '').trim();
-      if (v) cels.push({ c, v });
+      if (!isJunk(v) && v.length >= 2) cels.push({ c, v });
     }
     if (cels.length === 0) return;
 
-    // Calcular longitud mitjana de tots els valors
     const mitjana = cels.reduce((s, x) => s + x.v.length, 0) / cels.length;
-
-    // Una capçalera real és:
-    //   1. Significativament més curta que la mitjana (menys del 40%)
-    //   2. O conté patrons típics de capçalera: "pel que fa", ":" al final, etc.
-    //   3. I NO és el cas que tots els textos siguin curts (llavors no hi ha capçalera)
     const primer = cels[0];
-    const esCapcelera =
-      (primer.v.length < mitjana * 0.5 && primer.v.length < 80) ||
-      /pel que fa/i.test(primer.v) ||
-      /^\s*[\wÀ-ÿ\s]{3,50}:\s*$/.test(primer.v);
-
-    // Si tots els textos tenen longitud similar, probablement no hi ha capçalera
     const maxLen = Math.max(...cels.map(x => x.v.length));
     const minLen = Math.min(...cels.map(x => x.v.length));
     const totsSimilars = maxLen > 0 && (minLen / maxLen) > 0.4;
+    const esCapcelera = !totsSimilars && (
+      (primer.v.length < mitjana * 0.5 && primer.v.length < 80) ||
+      /pel que fa/i.test(primer.v) ||
+      /:[\s]*$/.test(primer.v)
+    );
 
-    if (esCapcelera && !totsSimilars) {
+    if (esCapcelera) {
       estat.colCapcelera = primer.c;
       estat.colPrimerCom = primer.c + 1;
     } else {
-      // Sense capçalera: primer comentari a la primera cel·la plena
       estat.colCapcelera = -1;
       estat.colPrimerCom = primer.c;
     }
@@ -2652,7 +2674,24 @@ function _mostrarAssistentImport(wb, nomFitxer, dropZone, mostrarError, onSucces
     cont.innerHTML = `
       ${header('🗂️', 'Configura les columnes', 'Indica on estan les capçaleres i els comentaris de cada ítem.', 3, 4)}
 
-      <!-- Capçalera -->
+      <!-- Fila de comentaris diferent -->
+      <div style="background:#fff;border:1px solid #e5e7eb;border-radius:10px;padding:14px;margin-bottom:12px;">
+        <div style="font-weight:700;color:#374151;font-size:13px;margin-bottom:6px;">📋 Els comentaris estan en una fila diferent?</div>
+        <div style="font-size:12px;color:#6b7280;margin-bottom:10px;">
+          Alguns excels tenen els <strong>títols dels ítems</strong> en una fila i els <strong>comentaris</strong> en una altra.<br>
+          En aquest cas activa el mode "Dues files" i indica quina fila té els comentaris.
+        </div>
+        <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+          <div id="uc_mode_files" style="display:flex;gap:6px;"></div>
+          <div id="uc_fila_coms_wrap" style="display:${estat.filaComs >= 0 ? 'flex' : 'none'};align-items:center;gap:6px;flex-wrap:wrap;">
+            <span style="font-size:12px;font-weight:600;color:#374151;">Fila comentaris:</span>
+            <div id="uc_fila_coms_botons" style="display:flex;gap:5px;flex-wrap:wrap;"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Capçalera (només en mode una fila) -->
+      <div id="uc_bloc_cap" style="display:${estat.filaComs >= 0 ? 'none' : 'block'}">
       <div style="background:#fff;border:1px solid #e5e7eb;border-radius:10px;padding:14px;margin-bottom:12px;">
         <div style="font-weight:700;color:#374151;font-size:13px;margin-bottom:8px;">📌 Columna de capçalera (text introductori de l'ítem)</div>
         <div style="font-size:12px;color:#6b7280;margin-bottom:10px;">
@@ -2662,7 +2701,10 @@ function _mostrarAssistentImport(wb, nomFitxer, dropZone, mostrarError, onSucces
         <div id="uc_cols_cap" style="display:flex;gap:6px;flex-wrap:wrap;"></div>
       </div>
 
-      <!-- Primer comentari -->
+      </div><!-- fi uc_bloc_cap -->
+
+      <!-- Primer comentari (només en mode una fila) -->
+      <div id="uc_bloc_com" style="display:${estat.filaComs >= 0 ? 'none' : 'block'}">
       <div style="background:#fff;border:1px solid #e5e7eb;border-radius:10px;padding:14px;margin-bottom:12px;">
         <div style="font-weight:700;color:#374151;font-size:13px;margin-bottom:8px;">💬 Columna del primer comentari</div>
         <div style="font-size:12px;color:#6b7280;margin-bottom:10px;">
@@ -2677,6 +2719,7 @@ function _mostrarAssistentImport(wb, nomFitxer, dropZone, mostrarError, onSucces
           <div id="uc_numcoms" style="display:flex;gap:5px;"></div>
         </div>
       </div>
+      </div><!-- fi uc_bloc_com -->
 
       <!-- Previsualització -->
       <div style="margin-bottom:12px;">
@@ -2690,6 +2733,50 @@ function _mostrarAssistentImport(wb, nomFitxer, dropZone, mostrarError, onSucces
         <button id="uc_p2back" style="padding:8px 16px;background:#f3f4f6;color:#374151;border:none;border-radius:8px;font-weight:600;cursor:pointer;font-size:13px;font-family:inherit;">← Enrere</button>
         <button id="uc_p2next" style="padding:8px 20px;background:#7c3aed;color:#fff;border:none;border-radius:8px;font-weight:700;cursor:pointer;font-size:13px;font-family:inherit;">Analitzar i veure resum →</button>
       </div>`;
+
+    // ── Botons mode (una fila / dues files) ──
+    const modeCont = cont.querySelector('#uc_mode_files');
+    [
+      { val: -1, label: '📋 Una sola fila', title: 'Títols i comentaris a la mateixa fila' },
+      { val: estat.filaItems + 1, label: '📋+💬 Dues files', title: 'Títols en una fila, comentaris en una altra' }
+    ].forEach(item => {
+      const isS = item.val === -1 ? estat.filaComs < 0 : estat.filaComs >= 0;
+      const btn = document.createElement('button');
+      btn.textContent = item.label;
+      btn.title = item.title;
+      btn.style.cssText = `padding:6px 14px;border-radius:8px;border:2px solid ${isS ? '#7c3aed' : '#e5e7eb'};background:${isS ? '#7c3aed' : '#fff'};color:${isS ? '#fff' : '#374151'};font-size:12px;cursor:pointer;font-weight:600;font-family:inherit;`;
+      btn.addEventListener('click', () => {
+        if (item.val === -1) {
+          estat.filaComs = -1;
+        } else {
+          // Suggerir la fila just després de la de títols
+          estat.filaComs = estat.filaItems === 0 ? 1 : estat.filaItems + 1;
+        }
+        renderPas2();
+      });
+      modeCont.appendChild(btn);
+    });
+
+    // ── Botons fila de comentaris (mode dues files) ──
+    const filaComsCont = cont.querySelector('#uc_fila_coms_botons');
+    if (filaComsCont && estat.filaComs >= 0) {
+      const wsRange = XLSX.utils.decode_range(ws['!ref'] || 'A1:Z10');
+      const maxRowsDisp = Math.min(wsRange.e.r + 1, 15);
+      Array.from({ length: maxRowsDisp }, (_, i) => i).forEach(r => {
+        if (r === estat.filaItems) return; // no permetre la mateixa fila que títols
+        let preview = '';
+        for (let c = 0; c <= wsRange.e.c && c < 5; c++) {
+          const v = _getCellWs(ws, r, c) || '';
+          if (v && v.length > 1 && !v.startsWith('=')) { preview = v.substring(0, 18) + (v.length > 18 ? '…' : ''); break; }
+        }
+        const isS = r === estat.filaComs;
+        const btn = document.createElement('button');
+        btn.textContent = `${r + 1}${preview ? ': ' + preview : ''}`;
+        btn.style.cssText = `padding:5px 10px;border-radius:8px;border:2px solid ${isS ? '#059669' : '#e5e7eb'};background:${isS ? '#059669' : '#fff'};color:${isS ? '#fff' : '#374151'};font-size:11px;cursor:pointer;font-weight:600;font-family:inherit;max-width:160px;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;`;
+        btn.addEventListener('click', () => { estat.filaComs = r; renderPas2(); });
+        filaComsCont.appendChild(btn);
+      });
+    }
 
     // Botons capçalera
     const capCols = [{ val: -1, label: '🚫 Sense capçalera', title: 'Els ítems no tenen text introductori' }];
@@ -2754,46 +2841,114 @@ function _mostrarAssistentImport(wb, nomFitxer, dropZone, mostrarError, onSucces
     const ws = estat.ws;
     if (!ws || !ws['!ref']) return [];
     const range = XLSX.utils.decode_range(ws['!ref']);
-    const r = estat.filaItems;
     const maxCol = range.e.c + 1;
-    const cel = c => (_getCellWs(ws, r, c) || '').trim();
-    const teCapcelera = estat.colCapcelera >= 0;
-    const pasCol = teCapcelera ? 1 + estat.numComs : estat.numComs; // quantes cols ocupa un ítem
 
-    const items = [];
-    let c = teCapcelera ? estat.colCapcelera : estat.colPrimerCom;
+    const modeDuesFiles = estat.filaComs >= 0 && estat.filaComs !== estat.filaItems;
 
-    while (c < maxCol) {
-      // Llegir capçalera (si existeix)
-      let capcelera = '';
-      if (teCapcelera) {
-        capcelera = cel(c);
-        c++;
+    if (modeDuesFiles) {
+      // ── MODE DUES FILES ────────────────────────────────────────────────────
+      // Fila títols: detectar posicions dels títols (cel·les no buides, no fórmules, no metadades)
+      const rT = estat.filaItems;
+      const rC = estat.filaComs;
+      const celT = c => (_getCellWs(ws, rT, c) || '').trim();
+      const celC = c => (_getCellWs(ws, rC, c) || '').trim();
+      const isJunk = v => !v || v.startsWith('=') || v.includes('#REF') || v.includes('#') ||
+        /^(TÍTOL|COMENTARI|ASSOLIMENT)\s+[IÍ]TEM/i.test(v) || /^[xX]$/.test(v);
+
+      // Recollir posicions dels títols
+      const posTitols = [];
+      for (let c = 0; c < maxCol; c++) {
+        const v = celT(c);
+        if (!isJunk(v) && v.length >= 2) posTitols.push(c);
       }
-      // Llegir comentaris
-      const coms = [];
-      for (let i = 0; i < estat.numComs && c < maxCol; i++, c++) {
-        const t = cel(c);
-        if (t && t.length >= 3) {
-          coms.push({ id: 'com_' + Date.now() + '_' + c + '_' + i, text: t, nivell: 'general' });
+      if (posTitols.length === 0) return [];
+
+      // Recollir comentaris de la fila de comentaris (filtrant junk)
+      const celsComs = [];
+      for (let c = 0; c < maxCol; c++) {
+        const v = celC(c);
+        if (!isJunk(v) && v.length >= 3) celsComs.push({ c, v });
+      }
+
+      // Per cada títol, assignar els comentaris que estan entre la seva posició i la del títol següent
+      const items = [];
+      for (let i = 0; i < posTitols.length; i++) {
+        const colInici = posTitols[i];
+        const colFi = i + 1 < posTitols.length ? posTitols[i + 1] : maxCol;
+        const titol = _capFirst(celT(colInici));
+
+        // Comentaris: entre colInici i colFi a la fila de comentaris
+        const comsItem = celsComs.filter(x => x.c >= colInici && x.c < colFi);
+
+        // Buscar capçalera: primera cel·la de comsItem que sembli una capçalera
+        let capcelera = '';
+        let comsReals = comsItem;
+        if (comsItem.length > 0) {
+          const primer = comsItem[0].v;
+          const semblaCap = /pel que fa/i.test(primer) || /^\s*[\wÀ-ÿ\s]{3,60}:\s*$/.test(primer) ||
+            (primer.length < 80 && comsItem.length > 1 && primer.length < comsItem[1].v.length * 0.6);
+          if (semblaCap) {
+            capcelera = primer;
+            comsReals = comsItem.slice(1);
+          }
         }
+
+        if (comsReals.length === 0) continue;
+
+        const comentaris = comsReals.map((x, idx) => ({
+          id: 'com_' + Date.now() + '_' + x.c + '_' + idx,
+          text: x.v,
+          nivell: 'general'
+        }));
+
+        items.push({
+          id: 'item_' + Date.now() + '_' + i,
+          titol,
+          capcelera,
+          comentaris
+        });
       }
-      // Necessitem almenys 1 comentari per crear l'ítem
-      if (coms.length === 0) break;
+      return items;
 
-      // Titol: usem la capçalera (sense els : finals), o el primer comentari truncat
-      let titol = capcelera.replace(/:+\s*$/, '').replace(/^[Pp]el que fa a\s*/i, '').trim();
-      if (!titol) titol = coms[0].text.substring(0, 40) + (coms[0].text.length > 40 ? '…' : '');
-      titol = _capFirst(titol);
+    } else {
+      // ── MODE UNA SOLA FILA (comportament original) ─────────────────────────
+      const r = estat.filaItems;
+      const cel = c => (_getCellWs(ws, r, c) || '').trim();
+      const isJunk = v => !v || v.startsWith('=') || v.includes('#REF') ||
+        /^(TÍTOL|COMENTARI|ASSOLIMENT)\s+[IÍ]TEM/i.test(v) || /^[xX]$/.test(v);
+      const teCapcelera = estat.colCapcelera >= 0;
 
-      items.push({
-        id: 'item_' + Date.now() + '_' + items.length,
-        titol,
-        capcelera: capcelera || '',
-        comentaris: coms
-      });
+      const items = [];
+      let c = teCapcelera ? estat.colCapcelera : estat.colPrimerCom;
+
+      while (c < maxCol) {
+        let capcelera = '';
+        if (teCapcelera) {
+          capcelera = cel(c);
+          c++;
+        }
+        const coms = [];
+        for (let i = 0; i < estat.numComs && c < maxCol; i++, c++) {
+          const t = cel(c);
+          if (!isJunk(t) && t.length >= 3) {
+            coms.push({ id: 'com_' + Date.now() + '_' + c + '_' + i, text: t, nivell: 'general' });
+          }
+        }
+        if (coms.length === 0) break;
+
+        let titol = capcelera.replace(/:+\s*$/, '').replace(/^[Pp]el que fa a\s*/i, '').trim();
+        if (!titol) titol = coms[0].text.substring(0, 40) + (coms[0].text.length > 40 ? '\u2026' : '');
+        titol = _capFirst(titol);
+
+        items.push({
+          id: 'item_' + Date.now() + '_' + items.length,
+          titol,
+          capcelera: capcelera || '',
+          comentaris: coms
+        });
+      }
+      return items;
     }
-    return items;
   }
 
   // ── PAS 3: resum i confirmació ─────────────────────────────────────────────
