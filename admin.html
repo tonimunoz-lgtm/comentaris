@@ -85,6 +85,7 @@
     <button class="backup-tab active" data-tab="fer" style="padding:8px 16px;background:none;border:none;font-size:13px;font-weight:600;cursor:pointer;color:#7c3aed;border-bottom:2px solid #7c3aed;margin-bottom:-2px;">📦 Fer backup</button>
     <button class="backup-tab" data-tab="restaurar" style="padding:8px 16px;background:none;border:none;font-size:13px;font-weight:600;cursor:pointer;color:#9ca3af;border-bottom:2px solid transparent;margin-bottom:-2px;">🔄 Restaurar</button>
     <button class="backup-tab" data-tab="config" style="padding:8px 16px;background:none;border:none;font-size:13px;font-weight:600;cursor:pointer;color:#9ca3af;border-bottom:2px solid transparent;margin-bottom:-2px;">⚙️ Config email</button>
+    <button class="backup-tab" data-tab="netejar" style="padding:8px 16px;background:none;border:none;font-size:13px;font-weight:600;cursor:pointer;color:#dc2626;border-bottom:2px solid transparent;margin-bottom:-2px;">🗑️ Netejar dades</button>
   </div>
 
   <!-- TAB: FER BACKUP -->
@@ -168,6 +169,133 @@
       </div>
 
       <button id="btnRestoreNow" class="btn btn-yellow">🔄 Restaurar col·leccions seleccionades</button>
+    </div>
+  </div>
+
+  <!-- TAB: NETEJAR DADES -->
+  <div id="tab-netejar" style="display:none;">
+    <!-- Avís -->
+    <div style="background:#fef2f2;border:2px solid #fca5a5;border-radius:10px;padding:14px;margin-bottom:16px;">
+      <div style="font-size:14px;font-weight:800;color:#991b1b;margin-bottom:4px;">⚠️ Zona de perill</div>
+      <div style="font-size:12px;color:#7f1d1d;line-height:1.6;">
+        Aquesta eina <strong>elimina dades permanentment</strong> de Firestore. No es pot desfer.<br>
+        Recomanem fer un <strong>backup complet</strong> abans de procedir.<br>
+        L'<strong>estructura del centre</strong> (nivells, grups, alumnes) mai s'esborra des d'aquí — es gestiona des de Secretaria.
+      </div>
+    </div>
+
+    <!-- Selector de col·leccions a netejar -->
+    <div style="margin-bottom:16px;">
+      <div style="font-size:13px;font-weight:700;color:#374151;margin-bottom:10px;">Selecciona què vols esborrar:</div>
+      <div style="display:flex;flex-direction:column;gap:8px;" id="netejarCheckboxes">
+
+        <!-- GRUP: Dades d'avaluació -->
+        <div style="background:#fef2f2;border:1.5px solid #fca5a5;border-radius:10px;padding:12px;">
+          <div style="font-size:12px;font-weight:700;color:#991b1b;margin-bottom:8px;text-transform:uppercase;letter-spacing:.5px;">📊 Dades d'avaluació</div>
+          <label style="display:flex;align-items:flex-start;gap:10px;cursor:pointer;margin-bottom:6px;">
+            <input type="checkbox" class="chk-netejar" data-col="avaluacio_centre" data-desc="Avaluacions enviades pels professors (per matèria i alumne)" style="margin-top:2px;width:15px;height:15px;accent-color:#dc2626;flex-shrink:0;">
+            <div>
+              <div style="font-size:13px;font-weight:600;color:#1f2937;">avaluacio_centre</div>
+              <div style="font-size:11px;color:#6b7280;">Avaluacions enviades pels professors per a cada alumne i matèria</div>
+            </div>
+          </label>
+          <label style="display:flex;align-items:flex-start;gap:10px;cursor:pointer;margin-bottom:6px;">
+            <input type="checkbox" class="chk-netejar" data-col="autoaval_respostes" data-desc="Respostes d'autoavaluació dels alumnes" style="margin-top:2px;width:15px;height:15px;accent-color:#dc2626;flex-shrink:0;">
+            <div>
+              <div style="font-size:13px;font-weight:600;color:#1f2937;">autoaval_respostes</div>
+              <div style="font-size:11px;color:#6b7280;">Respostes d'autodiagnosi dels alumnes</div>
+            </div>
+          </label>
+          <label style="display:flex;align-items:flex-start;gap:10px;cursor:pointer;">
+            <input type="checkbox" class="chk-netejar" data-col="plans_individualitzats" data-desc="Plans Individualitzats (PI) dels alumnes" style="margin-top:2px;width:15px;height:15px;accent-color:#dc2626;flex-shrink:0;">
+            <div>
+              <div style="font-size:13px;font-weight:600;color:#1f2937;">plans_individualitzats</div>
+              <div style="font-size:11px;color:#6b7280;">Plans Individualitzats (PI) creats pels professors</div>
+            </div>
+          </label>
+        </div>
+
+        <!-- GRUP: Classes i comentaris -->
+        <div style="background:#fff7ed;border:1.5px solid #fed7aa;border-radius:10px;padding:12px;">
+          <div style="font-size:12px;font-weight:700;color:#92400e;margin-bottom:8px;text-transform:uppercase;letter-spacing:.5px;">💬 Classes i comentaris</div>
+          <label style="display:flex;align-items:flex-start;gap:10px;cursor:pointer;margin-bottom:6px;">
+            <input type="checkbox" class="chk-netejar" data-col="classes" data-desc="Classes creades pels professors (panell de comentaris i ítems)" style="margin-top:2px;width:15px;height:15px;accent-color:#d97706;flex-shrink:0;">
+            <div>
+              <div style="font-size:13px;font-weight:600;color:#1f2937;">classes</div>
+              <div style="font-size:11px;color:#6b7280;">Classes creades pels professors incloent comentaris, periodes i alumnes vinculats</div>
+            </div>
+          </label>
+          <label style="display:flex;align-items:flex-start;gap:10px;cursor:pointer;">
+            <input type="checkbox" class="chk-netejar" data-col="activitats" data-desc="Activitats creades pels professors" style="margin-top:2px;width:15px;height:15px;accent-color:#d97706;flex-shrink:0;">
+            <div>
+              <div style="font-size:13px;font-weight:600;color:#1f2937;">activitats</div>
+              <div style="font-size:11px;color:#6b7280;">Activitats i projectes creats pels professors</div>
+            </div>
+          </label>
+        </div>
+
+        <!-- GRUP: Configuració i sistema -->
+        <div style="background:#f0f9ff;border:1.5px solid #bae6fd;border-radius:10px;padding:12px;">
+          <div style="font-size:12px;font-weight:700;color:#0369a1;margin-bottom:8px;text-transform:uppercase;letter-spacing:.5px;">⚙️ Configuració i sistema</div>
+          <label style="display:flex;align-items:flex-start;gap:10px;cursor:pointer;margin-bottom:6px;">
+            <input type="checkbox" class="chk-netejar" data-col="_sistema:info_butlletins" data-desc="Text informatiu dels butlletins" data-subdoc="info_butlletins" style="margin-top:2px;width:15px;height:15px;accent-color:#0284c7;flex-shrink:0;">
+            <div>
+              <div style="font-size:13px;font-weight:600;color:#1f2937;">_sistema → info_butlletins</div>
+              <div style="font-size:11px;color:#6b7280;">Textos informatius configurats per als butlletins</div>
+            </div>
+          </label>
+          <label style="display:flex;align-items:flex-start;gap:10px;cursor:pointer;margin-bottom:6px;">
+            <input type="checkbox" class="chk-netejar" data-col="_sistema:firmes_config" data-desc="Firmes i segells configurats" data-subdoc="firmes_config" style="margin-top:2px;width:15px;height:15px;accent-color:#0284c7;flex-shrink:0;">
+            <div>
+              <div style="font-size:13px;font-weight:600;color:#1f2937;">_sistema → firmes_config</div>
+              <div style="font-size:11px;color:#6b7280;">Firmes digitals i segells del director/a</div>
+            </div>
+          </label>
+          <label style="display:flex;align-items:flex-start;gap:10px;cursor:pointer;">
+            <input type="checkbox" class="chk-netejar" data-col="ultracomentator_plantilles" data-desc="Plantilles de l'Ultracomentator creades pels professors" style="margin-top:2px;width:15px;height:15px;accent-color:#0284c7;flex-shrink:0;">
+            <div>
+              <div style="font-size:13px;font-weight:600;color:#1f2937;">ultracomentator_plantilles</div>
+              <div style="font-size:11px;color:#6b7280;">Plantilles de comentaris de l'Ultracomentator</div>
+            </div>
+          </label>
+        </div>
+
+      </div>
+    </div>
+
+    <!-- Confirmació -->
+    <div id="netejarConfirmWrap" style="display:none;margin-bottom:16px;">
+      <div style="background:#fef2f2;border:2px solid #dc2626;border-radius:10px;padding:14px;margin-bottom:12px;">
+        <div style="font-size:13px;font-weight:700;color:#991b1b;margin-bottom:6px;">Confirmació requerida</div>
+        <div style="font-size:12px;color:#7f1d1d;margin-bottom:10px;">
+          S'esborraran les col·leccions seleccionades:<br>
+          <strong id="netejarLlistaSelected" style="color:#dc2626;"></strong>
+        </div>
+        <div style="font-size:12px;color:#374151;margin-bottom:8px;">Escriu <strong>ELIMINAR</strong> per confirmar:</div>
+        <input type="text" id="inpNetejarConfirm" placeholder="ELIMINAR"
+          style="width:100%;box-sizing:border-box;padding:9px 11px;border:2px solid #dc2626;border-radius:8px;font-size:14px;font-weight:700;outline:none;letter-spacing:2px;text-transform:uppercase;">
+      </div>
+      <button id="btnNetejarExecutar" class="btn btn-red" style="font-size:13px;padding:10px 20px;">
+        🗑️ Esborrar definitivament
+      </button>
+    </div>
+
+    <!-- Progrés -->
+    <div id="netejarProgress" style="display:none;margin-bottom:12px;">
+      <div style="font-size:12px;color:#6b7280;margin-bottom:4px;" id="netejarProgressLabel">Esborrant...</div>
+      <div style="background:#e5e7eb;border-radius:99px;height:8px;overflow:hidden;">
+        <div id="netejarProgressBar" style="background:#dc2626;height:100%;width:0%;transition:width .3s;border-radius:99px;"></div>
+      </div>
+    </div>
+    <div id="netejarResultat" style="font-size:13px;min-height:16px;"></div>
+
+    <!-- Botons principals -->
+    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:12px;">
+      <button id="btnNetejarPreview" class="btn btn-red">🗑️ Esborrar seleccionat</button>
+      <button onclick="document.querySelectorAll('.chk-netejar').forEach(c=>c.checked=true)"
+        class="btn btn-sm btn-gray">☑️ Seleccionar-ho tot</button>
+      <button onclick="document.querySelectorAll('.chk-netejar').forEach(c=>c.checked=false)"
+        class="btn btn-sm btn-gray">☐ Desseleccionar</button>
     </div>
   </div>
 
@@ -289,7 +417,7 @@ document.querySelectorAll('.backup-tab').forEach(tab => {
       t.style.color = '#9ca3af'; t.style.borderBottomColor = 'transparent';
     });
     tab.style.color = '#7c3aed'; tab.style.borderBottomColor = '#7c3aed';
-    ['fer','restaurar','config'].forEach(id => {
+    ['fer','restaurar','config','netejar'].forEach(id => {
       const el = document.getElementById('tab-'+id);
       if (el) el.style.display = (id === tab.dataset.tab) ? '' : 'none';
     });
@@ -875,6 +1003,123 @@ document.getElementById('btnAddAdmin').onclick = async () => {
 document.getElementById('btnSendEmail').onclick = () => {
   alert('Funcionalitat d\'enviament de correu disponible a través de Firebase Functions o EmailJS.');
 };
+
+// ═══════════════════════════════════════════════
+// NETEJAR DADES
+// ═══════════════════════════════════════════════
+
+document.getElementById('btnNetejarPreview').addEventListener('click', () => {
+  const seleccionats = [...document.querySelectorAll('.chk-netejar:checked')];
+  if (!seleccionats.length) {
+    mostrarToast('⚠️ Selecciona almenys una col·lecció', 3000);
+    return;
+  }
+  const noms = seleccionats.map(c => c.dataset.desc || c.dataset.col).join(', ');
+  document.getElementById('netejarLlistaSelected').textContent = noms;
+  document.getElementById('netejarConfirmWrap').style.display = 'block';
+  document.getElementById('inpNetejarConfirm').value = '';
+  document.getElementById('inpNetejarConfirm').focus();
+  document.getElementById('netejarResultat').textContent = '';
+});
+
+document.getElementById('btnNetejarExecutar').addEventListener('click', async () => {
+  const confirmText = document.getElementById('inpNetejarConfirm').value.trim().toUpperCase();
+  if (confirmText !== 'ELIMINAR') {
+    mostrarToast('⚠️ Escriu exactament ELIMINAR per confirmar', 3000);
+    document.getElementById('inpNetejarConfirm').style.borderColor = '#dc2626';
+    return;
+  }
+
+  const seleccionats = [...document.querySelectorAll('.chk-netejar:checked')];
+  if (!seleccionats.length) return;
+
+  const btn = document.getElementById('btnNetejarExecutar');
+  const progWrap = document.getElementById('netejarProgress');
+  const progLabel = document.getElementById('netejarProgressLabel');
+  const progBar = document.getElementById('netejarProgressBar');
+  const resultatEl = document.getElementById('netejarResultat');
+
+  btn.disabled = true;
+  progWrap.style.display = 'block';
+  resultatEl.textContent = '';
+
+  let totalEsborrats = 0;
+  const errors = [];
+
+  for (let i = 0; i < seleccionats.length; i++) {
+    const chk = seleccionats[i];
+    const col = chk.dataset.col;
+    const subdoc = chk.dataset.subdoc; // per _sistema:xxxx
+    const pct = Math.round(((i) / seleccionats.length) * 100);
+    progBar.style.width = pct + '%';
+    progLabel.textContent = `Esborrant: ${col} (${i+1}/${seleccionats.length})...`;
+
+    try {
+      if (subdoc) {
+        // Esborrar un document específic dins _sistema
+        await db.collection('_sistema').doc(subdoc).delete();
+        totalEsborrats++;
+      } else {
+        // Esborrar col·lecció sencera en lots de 100
+        let continuar = true;
+        let totalCol = 0;
+        while (continuar) {
+          const snap = await db.collection(col).limit(100).get();
+          if (snap.empty) { continuar = false; break; }
+          // Si té subcoleccions conegudes, esborrar-les primer
+          const SUBCOLS = { classes: ['comentaris','periodes','alumnes'] };
+          const subcols = SUBCOLS[col] || [];
+          const batch = db.batch();
+          for (const doc of snap.docs) {
+            // Esborrar subcoleccions si n'hi ha
+            for (const sc of subcols) {
+              try {
+                let scCont = true;
+                while (scCont) {
+                  const scSnap = await doc.ref.collection(sc).limit(200).get();
+                  if (scSnap.empty) { scCont = false; break; }
+                  const batchSc = db.batch();
+                  scSnap.docs.forEach(d => batchSc.delete(d.ref));
+                  await batchSc.commit();
+                }
+              } catch(e) { /* subcolecció no existent */ }
+            }
+            batch.delete(doc.ref);
+            totalCol++;
+          }
+          await batch.commit();
+          if (snap.docs.length < 100) continuar = false;
+        }
+        totalEsborrats += totalCol;
+      }
+    } catch(e) {
+      errors.push(`${col}: ${e.message}`);
+    }
+  }
+
+  progBar.style.width = '100%';
+  progLabel.textContent = '✅ Completat';
+  btn.disabled = false;
+  document.getElementById('netejarConfirmWrap').style.display = 'none';
+  document.querySelectorAll('.chk-netejar').forEach(c => c.checked = false);
+
+  if (errors.length) {
+    resultatEl.innerHTML = `<span style="color:#dc2626;">⚠️ Alguns errors: ${errors.join(' | ')}</span>`;
+  } else {
+    resultatEl.innerHTML = `<span style="color:#059669;font-weight:600;">✅ Fet! ${totalEsborrats} documents eliminats correctament.</span>`;
+    mostrarToast('✅ Dades eliminades correctament', 3000);
+  }
+
+  setTimeout(() => { progWrap.style.display = 'none'; }, 3000);
+});
+
+// Ocultar confirmació si es desselecciona tot
+document.querySelectorAll('.chk-netejar').forEach(chk => {
+  chk.addEventListener('change', () => {
+    const nSelec = document.querySelectorAll('.chk-netejar:checked').length;
+    if (!nSelec) document.getElementById('netejarConfirmWrap').style.display = 'none';
+  });
+});
 
 </script>
 </body>
