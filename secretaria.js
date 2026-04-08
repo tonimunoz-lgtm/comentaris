@@ -2162,17 +2162,25 @@ async function modalEditarRols(usuari, onGuardat) {
   let grupsTutoria = [];
   try {
     const snapT = await window.db.collection('grups_centre')
-      .where('tipus','==','classe').orderBy('ordre').get();
+      .where('tipus','==','classe').get();
     grupsTutoria = snapT.docs.map(d=>({id:d.id,...d.data()}));
   } catch(e){
-    // Si no hi ha índex, carregar tots i filtrar
     try {
       const snapT2 = await window.db.collection('grups_centre').get();
       grupsTutoria = snapT2.docs.map(d=>({id:d.id,...d.data()}))
-        .filter(g => g.tipus === 'classe')
-        .sort((a,b) => (a.ordre||99)-(b.ordre||99));
+        .filter(g => g.tipus === 'classe');
     } catch(e2){}
   }
+  // Ordenar: primer per nivellNom (1r ESO, 2n ESO...), després per nom de grup (A, B, C...)
+  grupsTutoria.sort((a, b) => {
+    const nivA = (a.nivellNom || a.nivell || '').toLowerCase();
+    const nivB = (b.nivellNom || b.nivell || '').toLowerCase();
+    const cmpNiv = nivA.localeCompare(nivB, 'ca', { numeric: true });
+    if (cmpNiv !== 0) return cmpNiv;
+    const nomA = (a.nom || '').toLowerCase();
+    const nomB = (b.nom || '').toLowerCase();
+    return nomA.localeCompare(nomB, 'ca', { numeric: true });
+  });
   const tutorGrups = Array.isArray(usuari.tutoria_grups) ? usuari.tutoria_grups : [];
 
   crearModal(`🎭 Rols — ${usuari.nom||usuari.email}`, `
