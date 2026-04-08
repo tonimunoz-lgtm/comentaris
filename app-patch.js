@@ -22,6 +22,13 @@ firebase.auth().onAuthStateChanged(async user => {
 
   // Esperar que rols.js hagi carregat carregarPerfilUsuari
   await esperarFn('carregarPerfilUsuari', 6000);
+  // Esperar que els scripts de botons estiguin carregats
+  await Promise.all([
+    esperarFn('injectarBotoSecretaria', 6000),
+    esperarFn('injectarBotoTutoria', 6000),
+    esperarFn('injectarBotoRevisor', 6000),
+    esperarFn('injectarBotoJuntaAvaluacio', 6000),
+  ]);
 
   try {
     // Carregar perfil usuari
