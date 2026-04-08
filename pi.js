@@ -460,53 +460,12 @@ async function injectarSeccioPI(detallEl) {
                  font-weight:700;cursor:pointer;">
           ✏️ Editar PI
         </button>` : ''}
-      </div>
-      ${piData.documentURL ? `
-      <div style="margin-top:12px;padding-top:12px;border-top:1px solid #ede9fe;">
-        <div style="font-size:11px;font-weight:700;color:#374151;margin-bottom:6px;">📎 Document adjunt:</div>
-        <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
-          <a href="${piEsH(piData.documentURL)}" target="_blank"
-            style="display:inline-flex;align-items:center;gap:6px;padding:6px 14px;
-                   background:#7c3aed;color:#fff;border-radius:8px;font-size:12px;
-                   font-weight:700;text-decoration:none;">
-            👁 ${piEsH(piData.documentNom || 'Veure document')}
-          </a>
-          ${esPedagogPI() ? `
-          <button class="btn-eliminar-doc-pi" data-ralc="${piEsH(ralc)}" data-nom="${piEsH(piData.documentNom||'')}"
-            style="padding:6px 12px;background:#fee2e2;color:#dc2626;border:1.5px solid #fca5a5;
-                   border-radius:8px;font-size:12px;font-weight:700;cursor:pointer;">
-            🗑 Eliminar
-          </button>` : ''}
-        </div>
-      </div>` : ''}
-    </div>`;
+      </div>`;
     seccio.querySelector('.btn-editar-pi-detall')?.addEventListener('click', () => {
       obrirFormulariPI(ralc, piData, () => {
         detallEl.querySelector('#piTutoriaSection')?.remove();
         injectarSeccioPI(detallEl);
       });
-    });
-
-    seccio.querySelector('.btn-eliminar-doc-pi')?.addEventListener('click', async (e) => {
-      const btn = e.currentTarget;
-      const nomFitxer = btn.dataset.nom;
-      if (!confirm('Segur que vols eliminar el document adjunt?')) return;
-      btn.disabled = true; btn.textContent = '⏳...';
-      try {
-        if (nomFitxer) {
-          await firebase.storage().ref(`plans_individualitzats/${ralc}/${nomFitxer}`).delete();
-        }
-        await window.db.collection(PI_COL).doc(String(ralc)).update({
-          documentURL: null,
-          documentNom: null,
-        });
-        window.mostrarToast('🗑 Document eliminat', 3000);
-        detallEl.querySelector('#piTutoriaSection')?.remove();
-        injectarSeccioPI(detallEl);
-      } catch(err) {
-        window.mostrarToast('❌ Error: ' + err.message, 4000);
-        btn.disabled = false; btn.textContent = '🗑 Eliminar';
-      }
     });
   }
 
@@ -974,56 +933,6 @@ function obrirFormulariPI(ralc, piData, onDesat, nomAlumne) {
                    font-family:inherit;line-height:1.6;">${piEsH(piData?.adaptacio || '')}</textarea>
         </div>
 
-        <!-- Document adjunt -->
-        <div style="margin-bottom:22px;">
-          <label style="font-size:12px;font-weight:700;color:#374151;display:block;margin-bottom:6px;">
-            📎 Document adjunt <span style="font-size:11px;font-weight:400;color:#9ca3af;">(PDF, Word, etc. — opcional)</span>
-          </label>
-          ${piData?.documentURL ? `
-            <div id="piDocActual" style="display:flex;align-items:center;gap:10px;padding:10px 14px;
-              background:#f5f3ff;border:1.5px solid #c4b5fd;border-radius:10px;margin-bottom:8px;">
-              <span style="font-size:18px;">📄</span>
-              <div style="flex:1;min-width:0;">
-                <div style="font-size:12px;font-weight:700;color:#4c1d95;
-                     white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${piEsH(piData.documentNom || 'Document adjunt')}</div>
-                <div style="font-size:11px;color:#7c3aed;">Document actual</div>
-              </div>
-              <a href="${piEsH(piData.documentURL)}" target="_blank"
-                style="padding:5px 10px;background:#7c3aed;color:#fff;border-radius:7px;
-                       font-size:11px;font-weight:700;text-decoration:none;white-space:nowrap;">
-                👁 Veure
-              </a>
-              <button id="btnEliminarDocPI"
-                style="padding:5px 10px;background:#fee2e2;color:#dc2626;border:1.5px solid #fca5a5;
-                       border-radius:7px;font-size:11px;font-weight:700;cursor:pointer;white-space:nowrap;">
-                🗑
-              </button>
-            </div>
-          ` : ''}
-          <div id="piDocPreview" style="display:none;align-items:center;gap:10px;padding:10px 14px;
-            background:#f0fdf4;border:1.5px solid #86efac;border-radius:10px;margin-bottom:8px;">
-            <span style="font-size:18px;">📄</span>
-            <div style="flex:1;min-width:0;">
-              <div id="piDocNom" style="font-size:12px;font-weight:700;color:#166534;
-                   white-space:nowrap;overflow:hidden;text-overflow:ellipsis;"></div>
-              <div style="font-size:11px;color:#22c55e;">Llest per pujar</div>
-            </div>
-            <button id="btnCancelDocPI"
-              style="padding:5px 10px;background:#fee2e2;color:#dc2626;border:1.5px solid #fca5a5;
-                     border-radius:7px;font-size:11px;font-weight:700;cursor:pointer;">
-              ✕
-            </button>
-          </div>
-          <input type="file" id="piDocInput" accept=".pdf,.doc,.docx,.odt,.xls,.xlsx,.ppt,.pptx,.txt"
-            style="display:none;">
-          <button id="btnTrlarDocPI"
-            style="padding:8px 16px;background:#f5f3ff;color:#4c1d95;
-                   border:1.5px solid #c4b5fd;border-radius:8px;font-size:12px;
-                   font-weight:700;cursor:pointer;width:100%;">
-            📎 ${piData?.documentURL ? 'Substituir document' : 'Adjuntar document'}
-          </button>
-        </div>
-
         <!-- Peu: error + botons -->
         <div id="piErrMsg" style="color:#ef4444;font-size:12px;min-height:16px;margin-bottom:10px;"></div>
 
@@ -1091,46 +1000,6 @@ function obrirFormulariPI(ralc, piData, onDesat, nomAlumne) {
     }
   });
 
-  // --- Document adjunt ---
-  let _fitxerSeleccionat = null;
-  let _eliminarDocExistent = false;
-
-  const inputDoc    = modal.querySelector('#piDocInput');
-  const btnTrlar    = modal.querySelector('#btnTrlarDocPI');
-  const preview     = modal.querySelector('#piDocPreview');
-  const previewNom  = modal.querySelector('#piDocNom');
-  const btnCancel   = modal.querySelector('#btnCancelDocPI');
-  const btnEliminar = modal.querySelector('#btnEliminarDocPI');
-
-  btnTrlar?.addEventListener('click', () => inputDoc?.click());
-
-  inputDoc?.addEventListener('change', () => {
-    const fitxer = inputDoc.files?.[0];
-    if (!fitxer) return;
-    const MAX_MB = 10;
-    if (fitxer.size > MAX_MB * 1024 * 1024) {
-      modal.querySelector('#piErrMsg').textContent = `⚠️ El fitxer no pot superar ${MAX_MB} MB`;
-      inputDoc.value = '';
-      return;
-    }
-    _fitxerSeleccionat = fitxer;
-    previewNom.textContent = fitxer.name;
-    preview.style.display = 'flex';
-    modal.querySelector('#piErrMsg').textContent = '';
-  });
-
-  btnCancel?.addEventListener('click', () => {
-    _fitxerSeleccionat = null;
-    inputDoc.value = '';
-    preview.style.display = 'none';
-  });
-
-  btnEliminar?.addEventListener('click', () => {
-    _eliminarDocExistent = true;
-    modal.querySelector('#piDocActual')?.remove();
-    btnTrlar.textContent = '📎 Adjuntar document';
-  });
-
   // Desar
   modal.querySelector('#btnDesarPI').addEventListener('click', async () => {
     const motiu     = modal.querySelector('#piMotiu')?.value?.trim();
@@ -1148,32 +1017,6 @@ function obrirFormulariPI(ralc, piData, onDesat, nomAlumne) {
       const uid = window.auth?.currentUser?.uid || '';
       const ara = firebase.firestore.FieldValue.serverTimestamp();
 
-      // --- Gestió document Storage ---
-      let documentURL = piData?.documentURL || null;
-      let documentNom = piData?.documentNom || null;
-      const storageRef = firebase.storage().ref(`plans_individualitzats/${ralc}`);
-
-      // Eliminar document existent si s'ha demanat
-      if (_eliminarDocExistent && piData?.documentURL) {
-        try { await storageRef.child(piData.documentNom).delete(); } catch(e) {}
-        documentURL = null;
-        documentNom = null;
-      }
-
-      // Pujar nou fitxer si n'hi ha
-      if (_fitxerSeleccionat) {
-        btn.textContent = '⏳ Pujant document...';
-        // Eliminar document anterior si existia (substituir)
-        if (piData?.documentNom && !_eliminarDocExistent) {
-          try { await storageRef.child(piData.documentNom).delete(); } catch(e) {}
-        }
-        const fileRef = storageRef.child(_fitxerSeleccionat.name);
-        const snapshot = await fileRef.put(_fitxerSeleccionat);
-        documentURL = await snapshot.ref.getDownloadURL();
-        documentNom = _fitxerSeleccionat.name;
-        btn.textContent = '⏳ Desant...';
-      }
-
       const payload = {
         ralc: String(ralc),
         motiu,
@@ -1182,8 +1025,6 @@ function obrirFormulariPI(ralc, piData, onDesat, nomAlumne) {
         actiu: true,
         updatedAt: ara,
         updatedPer: uid,
-        documentURL:  documentURL  ?? null,
-        documentNom:  documentNom  ?? null,
       };
       if (!piData) {
         payload.creatAt  = ara;
