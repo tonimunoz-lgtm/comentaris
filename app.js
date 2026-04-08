@@ -254,48 +254,30 @@ async function signInWithGoogle() {
   try {
     const result = await firebase.auth().signInWithPopup(provider);
     const user = result.user;
+
+    // Comprovar domini
+    if (!isDomainAllowed(user.email)) {
+      await auth.signOut();
+      return alert("Només es permet l'accés amb correu @institutmatadepera.cat");
+    }
+
     const profRef = db.collection('professors').doc(user.uid);
     const docSnap = await profRef.get();
 
     if (!docSnap.exists) {
-
-    // ✅ Afegit: només permet domini autoritzat
-  if (!isDomainAllowed(user.email)) {
-    await auth.signOut();
-    return alert("Només es permet l'accés amb correu @institutmatadepera.cat");
-  }
-      
-      // Usuari nou — cal acceptar les condicions primer
+      // Usuari nou: mostrar termes. El onAuthStateChanged ja haurà creat
+      // el document mínim; aquí afegim termsAcceptedAt un cop acceptat.
       mostrarModalTermes(async () => {
         try {
           await profRef.set({
-            email: user.email,
-            nom: user.displayName || user.email.split('@')[0],
-            rols: [],          // sense rol fins que secretaria l'assigni
-            google: true,
-            isAdmin: false,
-            suspended: false,
-            deleted: false,
-            classes: [],
             termsAcceptedAt: firebase.firestore.Timestamp.now(),
-            createdAt: firebase.firestore.Timestamp.now()
-          });
-          professorUID = user.uid;
-          setupAfterAuth(user);
+          }, { merge: true });
         } catch (err) {
-          await auth.signOut();
-          alert("Error creant el compte: " + err.message);
+          console.warn('signInWithGoogle: error desant termes', err);
         }
       });
-      return;
     }
-
-    // Usuari existent — login normal
-    const d = docSnap.data();
-    if (d.deleted)   { await auth.signOut(); return alert("⚠️ Compte eliminat."); }
-    if (d.suspended) { await auth.signOut(); return alert("⚠️ Compte suspès. Contacta l'administrador."); }
-    professorUID = user.uid;
-    setupAfterAuth(user);
+    // setupAfterAuth ja s'executa via onAuthStateChanged
   } catch (err) {
     if (err.code !== 'auth/popup-closed-by-user') {
       alert("Error amb Google: " + err.message);
@@ -363,9 +345,48 @@ document.getElementById('changePasswordBtn').addEventListener('click', () => {
     .catch(e => alert('Error: ' + e.message));
 });
 
-auth.onAuthStateChanged(user => {
+auth.onAuthStateChanged(async user => {
   if (user) {
     professorUID = user.uid;
+
+    // Comprovar si el document professors existeix
+    const profRef = db.collection('professors').doc(user.uid);
+    const profSnap = await profRef.get().catch(() => null);
+
+    if (!profSnap || !profSnap.exists) {
+      // Document no existeix: pot passar amb usuaris Google que no van
+      // acabar el flux de registre (modal de termes), o en cas de race condition.
+      // Si és usuari de Google, crear el document ara perquè aparegui a Secretaria.
+      const isGoogle = user.providerData?.some(p => p.providerId === 'google.com');
+      if (isGoogle && isDomainAllowed(user.email)) {
+        try {
+          await profRef.set({
+            email: user.email,
+            nom: user.displayName || user.email.split('@')[0],
+            rols: [],
+            google: true,
+            isAdmin: false,
+            suspended: false,
+            deleted: false,
+            classes: [],
+            createdAt: firebase.firestore.Timestamp.now(),
+          });
+        } catch(e) {
+          console.warn('onAuthStateChanged: error creant doc professor Google', e);
+        }
+      } else if (!isGoogle) {
+        // Usuari email/password sense document — situació anòmala, desconnectar
+        await auth.signOut();
+        return;
+      }
+    } else {
+      const d = profSnap.data();
+      if (d.deleted || d.suspended) {
+        await auth.signOut();
+        return;
+      }
+    }
+
     // Registrar login
     db.collection('professors').doc(user.uid).collection('logins')
       .add({ timestamp: firebase.firestore.Timestamp.now() })
