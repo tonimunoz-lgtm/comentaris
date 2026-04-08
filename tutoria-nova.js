@@ -545,6 +545,7 @@ function renderLlistaAlumnesSemafor(alumnes, semafors, materies, curs) {
       html += `
         <div class="alumne-semafor-item" data-id="${a.id}"
           data-curs="${curs}"
+          data-ralc="${a.ralc || ''}"
           style="
             padding:12px 14px;cursor:pointer;border-bottom:1px solid #f3f4f6;
             display:flex;align-items:center;gap:10px;transition:background 0.15s;
@@ -588,6 +589,11 @@ function renderLlistaAlumnesSemafor(alumnes, semafors, materies, curs) {
       if (alumne) await mostrarDetallAlumne(alumne, materies, el.dataset.curs);
     });
   });
+
+  // Registrar alumnes al mapa nom→ralc de PI perquè els badges apareguin
+  if (typeof window._piRegistrarAlumnesTutoria === 'function') {
+    window._piRegistrarAlumnesTutoria(alumnes);
+  }
 }
 
 /* ══════════════════════════════════════════════════════
