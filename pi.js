@@ -263,16 +263,18 @@ window._piRegistrarAlumnesTutoria = function(alumnes) {
     const nomComplet = a.cognoms ? `${a.cognoms}, ${a.nom}` : (a.nom || '');
     if (a.ralc && nomComplet) _piNomARalcMap.set(nomComplet.trim(), String(a.ralc));
   });
+  // Aplicar badges immediatament ara que tenim el mapa
+  setTimeout(actualitzarBadgesPITutoria, 50);
 };
 
 function afegirBadgePIaTutoriaItem(el) {
   if (el.querySelector('.badge-pi-tutoria')) return;
   if (!_piCache) return;
 
-  // Intent 1: data-ralc directe
+  // Intent 1: data-ralc directe (ara sempre disponible gràcies a tutoria-nova.js)
   let ralc = el.dataset.ralc;
 
-  // Intent 2: buscar per nom en el mapa nom→ralc
+  // Intent 2: buscar per nom en el mapa nom→ralc (fallback)
   if (!ralc) {
     const nomDiv = el.querySelector('div[style*="font-weight:600"]');
     const nom = nomDiv?.textContent?.trim();
@@ -670,13 +672,28 @@ async function inicialitzarFiltresPI(overlay) {
       grupsUtils = totsGrups.filter(g => g.tipus === 'classe' && (g.alumnes||[]).length > 0);
     }
 
-    // Enriquir cada grup de tutoria amb el nom del grup classe pare
+    // Enriquir cada grup de tutoria amb el nom i dades del grup classe pare
     grupsUtils = grupsUtils.map(g => {
       if (g.tipus === 'tutoria' && g.parentGrupId) {
         const pare = grupsPerId[g.parentGrupId];
-        return { ...g, nomMostrat: pare?.nom || g.nom, nivellNom: g.nivellNom || pare?.nivellNom || '' };
+        return {
+          ...g,
+          nomMostrat: pare?.nom || g.nom,
+          nivellNom:  g.nivellNom  || pare?.nivellNom  || '',
+          curs:       g.curs       || pare?.curs        || '',
+        };
       }
       return { ...g, nomMostrat: g.nom };
+    });
+
+    // Si cap grup tutoria té curs, intentar-lo llegir del grup pare
+    // (fallback per dades antigues on el grup tutoria no tenia el camp curs)
+    grupsUtils = grupsUtils.map(g => {
+      if (!g.curs && g.parentGrupId) {
+        const pare = grupsPerId[g.parentGrupId];
+        return { ...g, curs: pare?.curs || '' };
+      }
+      return g;
     });
 
     const cursos = [...new Set(grupsUtils.map(g => g.curs).filter(Boolean))].sort().reverse();
@@ -745,8 +762,13 @@ async function carregarAlumnesPI(grupId, grupsUtils, grupsPerId, overlay) {
     // Si és grup tutoria, llegir alumnes del grup pare
     if (grupData.tipus === 'tutoria' && grupData.parentGrupId) {
       const pareDoc = await window.db.collection('grups_centre').doc(grupData.parentGrupId).get();
-      alumnes = pareDoc.data()?.alumnes || alumnes;
+      const alumnesPare = pareDoc.data()?.alumnes || [];
+      // Usar els del pare si en té, sinó els del propi grup tutoria
+      if (alumnesPare.length > 0) alumnes = alumnesPare;
     }
+
+    // Fallback: si el grup classe és el seleccionat (no tutoria), llegir igualment
+    // (ja cobert per alumnes = grupData.alumnes || [] anterior)
 
     if (alumnes.length === 0) {
       cos.innerHTML = '<div style="text-align:center;color:#9ca3af;padding:30px;">Cap alumne en aquest grup.</div>';
