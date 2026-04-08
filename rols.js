@@ -158,38 +158,14 @@ window.mostrarToast = function(msg, durada = 3000) {
 };
 
 /* ══════════════════════════════════════════════════════
-   INICIALITZACIÓ — Esperar auth
+   INICIALITZACIÓ — Amagar nav fins que app-patch.js
+   hagi carregat els rols i injectat els botons correctes
 ══════════════════════════════════════════════════════ */
 document.addEventListener('DOMContentLoaded', () => {
-  // Amagar el nav fins que els rols estiguin carregats
+  // Amagar el nav immediatament — app-patch.js el farà visible
+  // un cop hagi carregat el perfil i injectat els botons correctes
   const nav = document.querySelector('.sidebar-nav');
   if (nav) nav.style.visibility = 'hidden';
-
-  // Esperar que Firebase estigui disponible
-  const waitForFirebase = setInterval(() => {
-    if (!window.firebase || !window.db) return;
-    clearInterval(waitForFirebase);
-
-    firebase.auth().onAuthStateChanged(async user => {
-      if (!user) {
-        window._userRol  = null;
-        window._userRols = [];
-        // visibilitat gestionada per app-patch.js
-        return;
-      }
-
-      const perfil = await carregarPerfilUsuari(user.uid);
-      if (perfil) {
-        // Comprovar si cal canviar contrasenya (primer accés)
-        if (perfil.data?.forcePasswordChange && !sessionStorage.getItem('pwChangeDone')) {
-          mostrarModalCambioPassword();
-        }
-        // Sense setTimeout: els rols ja estan carregats aquí
-        actualitzarUIRols();
-        // visibilitat gestionada per app-patch.js
-      }
-    });
-  }, 200);
 });
 
 /* ══════════════════════════════════════════════════════
