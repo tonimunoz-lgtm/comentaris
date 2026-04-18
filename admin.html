@@ -285,6 +285,17 @@
           S'esborraran les col·leccions seleccionades:<br>
           <strong id="netejarLlistaSelected" style="color:#dc2626;"></strong>
         </div>
+
+        <!-- Preview del que s'esborrarà -->
+        <div id="netejarPreviewBox" style="background:#fff;border:1.5px solid #fca5a5;border-radius:8px;padding:10px 12px;margin-bottom:10px;font-size:12px;">
+          <div style="font-weight:700;color:#991b1b;margin-bottom:6px;display:flex;align-items:center;gap:6px;">
+            📊 Preview: què s'esborrarà
+            <span id="netejarPreviewLoading" style="font-weight:400;color:#6b7280;font-size:11px;display:none;">⏳ Comptant...</span>
+          </div>
+          <div id="netejarPreviewContent" style="color:#374151;line-height:1.7;"></div>
+          <div id="netejarPreviewTotal" style="margin-top:6px;padding-top:6px;border-top:1px dashed #fca5a5;font-weight:700;color:#991b1b;"></div>
+        </div>
+
         <div style="font-size:12px;color:#374151;margin-bottom:8px;">Escriu <strong>ELIMINAR</strong> per confirmar:</div>
         <input type="text" id="inpNetejarConfirm" placeholder="ELIMINAR"
           style="width:100%;box-sizing:border-box;padding:9px 11px;border:2px solid #dc2626;border-radius:8px;font-size:14px;font-weight:700;outline:none;letter-spacing:2px;text-transform:uppercase;">
@@ -1022,7 +1033,90 @@ document.getElementById('btnSendEmail').onclick = () => {
 // NETEJAR DADES
 // ═══════════════════════════════════════════════
 
-document.getElementById('btnNetejarPreview').addEventListener('click', () => {
+// Calcula quants documents hi ha a cada col·lecció seleccionada
+async function calcularPreviewNeteja(seleccionats) {
+  const resultats = [];
+
+  for (const chk of seleccionats) {
+    const col = chk.dataset.col;
+    const subdoc = chk.dataset.subdoc;
+    const desc = chk.dataset.col; // nom tècnic
+
+    try {
+      if (subdoc) {
+        // Document específic dins _sistema
+        const doc = await db.collection('_sistema').doc(subdoc).get();
+        resultats.push({
+          col: `_sistema → ${subdoc}`,
+          count: doc.exists ? 1 : 0,
+          extra: doc.exists ? '1 document' : 'no existeix'
+        });
+      } else if (col === 'avaluacio_centre') {
+        // Cas especial: iterar subcol·leccions dinàmiques
+        let total = 0;
+        let nCursos = 0;
+        let nSubcols = 0;
+
+        const grupsSnap = await db.collection('grups_centre').get();
+        const grupIds = grupsSnap.docs.map(d => d.id);
+
+        const cursosSnap = await db.collection(col).get();
+        nCursos = cursosSnap.docs.length;
+
+        for (const cursDoc of cursosSnap.docs) {
+          for (const grupId of grupIds) {
+            try {
+              const scSnap = await db.collection(col).doc(cursDoc.id)
+                .collection(grupId).get();
+              if (!scSnap.empty) {
+                total += scSnap.docs.length;
+                nSubcols++;
+              }
+            } catch(e) {}
+          }
+        }
+
+        resultats.push({
+          col,
+          count: total,
+          extra: `${total} avaluacions · ${nCursos} curs(os) · ${nSubcols} subcol·leccions`
+        });
+      } else if (col === 'classes') {
+        // Classes amb subcol·leccions conegudes
+        const snap = await db.collection(col).get();
+        let totalSubcols = 0;
+        const SUBCOLS = ['comentaris','periodes','alumnes'];
+        for (const doc of snap.docs) {
+          for (const sc of SUBCOLS) {
+            try {
+              const scSnap = await doc.ref.collection(sc).get();
+              totalSubcols += scSnap.docs.length;
+            } catch(e) {}
+          }
+        }
+        resultats.push({
+          col,
+          count: snap.docs.length,
+          extra: `${snap.docs.length} classes + ${totalSubcols} documents en subcol·leccions`
+        });
+      } else {
+        // Col·lecció simple
+        const snap = await db.collection(col).get();
+        resultats.push({
+          col,
+          count: snap.docs.length,
+          extra: `${snap.docs.length} document${snap.docs.length===1?'':'s'}`
+        });
+      }
+    } catch(e) {
+      resultats.push({ col, count: 0, extra: `⚠️ error: ${e.message}` });
+    }
+  }
+
+  return resultats;
+}
+
+document.getElementById('btnNetejarPreview').addEventListener('click', async () => {
   const seleccionats = [...document.querySelectorAll('.chk-netejar:checked')];
   if (!seleccionats.length) {
     mostrarToast('⚠️ Selecciona almenys una col·lecció', 3000);
@@ -1032,8 +1126,44 @@ document.getElementById('btnNetejarPreview').addEventListener('click', () => {
   document.getElementById('netejarLlistaSelected').textContent = noms;
   document.getElementById('netejarConfirmWrap').style.display = 'block';
   document.getElementById('inpNetejarConfirm').value = '';
-  document.getElementById('inpNetejarConfirm').focus();
   document.getElementById('netejarResultat').textContent = '';
+
+  // Mostrar "Comptant..." mentre carrega
+  const previewContent = document.getElementById('netejarPreviewContent');
+  const previewTotal = document.getElementById('netejarPreviewTotal');
+  const previewLoading = document.getElementById('netejarPreviewLoading');
+  previewContent.innerHTML = '';
+  previewTotal.textContent = '';
+  previewLoading.style.display = 'inline';
+
+  // Bloquejar el botó d'executar fins que el preview estigui llest
+  const btnExec = document.getElementById('btnNetejarExecutar');
+  btnExec.disabled = true;
+  btnExec.style.opacity = '0.5';
+
+  try {
+    const resultats = await calcularPreviewNeteja(seleccionats);
+    const totalGlobal = resultats.reduce((sum, r) => sum + r.count, 0);
+
+    previewContent.innerHTML = resultats.map(r => `
+      <div style="display:flex;justify-content:space-between;align-items:center;padding:3px 0;">
+        <span style="font-family:monospace;font-size:11px;color:#1f2937;">${r.col}</span>
+        <span style="color:${r.count > 0 ? '#dc2626' : '#6b7280'};font-size:11px;">${r.extra}</span>
+      </div>
+    `).join('');
+
+    previewTotal.textContent = totalGlobal > 0
+      ? `Total aproximat: ${totalGlobal} document${totalGlobal===1?'':'s'} a esborrar`
+      : '⚠️ No hi ha res a esborrar a les col·leccions seleccionades';
+
+  } catch(e) {
+    previewContent.innerHTML = `<div style="color:#dc2626;">⚠️ Error calculant preview: ${e.message}</div>`;
+  } finally {
+    previewLoading.style.display = 'none';
+    btnExec.disabled = false;
+    btnExec.style.opacity = '1';
+    document.getElementById('inpNetejarConfirm').focus();
+  }
 });
 
 document.getElementById('btnNetejarExecutar').addEventListener('click', async () => {
