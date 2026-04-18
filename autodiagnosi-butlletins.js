@@ -112,6 +112,11 @@ function injectarTabuladorAutodiagnosi() {
       cursor:pointer;background:transparent;color:#6b7280;transition:all .15s;">
       📝 Informació butlletins
     </button>
+    <button id="tabInfoAutodiagnosi" style="
+      padding:8px 18px;border:none;border-radius:7px;font-size:13px;font-weight:700;
+      cursor:pointer;background:transparent;color:#6b7280;transition:all .15s;">
+      🧠 Informació autodiagnosi
+    </button>
   `;
 
   // Inserir just després del h3
@@ -138,6 +143,12 @@ function injectarTabuladorAutodiagnosi() {
   contingutInfo.style.display = 'none';
   secBody.appendChild(contingutInfo);
 
+  // Contenidor per a informació autodiagnosi (inicialment ocult)
+  const contingutInfoAuto = document.createElement('div');
+  contingutInfoAuto.id = 'adContingutInfoAutodiagnosi';
+  contingutInfoAuto.style.display = 'none';
+  secBody.appendChild(contingutInfoAuto);
+
   // Listeners dels tabs
   document.getElementById('tabButlletiNormal').addEventListener('click', () => {
     activarTab('normal');
@@ -150,20 +161,26 @@ function injectarTabuladorAutodiagnosi() {
     activarTab('info');
     renderInfoButlletinsPanel(contingutInfo);
   });
+  document.getElementById('tabInfoAutodiagnosi').addEventListener('click', () => {
+    activarTab('infoAuto');
+    renderInfoAutodiagnosiPanel(contingutInfoAuto);
+  });
 }
 
 function activarTab(tab) {
   const btnNormal = document.getElementById('tabButlletiNormal');
   const btnAuto   = document.getElementById('tabAutodiagnosi');
   const btnInfo   = document.getElementById('tabInfoButlletins');
+  const btnInfoAuto = document.getElementById('tabInfoAutodiagnosi');
   const contNormal = document.getElementById('adContingutNormal');
   const contAuto   = document.getElementById('adContingutAutodiagnosi');
   const contInfo   = document.getElementById('adContingutInfoButlletins');
+  const contInfoAuto = document.getElementById('adContingutInfoAutodiagnosi');
   if (!btnNormal || !btnAuto) return;
 
   // Reset tots
-  [btnNormal, btnAuto, btnInfo].forEach(b => { if(b) { b.style.background = 'transparent'; b.style.color = '#6b7280'; } });
-  [contNormal, contAuto, contInfo].forEach(c => { if(c) c.style.display = 'none'; });
+  [btnNormal, btnAuto, btnInfo, btnInfoAuto].forEach(b => { if(b) { b.style.background = 'transparent'; b.style.color = '#6b7280'; } });
+  [contNormal, contAuto, contInfo, contInfoAuto].forEach(c => { if(c) c.style.display = 'none'; });
 
   if (tab === 'normal') {
     btnNormal.style.background = '#7c3aed'; btnNormal.style.color = '#fff';
@@ -174,6 +191,9 @@ function activarTab(tab) {
   } else if (tab === 'info') {
     btnInfo.style.background = '#7c3aed'; btnInfo.style.color = '#fff';
     if (contInfo) contInfo.style.display = 'block';
+  } else if (tab === 'infoAuto') {
+    if (btnInfoAuto) { btnInfoAuto.style.background = '#7c3aed'; btnInfoAuto.style.color = '#fff'; }
+    if (contInfoAuto) contInfoAuto.style.display = 'block';
   }
 }
 
@@ -499,12 +519,14 @@ async function carregarAutodiagnosis() {
     window._adGrupEtiqueta   = etiquetaGrupFinal;
     window._adCurs           = cursGrup;
     window._adTrimestre      = trimestre;
+    window._adGrupId         = grupId;
+    window._adParentGrupId   = grupDocData.parentGrupId || null;
 
     // Listener botons PDF individuals
     resDiv.querySelectorAll('.ad-btn-pdf').forEach(btn => {
       btn.addEventListener('click', () => {
         const alumne = window._adLlistaAlumnes[parseInt(btn.dataset.idx)];
-        if (alumne?.resposta) generarPDFAutodiagnosi(alumne, window._adGrupEtiqueta || window._adGrupNom, '', window._adCurs, window._adTrimestre);
+        if (alumne?.resposta) generarPDFAutodiagnosi(alumne, window._adGrupEtiqueta || window._adGrupNom, '', window._adCurs, window._adTrimestre, window._adGrupId, window._adParentGrupId);
       });
     });
 
@@ -512,7 +534,7 @@ async function carregarAutodiagnosis() {
     document.getElementById('adGenTots')?.addEventListener('click', () => {
       window._adLlistaAlumnes
         .filter(a => a.resposta)
-        .forEach(a => generarPDFAutodiagnosi(a, window._adGrupEtiqueta || window._adGrupNom, '', window._adCurs, window._adTrimestre));
+        .forEach(a => generarPDFAutodiagnosi(a, window._adGrupEtiqueta || window._adGrupNom, '', window._adCurs, window._adTrimestre, window._adGrupId, window._adParentGrupId));
     });
 
   } catch(e) {
@@ -524,7 +546,7 @@ async function carregarAutodiagnosis() {
 // ─────────────────────────────────────────────
 // GENERAR PDF — FORMAT OFICIAL INS MATADEPERA
 // ─────────────────────────────────────────────
-async function generarPDFAutodiagnosi(alumne, grupNom, grupNivell, curs, trimestre) {
+async function generarPDFAutodiagnosi(alumne, grupNom, grupNivell, curs, trimestre, grupId, parentGrupId) {
   const r = alumne.resposta;
   const nomComplet = alumne.cognoms
     ? `${alumne.cognoms}, ${alumne.nom}`
@@ -542,12 +564,13 @@ async function generarPDFAutodiagnosi(alumne, grupNom, grupNivell, curs, trimest
   const trimestreText = trimestre || r.periodeNom || '1r butlletí d\'avaluació';
   const grupDisplay = grupNom || '';  // grupNom ja porta l'etiqueta completa (ex: "1r ESO A")
 
-  // ── Llegir logos i textos de Firestore ──
+  // ── Llegir logos, textos i TUTOR de Firestore ──
   let logoGeneralitatBase64 = '';
   let logoInstitutBase64 = '';
   let textLinia1 = 'Generalitat de Catalunya';
   let textLinia2 = "Departament d'ensenyament";
   let textLinia3 = 'INS Matadepera';
+  let tutorNomComplet = '';
   try {
     if (typeof window.carregarFirmesConfig === 'function') {
       const cfg = await window.carregarFirmesConfig();
@@ -558,8 +581,45 @@ async function generarPDFAutodiagnosi(alumne, grupNom, grupNivell, curs, trimest
       textLinia1 = textos.linia1 || 'Generalitat de Catalunya';
       textLinia2 = textos.linia2 || "Departament d'ensenyament";
       textLinia3 = textos.linia3 || 'INS Matadepera';
+
+      // Buscar tutor: primer pel grupId (grup tutoria normalment),
+      // si no n'hi ha, pel parentGrupId (grup classe pare)
+      const tutorsMap = cfg.tutors || {};
+      let tutorData = grupId ? tutorsMap[grupId] : null;
+      if (!tutorData && parentGrupId) {
+        tutorData = tutorsMap[parentGrupId];
+      }
+      if (tutorData) {
+        tutorNomComplet = [tutorData.nom, tutorData.cognom1, tutorData.cognom2]
+          .filter(Boolean).join(' ');
+      }
     }
   } catch(e) { /* ignorar si firmes.js no disponible */ }
+
+  // ── Llegir textos editables per al període (intro, enllaç, ítems) ──
+  let textIntro = "En aquest butlletí es presenta una autodiagnosi de l'alumne/a. En aquesta valora com està afrontant i assolint els aprenentatges fins al dia d'avui en base als ítems<sup>1</sup> descrits a la part final d'aquest document. El comentari del tutor/a, que fa en nom de l'equip docent, és una valoració dels mateixos aspectes basada en la lectura de l'autodiagnosi.";
+  let urlEnllac = '#';
+  let textEnllac = "Cliqueu el següent enllaç per respondre la part del butlletí d'avaluació corresponent a les famílies i confirmar la visualització del butlletí.";
+  let textItems = `<em>a. <u>Treball a classe.</u> Entenem per això: atenció, escolta activa, fa les tasques de classe, és responsable amb el treball del seu grup, etc.</em><br>
+<em>b. <u>Organització i autonomia.</u> Entenem per això: apuntar-se les tasques, portar el material, portar les tasques fetes, posar-se a treballar a classe sense que se li hagi d'insistir molt, etc.</em><br>
+<em>c. <u>Interès per aprendre.</u> Entenem per això: participar a classe, fer el màxim perquè el grup compleixi els encàrrecs, fa preguntes (si són interessants, millor), intentar fer les feines ben fetes (i no per sortir del pas), explica el que fa a la família.</em><br>
+<em>d. <u>Assoliment d'objectius d'aprenentatge.</u> Entenem per això: què està aprenent en les diferents matèries.</em>`;
+
+  try {
+    const infoDoc = await window.db.collection('_sistema').doc('info_autodiagnosi').get();
+    if (infoDoc.exists) {
+      const data = infoDoc.data() || {};
+      // Format: { [periodeNom]: { intro, url, textEnllac, items } }
+      const periodeKey = trimestreText;
+      const perPeriode = data[periodeKey] || data._default || null;
+      if (perPeriode) {
+        if (perPeriode.intro)      textIntro   = perPeriode.intro;
+        if (perPeriode.url)        urlEnllac   = perPeriode.url;
+        if (perPeriode.textEnllac) textEnllac  = perPeriode.textEnllac;
+        if (perPeriode.items)      textItems   = perPeriode.items;
+      }
+    }
+  } catch(e) { /* si no existeix, mantenim valors per defecte */ }
 
   const html = `<!DOCTYPE html>
 <html lang="ca">
@@ -628,7 +688,7 @@ async function generarPDFAutodiagnosi(alumne, grupNom, grupNivell, curs, trimest
       background: #f3f4f6;
       font-weight: bold;
       font-size: 10.5pt;
-      width: 180px;
+      width: 110px;
       vertical-align: top;
     }
     .taula-caps td {
@@ -704,11 +764,7 @@ async function generarPDFAutodiagnosi(alumne, grupNom, grupNivell, curs, trimest
 
   <!-- INTRODUCCIÓ -->
   <p class="intro">
-    En aquest butlletí es presenta una autodiagnosi de l'alumne/a. En aquesta valora
-    com està afrontant i assolint els aprenentatges fins al dia d'avui en base als ítems<sup>1</sup>
-    descrits a la part final d'aquest document. El comentari del tutor/a, que fa en nom
-    de l'equip docent, és una valoració dels mateixos aspectes basada en la lectura de
-    l'autodiagnosi.
+    ${textIntro}
   </p>
 
   <!-- TAULA PRINCIPAL -->
@@ -725,7 +781,7 @@ async function generarPDFAutodiagnosi(alumne, grupNom, grupNivell, curs, trimest
     <!-- Fila tutor -->
     <tr class="taula-caps">
       <td colspan="2">
-        <strong>Tutor/a:</strong>
+        <strong>Tutor/a:</strong> ${adEsH(tutorNomComplet)}
       </td>
     </tr>
     <!-- Fila autodiagnosi -->
@@ -751,10 +807,9 @@ async function generarPDFAutodiagnosi(alumne, grupNom, grupNivell, curs, trimest
   <!-- PEU DE PÀGINA -->
   <div class="peu">
     <div>
-      Cliqueu el següent
-      <a href="#">enllaç</a>
-      per respondre la part del butlletí d'avaluació corresponent a
-      les famílies i confirmar la visualització del butlletí.
+      ${urlEnllac && urlEnllac !== '#'
+        ? adEsH(textEnllac).replace(/enllaç/i, `<a href="${adEsH(urlEnllac)}">enllaç</a>`)
+        : adEsH(textEnllac)}
     </div>
   </div>
 
@@ -765,10 +820,7 @@ async function generarPDFAutodiagnosi(alumne, grupNom, grupNivell, curs, trimest
   <!-- NOTA A PEU -->
   <div class="nota-peu">
     <sup>1</sup> <em>Descripció dels ítems avaluables:</em><br>
-    <em>a. <u>Treball a classe.</u> Entenem per això: atenció, escolta activa, fa les tasques de classe, és responsable amb el treball del seu grup, etc.</em><br>
-    <em>b. <u>Organització i autonomia.</u> Entenem per això: apuntar-se les tasques, portar el material, portar les tasques fetes, posar-se a treballar a classe sense que se li hagi d'insistir molt, etc.</em><br>
-    <em>c. <u>Interès per aprendre.</u> Entenem per això: participar a classe, fer el màxim perquè el grup compleixi els encàrrecs, fa preguntes (si són interessants, millor), intentar fer les feines ben fetes (i no per sortir del pas), explica el que fa a la família.</em><br>
-    <em>d. <u>Assoliment d'objectius d'aprenentatge.</u> Entenem per això: què està aprenent en les diferents matèries.</em>
+    ${textItems}
   </div>
 
 </body>
@@ -898,6 +950,172 @@ async function renderInfoButlletinsPanel(cont) {
           { merge: true }
         );
         infoActual[periode] = text; // actualitzar cache local
+        msgEl.textContent = '✅ Desat correctament';
+        msgEl.style.color = '#059669';
+        setTimeout(() => { if(msgEl) msgEl.textContent = ''; }, 3000);
+      } catch(e) {
+        msgEl.textContent = '❌ Error: ' + e.message;
+        msgEl.style.color = '#dc2626';
+      }
+      btnD.disabled = false; btnD.textContent = '💾 Desar';
+    });
+
+  } catch(e) {
+    cont.innerHTML = `<div style="color:#ef4444;padding:16px;">Error: ${e.message}</div>`;
+  }
+}
+
+// ─────────────────────────────────────────────
+// PANELL INFORMACIÓ AUTODIAGNOSI
+// Guardat a: _sistema/info_autodiagnosi → { [periode]: { intro, url, textEnllac, items } }
+// ─────────────────────────────────────────────
+async function renderInfoAutodiagnosiPanel(cont) {
+  cont.innerHTML = '<div style="padding:30px;text-align:center;color:#9ca3af;">⏳ Carregant...</div>';
+
+  try {
+    const periodes = await carregarPeriodesAD();
+    const doc = await window.db.collection('_sistema').doc('info_autodiagnosi').get();
+    const infoActual = doc.exists ? (doc.data() || {}) : {};
+
+    // Textos per defecte (els mateixos que usa el PDF si no hi ha res guardat)
+    const INTRO_DEFAULT = "En aquest butlletí es presenta una autodiagnosi de l'alumne/a. En aquesta valora com està afrontant i assolint els aprenentatges fins al dia d'avui en base als ítems<sup>1</sup> descrits a la part final d'aquest document. El comentari del tutor/a, que fa en nom de l'equip docent, és una valoració dels mateixos aspectes basada en la lectura de l'autodiagnosi.";
+    const TEXTENLLAC_DEFAULT = "Cliqueu el següent enllaç per respondre la part del butlletí d'avaluació corresponent a les famílies i confirmar la visualització del butlletí.";
+    const ITEMS_DEFAULT = `<em>a. <u>Treball a classe.</u> Entenem per això: atenció, escolta activa, fa les tasques de classe, és responsable amb el treball del seu grup, etc.</em><br>
+<em>b. <u>Organització i autonomia.</u> Entenem per això: apuntar-se les tasques, portar el material, portar les tasques fetes, posar-se a treballar a classe sense que se li hagi d'insistir molt, etc.</em><br>
+<em>c. <u>Interès per aprendre.</u> Entenem per això: participar a classe, fer el màxim perquè el grup compleixi els encàrrecs, fa preguntes (si són interessants, millor), intentar fer les feines ben fetes (i no per sortir del pas), explica el que fa a la família.</em><br>
+<em>d. <u>Assoliment d'objectius d'aprenentatge.</u> Entenem per això: què està aprenent en les diferents matèries.</em>`;
+
+    cont.innerHTML = `
+      <div style="max-width:760px;">
+        <div style="background:#eff6ff;border:1.5px solid #bfdbfe;border-radius:12px;
+                    padding:14px 18px;margin-bottom:20px;font-size:13px;color:#1e40af;">
+          <strong>🧠 Informació del PDF d'autodiagnosi per període</strong><br>
+          <span style="font-size:12px;">Configura els textos que apareixen al PDF d'autodiagnosi de cada alumne:
+          text introductori, URL de l'enllaç per a famílies i descripció dels ítems avaluables.
+          Pots personalitzar-ho per cada període.</span>
+        </div>
+
+        <div style="margin-bottom:14px;">
+          <label style="font-size:12px;font-weight:700;color:#374151;display:block;margin-bottom:6px;">
+            Període
+          </label>
+          <select id="infoAPeriode" style="width:100%;max-width:320px;padding:9px 12px;
+            border:1.5px solid #e5e7eb;border-radius:8px;font-size:13px;outline:none;">
+            ${periodes.map(p => `<option value="${adEsH(p.nom)}">${adEsH(p.nom)}</option>`).join('')}
+          </select>
+        </div>
+
+        <div style="margin-bottom:14px;">
+          <label style="font-size:12px;font-weight:700;color:#374151;display:block;margin-bottom:6px;">
+            Text introductori <span style="font-weight:400;color:#9ca3af;">(apareix sobre la taula)</span>
+          </label>
+          <textarea id="infoAIntro" rows="5"
+            placeholder="Text introductori del PDF..."
+            style="width:100%;box-sizing:border-box;padding:10px 12px;
+                   border:1.5px solid #e5e7eb;border-radius:10px;font-size:13px;
+                   outline:none;resize:vertical;font-family:inherit;line-height:1.6;">
+          </textarea>
+          <div style="font-size:11px;color:#9ca3af;margin-top:4px;">
+            💡 Pots fer servir <code>&lt;sup&gt;1&lt;/sup&gt;</code> per referenciar els ítems del peu.
+          </div>
+        </div>
+
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:14px;">
+          <div>
+            <label style="font-size:12px;font-weight:700;color:#374151;display:block;margin-bottom:6px;">
+              URL de l'enllaç
+            </label>
+            <input type="url" id="infoAUrl"
+              placeholder="https://..."
+              style="width:100%;box-sizing:border-box;padding:9px 12px;
+                     border:1.5px solid #e5e7eb;border-radius:8px;font-size:13px;outline:none;">
+          </div>
+          <div>
+            <label style="font-size:12px;font-weight:700;color:#374151;display:block;margin-bottom:6px;">
+              Text que acompanya l'enllaç
+            </label>
+            <input type="text" id="infoATextEnllac"
+              placeholder="Cliqueu el següent enllaç per..."
+              style="width:100%;box-sizing:border-box;padding:9px 12px;
+                     border:1.5px solid #e5e7eb;border-radius:8px;font-size:13px;outline:none;">
+          </div>
+        </div>
+        <div style="font-size:11px;color:#9ca3af;margin-top:-8px;margin-bottom:14px;">
+          💡 La paraula "enllaç" del text es convertirà automàticament en un enllaç clicable.
+        </div>
+
+        <div style="margin-bottom:14px;">
+          <label style="font-size:12px;font-weight:700;color:#374151;display:block;margin-bottom:6px;">
+            Descripció dels ítems avaluables <span style="font-weight:400;color:#9ca3af;">(peu de pàgina)</span>
+          </label>
+          <textarea id="infoAItems" rows="8"
+            placeholder="Descripció dels ítems (a, b, c, d)..."
+            style="width:100%;box-sizing:border-box;padding:10px 12px;
+                   border:1.5px solid #e5e7eb;border-radius:10px;font-size:12px;
+                   outline:none;resize:vertical;font-family:inherit;line-height:1.6;">
+          </textarea>
+          <div style="font-size:11px;color:#9ca3af;margin-top:4px;">
+            💡 Admet etiquetes HTML: <code>&lt;em&gt;</code>, <code>&lt;u&gt;</code>, <code>&lt;br&gt;</code>, <code>&lt;strong&gt;</code>.
+          </div>
+        </div>
+
+        <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;">
+          <button id="infoADesar" style="padding:9px 22px;background:#7c3aed;color:#fff;
+            border:none;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;">
+            💾 Desar
+          </button>
+          <button id="infoARestaurar" style="padding:9px 18px;background:#f3f4f6;color:#374151;
+            border:1.5px solid #e5e7eb;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;">
+            ↩ Restaurar valors per defecte
+          </button>
+          <span id="infoAMsg" style="font-size:12px;color:#059669;"></span>
+        </div>
+      </div>
+    `;
+
+    // Funció per carregar els textos del període seleccionat
+    const carregarTextos = () => {
+      const periode = document.getElementById('infoAPeriode')?.value;
+      const config = infoActual[periode] || {};
+      document.getElementById('infoAIntro').value      = config.intro      ?? INTRO_DEFAULT;
+      document.getElementById('infoAUrl').value        = config.url        ?? '';
+      document.getElementById('infoATextEnllac').value = config.textEnllac ?? TEXTENLLAC_DEFAULT;
+      document.getElementById('infoAItems').value      = config.items      ?? ITEMS_DEFAULT;
+      document.getElementById('infoAMsg').textContent = '';
+    };
+
+    carregarTextos();
+
+    document.getElementById('infoAPeriode')?.addEventListener('change', carregarTextos);
+
+    document.getElementById('infoARestaurar')?.addEventListener('click', () => {
+      document.getElementById('infoAIntro').value      = INTRO_DEFAULT;
+      document.getElementById('infoAUrl').value        = '';
+      document.getElementById('infoATextEnllac').value = TEXTENLLAC_DEFAULT;
+      document.getElementById('infoAItems').value      = ITEMS_DEFAULT;
+      const msg = document.getElementById('infoAMsg');
+      msg.textContent = 'ℹ️ Valors restaurats (no desat encara)';
+      msg.style.color = '#6b7280';
+    });
+
+    document.getElementById('infoADesar')?.addEventListener('click', async () => {
+      const periode = document.getElementById('infoAPeriode')?.value;
+      const intro      = document.getElementById('infoAIntro')?.value?.trim()      || '';
+      const url        = document.getElementById('infoAUrl')?.value?.trim()        || '';
+      const textEnllac = document.getElementById('infoATextEnllac')?.value?.trim() || '';
+      const items      = document.getElementById('infoAItems')?.value?.trim()      || '';
+
+      const btnD  = document.getElementById('infoADesar');
+      const msgEl = document.getElementById('infoAMsg');
+      if (!periode) return;
+
+      btnD.disabled = true; btnD.textContent = '⏳ Desant...';
+      try {
+        await window.db.collection('_sistema').doc('info_autodiagnosi').set(
+          { [periode]: { intro, url, textEnllac, items } },
+          { merge: true }
+        );
+        infoActual[periode] = { intro, url, textEnllac, items };
         msgEl.textContent = '✅ Desat correctament';
         msgEl.style.color = '#059669';
         setTimeout(() => { if(msgEl) msgEl.textContent = ''; }, 3000);
