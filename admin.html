@@ -196,7 +196,7 @@
             <input type="checkbox" class="chk-netejar" data-col="avaluacio_centre" data-desc="Avaluacions enviades pels professors (per matèria i alumne)" style="margin-top:2px;width:15px;height:15px;accent-color:#dc2626;flex-shrink:0;">
             <div>
               <div style="font-size:13px;font-weight:600;color:#1f2937;">avaluacio_centre</div>
-              <div style="font-size:11px;color:#6b7280;">Avaluacions enviades pels professors per a cada alumne i matèria</div>
+              <div style="font-size:11px;color:#6b7280;">Avaluacions enviades pels professors per a cada alumne i matèria. <strong style="color:#991b1b;">Inclou butlletins i quadre de dades de secretaria</strong> (es generen a partir d'aquestes dades).</div>
             </div>
           </label>
           <label style="display:flex;align-items:flex-start;gap:10px;cursor:pointer;margin-bottom:6px;">
@@ -204,6 +204,20 @@
             <div>
               <div style="font-size:13px;font-weight:600;color:#1f2937;">autoaval_respostes</div>
               <div style="font-size:11px;color:#6b7280;">Respostes d'autodiagnosi dels alumnes</div>
+            </div>
+          </label>
+          <label style="display:flex;align-items:flex-start;gap:10px;cursor:pointer;margin-bottom:6px;">
+            <input type="checkbox" class="chk-netejar" data-col="autoaval_pendents" data-desc="Autodiagnosis pendents enviades als alumnes" style="margin-top:2px;width:15px;height:15px;accent-color:#dc2626;flex-shrink:0;">
+            <div>
+              <div style="font-size:13px;font-weight:600;color:#1f2937;">autoaval_pendents</div>
+              <div style="font-size:11px;color:#6b7280;">Autodiagnosis pendents que l'alumne encara no ha contestat</div>
+            </div>
+          </label>
+          <label style="display:flex;align-items:flex-start;gap:10px;cursor:pointer;margin-bottom:6px;">
+            <input type="checkbox" class="chk-netejar" data-col="autoaval_plantilles" data-desc="Plantilles d'autodiagnosi creades pels professors" style="margin-top:2px;width:15px;height:15px;accent-color:#dc2626;flex-shrink:0;">
+            <div>
+              <div style="font-size:13px;font-weight:600;color:#1f2937;">autoaval_plantilles</div>
+              <div style="font-size:11px;color:#6b7280;">Plantilles de qüestionaris d'autodiagnosi creades pels tutors</div>
             </div>
           </label>
           <label style="display:flex;align-items:flex-start;gap:10px;cursor:pointer;">
@@ -1059,6 +1073,52 @@ document.getElementById('btnNetejarExecutar').addEventListener('click', async ()
         // Esborrar un document específic dins _sistema
         await db.collection('_sistema').doc(subdoc).delete();
         totalEsborrats++;
+      } else if (col === 'avaluacio_centre') {
+        // CAS ESPECIAL: avaluacio_centre té estructura de subcol·leccions dinàmiques
+        // Estructura real: avaluacio_centre/{curs}/{grupId}/{alumneDocId}
+        // Com que les subcol·leccions (grupIds) són dinàmiques, les enumerem via
+        // grups_centre (que conté tots els IDs de grups/matèries del centre).
+        progLabel.textContent = `Esborrant: ${col} (carregant mapa de grups)...`;
+        let totalCol = 0;
+
+        // 1. Obtenir tots els IDs de grups coneguts (per enumerar les subcol·leccions)
+        let grupIds = [];
+        try {
+          const grupsSnap = await db.collection('grups_centre').get();
+          grupIds = grupsSnap.docs.map(d => d.id);
+        } catch(e) { console.warn('No s\'han pogut llegir grups_centre:', e.message); }
+
+        // 2. Obtenir tots els documents de curs dins avaluacio_centre
+        const cursosSnap = await db.collection(col).get();
+
+        for (const cursDoc of cursosSnap.docs) {
+          progLabel.textContent = `Esborrant: ${col}/${cursDoc.id}...`;
+
+          // 3. Per cada grup conegut, intentar esborrar la subcol·lecció
+          for (const grupId of grupIds) {
+            try {
+              let scCont = true;
+              while (scCont) {
+                const scSnap = await db.collection(col).doc(cursDoc.id)
+                  .collection(grupId).limit(200).get();
+                if (scSnap.empty) { scCont = false; break; }
+                const batchSc = db.batch();
+                scSnap.docs.forEach(d => batchSc.delete(d.ref));
+                await batchSc.commit();
+                totalCol += scSnap.docs.length;
+                if (scSnap.docs.length < 200) scCont = false;
+              }
+            } catch(e) { /* subcolecció buida o inexistent */ }
+          }
+
+          // 4. Esborrar el document de curs (sol contenir només el marcador)
+          try {
+            await cursDoc.ref.delete();
+            totalCol++;
+          } catch(e) {}
+        }
+
+        totalEsborrats += totalCol;
       } else {
         // Esborrar col·lecció sencera en lots de 100
         let continuar = true;
