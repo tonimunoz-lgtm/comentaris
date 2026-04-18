@@ -688,7 +688,9 @@ async function generarPDFAutodiagnosi(alumne, grupNom, grupNivell, curs, trimest
       background: #f3f4f6;
       font-weight: bold;
       font-size: 10.5pt;
-      width: 110px;
+      width: 1%;
+      white-space: nowrap;
+      padding: 8px 10px;
       vertical-align: top;
     }
     .taula-caps td {
