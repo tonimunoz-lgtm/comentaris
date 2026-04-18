@@ -345,14 +345,23 @@ async function carregarAutodiagnosis() {
 
     // Llegir respostes de autoaval_respostes per a aquests alumnes
     let respostes = [];
+    // Llegir també autoaval_pendents per saber quins alumnes tenen qüestionaris
+    // realment actius (no només "tenen compte"). Si no hi ha pendent, no és "Pendent".
+    let pendents = [];
     if (uidsAlumnes.length > 0) {
       // Firestore limita 'in' a 30 elements, fer chunks
       for (let i = 0; i < uidsAlumnes.length; i += 30) {
         const chunk = uidsAlumnes.slice(i, i + 30);
-        const snap = await db.collection('autoaval_respostes')
-          .where('alumneUID', 'in', chunk)
-          .get();
-        respostes.push(...snap.docs.map(d => ({ id: d.id, ...d.data() })));
+        const [snapResp, snapPend] = await Promise.all([
+          db.collection('autoaval_respostes')
+            .where('alumneUID', 'in', chunk)
+            .get(),
+          db.collection('autoaval_pendents')
+            .where('alumneUID', 'in', chunk)
+            .get()
+        ]);
+        respostes.push(...snapResp.docs.map(d => ({ id: d.id, ...d.data() })));
+        pendents.push(...snapPend.docs.map(d => ({ id: d.id, ...d.data() })));
       }
     }
 
@@ -371,10 +380,23 @@ async function carregarAutodiagnosis() {
       }
     });
 
+    // Set d'alumnes amb qüestionari pendent actiu (estat != 'enviat')
+    // Això evita que apareguin com a "Pendent" alumnes que només tenen compte
+    // però no tenen cap qüestionari assignat realment.
+    const pendentsFiltrats = periodeFiltre
+      ? pendents.filter(p => (p.periodeNom || '') === periodeFiltre)
+      : pendents;
+    const alumnesAmbPendent = new Set(
+      pendentsFiltrats
+        .filter(p => p.estat !== 'enviat')
+        .map(p => p.alumneUID)
+    );
+
     // Construir llista d'alumnes amb estat
     const llistaAlumnes = alumnesGrup.map(a => {
       const alumneU = alumnesAmbUID.find(u => u.ralc === a.ralc || u.nom === a.nom);
       const resposta = alumneU?.uid ? respostesPerAlumne[alumneU.uid] : null;
+      const tePendent = alumneU?.uid ? alumnesAmbPendent.has(alumneU.uid) : false;
       return {
         nom: a.nom || '',
         cognoms: a.cognoms || '',
@@ -382,6 +404,7 @@ async function carregarAutodiagnosis() {
         uid: alumneU?.uid || null,
         resposta: resposta || null,
         teCom: !!alumneU?.uid,
+        tePendent,
       };
     }).sort((a, b) => (a.cognoms || a.nom).localeCompare(b.cognoms || b.nom, 'ca'));
 
@@ -426,7 +449,9 @@ async function carregarAutodiagnosis() {
                   : '<span style="background:#dbeafe;color:#1e40af;padding:3px 9px;border-radius:99px;font-size:11px;font-weight:700;">📥 Rebut</span>'
               : !a.teCom
                 ? '<span style="background:#f3f4f6;color:#9ca3af;padding:3px 9px;border-radius:99px;font-size:11px;">Sense compte</span>'
-                : '<span style="background:#fef2f2;color:#dc2626;padding:3px 9px;border-radius:99px;font-size:11px;">⏳ Pendent</span>';
+                : a.tePendent
+                  ? '<span style="background:#fef2f2;color:#dc2626;padding:3px 9px;border-radius:99px;font-size:11px;">⏳ Pendent</span>'
+                  : '<span style="background:#f3f4f6;color:#6b7280;padding:3px 9px;border-radius:99px;font-size:11px;">— Sense qüestionari</span>';
 
             const teValoracio = !!(a.resposta?.comentariTutor);
 
