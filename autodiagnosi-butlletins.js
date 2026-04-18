@@ -674,6 +674,7 @@ async function generarPDFAutodiagnosi(alumne, grupNom, grupNivell, curs, trimest
     /* TAULA PRINCIPAL */
     .taula-principal {
       width: 100%;
+      table-layout: fixed;
       border-collapse: collapse;
       border: 1.5px solid #111;
       margin-bottom: 20px;
@@ -683,14 +684,15 @@ async function generarPDFAutodiagnosi(alumne, grupNom, grupNivell, curs, trimest
       padding: 8px 12px;
       vertical-align: top;
       font-size: 10.5pt;
+      word-wrap: break-word;
+      overflow-wrap: break-word;
     }
     .taula-principal .cap-fila {
       background: #f3f4f6;
       font-weight: bold;
-      font-size: 10.5pt;
-      width: 1%;
-      white-space: nowrap;
-      padding: 8px 10px;
+      font-size: 10pt;
+      width: 130px;
+      padding: 8px 8px;
       vertical-align: top;
     }
     .taula-caps td {
@@ -769,9 +771,8 @@ async function generarPDFAutodiagnosi(alumne, grupNom, grupNivell, curs, trimest
     ${textIntro}
   </p>
 
-  <!-- TAULA PRINCIPAL -->
-  <table class="taula-principal">
-    <!-- Fila capçalera: Nom i Grup -->
+  <!-- TAULA CAPÇALERA (Nom, Grup, Tutor) -->
+  <table class="taula-principal" style="margin-bottom:0;border-bottom:none;">
     <tr class="taula-caps">
       <td style="width:55%;border-right:1.5px solid #111;">
         <strong>Nom i cognoms:</strong> ${adEsH(nomComplet)}
@@ -780,13 +781,19 @@ async function generarPDFAutodiagnosi(alumne, grupNom, grupNivell, curs, trimest
         <strong>Grup classe:</strong> ${adEsH(grupDisplay)}
       </td>
     </tr>
-    <!-- Fila tutor -->
     <tr class="taula-caps">
       <td colspan="2">
         <strong>Tutor/a:</strong> ${adEsH(tutorNomComplet)}
       </td>
     </tr>
-    <!-- Fila autodiagnosi -->
+  </table>
+
+  <!-- TAULA CONTINGUT (Autodiagnosi, Valoració) -->
+  <table class="taula-principal" style="border-top:none;">
+    <colgroup>
+      <col style="width:130px;">
+      <col>
+    </colgroup>
     <tr>
       <td class="cap-fila">Autodiagnosi alumne/a</td>
       <td>
@@ -795,7 +802,6 @@ async function generarPDFAutodiagnosi(alumne, grupNom, grupNivell, curs, trimest
           : '<div class="text-buit">L\'alumne/a no ha completat l\'autodiagnosi.</div>'}
       </td>
     </tr>
-    <!-- Fila valoració tutor/a -->
     <tr>
       <td class="cap-fila">Valoració tutor/a</td>
       <td>
