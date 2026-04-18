@@ -1033,6 +1033,46 @@ document.getElementById('btnSendEmail').onclick = () => {
 // NETEJAR DADES
 // ═══════════════════════════════════════════════
 
+// Obté tots els cursos possibles on poden haver-hi dades d'avaluacio_centre.
+// Necessari perquè a Firestore un document pare pot NO existir com a document real
+// però tenir subcol·leccions (problema dels "missing ancestors"). Per això no podem
+// fer .collection('avaluacio_centre').get() — hem d'endevinar els IDs de curs.
+async function obtenirCursosPossibles() {
+  const cursos = new Set();
+
+  // 1. Curs actiu a _sistema/config
+  try {
+    const cfg = await db.collection('_sistema').doc('config').get();
+    if (cfg.exists && cfg.data().cursActiu) cursos.add(cfg.data().cursActiu);
+  } catch(e) {}
+
+  // 2. Cursos presents als nivells
+  try {
+    const snap = await db.collection('nivells_centre').get();
+    snap.docs.forEach(d => { if (d.data().curs) cursos.add(d.data().curs); });
+  } catch(e) {}
+
+  // 3. Cursos presents als grups
+  try {
+    const snap = await db.collection('grups_centre').get();
+    snap.docs.forEach(d => { if (d.data().curs) cursos.add(d.data().curs); });
+  } catch(e) {}
+
+  // 4. Intent: llistar directament docs d'avaluacio_centre (si n'hi ha algun de real)
+  try {
+    const snap = await db.collection('avaluacio_centre').get();
+    snap.docs.forEach(d => cursos.add(d.id));
+  } catch(e) {}
+
+  // 5. Fallback: afegir cursos recents (any actual ± 2) per si hi ha dades antigues
+  const any = new Date().getFullYear();
+  for (let y = any - 2; y <= any + 1; y++) {
+    cursos.add(`${y}-${String(y+1).slice(-2)}`);
+  }
+
+  return [...cursos];
+}
+
 // Calcula quants documents hi ha a cada col·lecció seleccionada
 async function calcularPreviewNeteja(seleccionats) {
   const resultats = [];
@@ -1040,7 +1080,6 @@ async function calcularPreviewNeteja(seleccionats) {
   for (const chk of seleccionats) {
     const col = chk.dataset.col;
     const subdoc = chk.dataset.subdoc;
-    const desc = chk.dataset.col; // nom tècnic
 
     try {
       if (subdoc) {
@@ -1053,24 +1092,25 @@ async function calcularPreviewNeteja(seleccionats) {
         });
       } else if (col === 'avaluacio_centre') {
         // Cas especial: iterar subcol·leccions dinàmiques
+        // Els docs de curs poden ser "fantasmes" (no existir com a docs reals
+        // però tenir subcol·leccions) → iterar combinacions directament.
         let total = 0;
-        let nCursos = 0;
-        let nSubcols = 0;
+        const cursosAmbDades = new Set();
+        const subcolsAmbDades = new Set();
 
         const grupsSnap = await db.collection('grups_centre').get();
         const grupIds = grupsSnap.docs.map(d => d.id);
+        const cursosPossibles = await obtenirCursosPossibles();
 
-        const cursosSnap = await db.collection(col).get();
-        nCursos = cursosSnap.docs.length;
-
-        for (const cursDoc of cursosSnap.docs) {
+        for (const curs of cursosPossibles) {
           for (const grupId of grupIds) {
             try {
-              const scSnap = await db.collection(col).doc(cursDoc.id)
+              const scSnap = await db.collection(col).doc(curs)
                 .collection(grupId).get();
               if (!scSnap.empty) {
                 total += scSnap.docs.length;
-                nSubcols++;
+                cursosAmbDades.add(curs);
+                subcolsAmbDades.add(`${curs}/${grupId}`);
               }
             } catch(e) {}
           }
@@ -1079,7 +1119,7 @@ async function calcularPreviewNeteja(seleccionats) {
         resultats.push({
           col,
           count: total,
-          extra: `${total} avaluacions · ${nCursos} curs(os) · ${nSubcols} subcol·leccions`
+          extra: `${total} avaluacions · ${cursosAmbDades.size} curs(os) · ${subcolsAmbDades.size} subcol·leccions`
         });
       } else if (col === 'classes') {
         // Classes amb subcol·leccions conegudes
@@ -1206,30 +1246,30 @@ document.getElementById('btnNetejarExecutar').addEventListener('click', async ()
       } else if (col === 'avaluacio_centre') {
         // CAS ESPECIAL: avaluacio_centre té estructura de subcol·leccions dinàmiques
         // Estructura real: avaluacio_centre/{curs}/{grupId}/{alumneDocId}
-        // Com que les subcol·leccions (grupIds) són dinàmiques, les enumerem via
-        // grups_centre (que conté tots els IDs de grups/matèries del centre).
-        progLabel.textContent = `Esborrant: ${col} (carregant mapa de grups)...`;
+        // ATENCIÓ: els docs de curs poden ser "fantasmes" (no apareixen a .get()
+        // però tenen subcol·leccions). Per això iterem cursos possibles + grupIds
+        // directament en lloc de confiar en cursosSnap.
+        progLabel.textContent = `Esborrant: ${col} (carregant mapa)...`;
         let totalCol = 0;
 
-        // 1. Obtenir tots els IDs de grups coneguts (per enumerar les subcol·leccions)
+        // 1. Obtenir tots els IDs de grups coneguts
         let grupIds = [];
         try {
           const grupsSnap = await db.collection('grups_centre').get();
           grupIds = grupsSnap.docs.map(d => d.id);
         } catch(e) { console.warn('No s\'han pogut llegir grups_centre:', e.message); }
 
-        // 2. Obtenir tots els documents de curs dins avaluacio_centre
-        const cursosSnap = await db.collection(col).get();
+        // 2. Obtenir tots els cursos possibles (inclòs cursos amb docs pare fantasma)
+        const cursosPossibles = await obtenirCursosPossibles();
 
-        for (const cursDoc of cursosSnap.docs) {
-          progLabel.textContent = `Esborrant: ${col}/${cursDoc.id}...`;
-
-          // 3. Per cada grup conegut, intentar esborrar la subcol·lecció
+        // 3. Iterar totes les combinacions curs/grup i esborrar
+        for (const curs of cursosPossibles) {
           for (const grupId of grupIds) {
+            progLabel.textContent = `Esborrant: ${col}/${curs}/${grupId}...`;
             try {
               let scCont = true;
               while (scCont) {
-                const scSnap = await db.collection(col).doc(cursDoc.id)
+                const scSnap = await db.collection(col).doc(curs)
                   .collection(grupId).limit(200).get();
                 if (scSnap.empty) { scCont = false; break; }
                 const batchSc = db.batch();
@@ -1241,10 +1281,13 @@ document.getElementById('btnNetejarExecutar').addEventListener('click', async ()
             } catch(e) { /* subcolecció buida o inexistent */ }
           }
 
-          // 4. Esborrar el document de curs (sol contenir només el marcador)
+          // 4. Intentar esborrar el document de curs (si existeix com a doc real)
           try {
-            await cursDoc.ref.delete();
-            totalCol++;
+            const cursDoc = await db.collection(col).doc(curs).get();
+            if (cursDoc.exists) {
+              await cursDoc.ref.delete();
+              totalCol++;
+            }
           } catch(e) {}
         }
 
