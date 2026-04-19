@@ -304,6 +304,15 @@ function obrirEditorAutodiagRevisor(alumne, grupEtiqueta) {
   const preguntes = r.preguntes || [];
   const respostesMap = r.respostes || {};
   const nomComplet = alumne.cognoms ? `${alumne.cognoms}, ${alumne.nom}` : alumne.nom;
+
+  // Determinar si l'usuari actual pot retornar autodiagnosis a l'alumne.
+  // Només poden fer-ho tutors, admins o superadmins. El "revisor institucional"
+  // (rol revisor SENSE cap altre rol de gestió) NO pot retornar — el seu paper
+  // és supervisar, no comunicar-se amb l'alumne.
+  const rols = window._userRols || [];
+  const esAdmin = rols.includes('admin') || rols.includes('superadmin') || !!window._isSuperAdmin;
+  const esTutor = rols.includes('tutor');
+  const potRetornar = esAdmin || esTutor;
   const overlay = document.createElement('div');
   overlay.id = 'adRevModal';
   overlay.style.cssText = 'position:fixed;inset:0;z-index:99999;background:rgba(0,0,0,0.65);display:flex;align-items:center;justify-content:center;padding:16px;';
@@ -329,6 +338,9 @@ function obrirEditorAutodiagRevisor(alumne, grupEtiqueta) {
         <div id="adRevModalErr" style="color:#ef4444;font-size:13px;min-height:16px;margin-bottom:10px;"></div>
         <div style="display:flex;gap:10px;flex-wrap:wrap;">
           <button class="ad-rev-close" style="flex:1;padding:11px;background:#f3f4f6;color:#374151;border:none;border-radius:10px;font-size:13px;font-weight:700;cursor:pointer;min-width:100px;">Tancar</button>
+          ${potRetornar ? `
+          <button id="adRevRetornar" style="flex:1;padding:11px;background:#f97316;color:#fff;border:none;border-radius:10px;font-size:13px;font-weight:700;cursor:pointer;min-width:140px;" ${r.estat==='enviatButlleti'?'disabled title="Ja enviat al butlletí" style="opacity:.5;cursor:not-allowed;"':''}>↩️ Retornar a l'alumne</button>
+          ` : ''}
           <button id="adRevGuardar" style="flex:1;padding:11px;background:#4c1d95;color:#fff;border:none;border-radius:10px;font-size:13px;font-weight:700;cursor:pointer;min-width:120px;">💾 Guardar</button>
           <button id="adRevButlleti" style="flex:1;padding:11px;background:#059669;color:#fff;border:none;border-radius:10px;font-size:13px;font-weight:800;cursor:pointer;min-width:140px;" ${r.estat==='enviatButlleti'?'disabled style="opacity:.5;"':''}>🏫 ${r.estat==='enviatButlleti'?'Ja enviat':'Enviar al butlletí'}</button>
         </div>
@@ -355,6 +367,70 @@ function obrirEditorAutodiagRevisor(alumne, grupEtiqueta) {
       await window.enviarAutodiagAlButlleti(r, alumne, overlay, () => { const gId = document.getElementById('adRevGrup')?.value; if (gId) carregarAutodiagRevisor(gId, window._adRevGrupEtiqueta, {}); });
     } else { await enviarAutodiagAlButlletiLocal(r, alumne, overlay); }
   });
+
+  // Botó "Retornar a l'alumne" → elimina la resposta i torna a posar el pendent a 'pendent'
+  // Només existeix si potRetornar és true (tutors, admins, superadmins)
+  const btnRetornar = document.getElementById('adRevRetornar');
+  if (btnRetornar) {
+    btnRetornar.addEventListener('click', async () => {
+      if (r.estat === 'enviatButlleti') {
+        document.getElementById('adRevModalErr').textContent =
+          '❌ No es pot retornar: ja s\'ha enviat al butlletí.';
+        return;
+      }
+      await retornarAutodiagAlAlumne(r, alumne, overlay);
+    });
+  }
+}
+
+// ─────────────────────────────────────────────
+// RETORNAR AUTODIAGNOSI A L'ALUMNE
+// Esborra la resposta actual i torna a posar el pendent en estat 'pendent'
+// ─────────────────────────────────────────────
+async function retornarAutodiagAlAlumne(r, alumne, overlay) {
+  const errEl = document.getElementById('adRevModalErr');
+  const btn = document.getElementById('adRevRetornar');
+
+  // Diàleg de confirmació amb motiu opcional
+  const motiu = window.prompt(
+    'Retornar l\'autodiagnosi a ' + (alumne?.nom || 'l\'alumne') + '?\n\n' +
+    'L\'alumne rebrà novament el formulari per tornar a contestar.\n' +
+    'La resposta actual s\'esborrarà.\n\n' +
+    'Escriu (opcional) un motiu que veurà l\'alumne:',
+    ''
+  );
+  if (motiu === null) return; // cancel·lat
+
+  if (btn) { btn.disabled = true; btn.textContent = '⏳ Retornant...'; }
+
+  try {
+    const db = window.db;
+    const now = window.firebase.firestore.FieldValue.serverTimestamp();
+
+    // 1. Esborrar el document de autoaval_respostes
+    await db.collection('autoaval_respostes').doc(r.id).delete();
+
+    // 2. Actualitzar el pendent de l'alumne → estat 'pendent' per reactivar el formulari
+    //    S'identifica pel alumneUID (és el docId de autoaval_pendents)
+    if (r.alumneUID) {
+      await db.collection('autoaval_pendents').doc(r.alumneUID).set({
+        estat: 'pendent',
+        retornatAt: now,
+        motiuRetorn: motiu.trim() || '',
+        retornatPer: window.firebase.auth().currentUser?.email || '',
+      }, { merge: true });
+    }
+
+    window.mostrarToast?.('↩️ Autodiagnosi retornada a l\'alumne', 3000);
+    overlay.remove();
+
+    // Refrescar la llista del revisor
+    const gId = document.getElementById('adRevGrup')?.value;
+    if (gId) carregarAutodiagRevisor(gId, window._adRevGrupEtiqueta, {});
+  } catch(e) {
+    if (errEl) errEl.textContent = '❌ Error retornant: ' + e.message;
+    if (btn) { btn.disabled = false; btn.textContent = '↩️ Retornar a l\'alumne'; }
+  }
 }
 
 async function enviarAutodiagAlButlletiLocal(r, alumne, overlay) {
