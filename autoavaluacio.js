@@ -238,28 +238,9 @@ async function carregarFormulariAlumne() {
 
 function renderitzarFormulariAlumne(cont, plantilla, pendent) {
   const preguntes = plantilla.preguntes || [];
-  const esRetorn = !!pendent.retornatAt;
-  const motiuRetorn = pendent.motiuRetorn || '';
 
   cont.innerHTML = `
     <div style="background:#fff;border-radius:16px;padding:28px;box-shadow:0 4px 20px rgba(0,0,0,0.08);margin-bottom:20px;">
-      ${esRetorn ? `
-        <div style="background:#fff7ed;border:2px solid #fdba74;border-radius:12px;padding:14px 16px;margin-bottom:20px;">
-          <div style="font-size:14px;font-weight:700;color:#9a3412;margin-bottom:6px;">
-            ↩️ El teu tutor/a t'ha retornat l'autodiagnosi
-          </div>
-          <div style="font-size:13px;color:#7c2d12;line-height:1.5;">
-            Cal que tornis a contestar el formulari. La teva resposta anterior s'ha esborrat.
-            ${motiuRetorn ? `
-              <div style="margin-top:10px;padding:10px 12px;background:#fff;border-left:3px solid #f97316;border-radius:6px;">
-                <div style="font-size:11px;font-weight:700;color:#9a3412;text-transform:uppercase;letter-spacing:.05em;margin-bottom:4px;">Motiu del tutor/a</div>
-                <div style="font-size:13px;color:#374151;white-space:pre-wrap;">${esH(motiuRetorn)}</div>
-              </div>
-            ` : ''}
-          </div>
-        </div>
-      ` : ''}
-
       <div style="display:flex;align-items:center;gap:12px;margin-bottom:20px;">
         <div style="width:48px;height:48px;background:linear-gradient(135deg,#7c3aed,#4c1d95);border-radius:12px;display:flex;align-items:center;justify-content:center;font-size:24px;">📝</div>
         <div>
@@ -341,13 +322,9 @@ async function enviarRespostesAlumne(pendent, plantilla) {
     });
 
     // Marcar pendent com a enviat
-    // Es netegen els camps de retorn (si n'hi havia) perquè no quedin d'arrossegament
     await _aaDB.collection('autoaval_pendents').doc(_aaUID).update({
       estat: 'enviat',
       enviatAt: now,
-      retornatAt: firebase.firestore.FieldValue.delete(),
-      motiuRetorn: firebase.firestore.FieldValue.delete(),
-      retornatPer: firebase.firestore.FieldValue.delete(),
     });
 
     // Refrescar pantalla
