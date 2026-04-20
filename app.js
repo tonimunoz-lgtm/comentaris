@@ -109,11 +109,12 @@ document.addEventListener('click', e => {
   }
 });
 
-function confirmAction(title, msg, cb) {
+function confirmAction(title, msg, cb, btnText) {
   document.getElementById('confirmTitle').textContent = title;
   document.getElementById('confirmMsg').textContent   = msg;
   openModal('modalConfirm');
   const btn = document.getElementById('confirmYes');
+  btn.textContent = btnText || 'Confirmar';
   const clone = btn.cloneNode(true);
   btn.parentNode.replaceChild(clone, btn);
   clone.addEventListener('click', () => { closeModal('modalConfirm'); cb(); });
