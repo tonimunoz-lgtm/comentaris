@@ -330,11 +330,18 @@ document.getElementById('btnRecover').addEventListener('click', () => {
 });
 
 document.getElementById('btnLogout').addEventListener('click', () => {
-  auth.signOut().then(() => {
-    professorUID = null;
-    currentClassId = null;
-    showLogin();
-  });
+  confirmAction(
+    'Tancar sessió',
+    'Estàs a punt de sortir de l\'aplicació. Vols continuar?',
+    () => {
+      auth.signOut().then(() => {
+        professorUID = null;
+        currentClassId = null;
+        showLogin();
+      });
+    },
+    'Sortir'
+  );
 });
 
 document.getElementById('changePasswordBtn').addEventListener('click', () => {
