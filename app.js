@@ -340,20 +340,15 @@ document.getElementById('btnLogout').addEventListener('click', () => {
 document.getElementById('changePasswordBtn').addEventListener('click', () => {
   const email = auth.currentUser?.email;
   if (!email) return;
-
-  const confirmat = confirm(
-    '🔑 Canvi de contrasenya\n\n' +
-    'Estàs a punt de sol·licitar un canvi de contrasenya.\n' +
-    'Se t\'enviarà un correu electrònic a:\n\n' +
-    email + '\n\n' +
-    'amb un enllaç per establir la nova contrasenya.\n\n' +
-    'Vols continuar?'
+  confirmAction(
+    'Canviar contrasenya',
+    `Estàs a punt de sol·licitar un canvi de contrasenya. Se t'enviarà un correu a ${email} amb l'enllaç per establir-ne una de nova. Vols continuar?`,
+    () => {
+      auth.sendPasswordResetEmail(email)
+        .then(() => window.mostrarToast?.('✅ Correu enviat a ' + email) || alert('Email enviat a ' + email))
+        .catch(e => alert('Error: ' + e.message));
+    }
   );
-  if (!confirmat) return;
-
-  auth.sendPasswordResetEmail(email)
-    .then(() => alert('✅ Email de canvi de contrasenya enviat a ' + email))
-    .catch(e => alert('❌ Error: ' + e.message));
 });
 
 auth.onAuthStateChanged(async user => {
